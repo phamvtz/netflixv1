@@ -1,0 +1,37 @@
+/* Design tokens — panel admin / seller */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0b0b10;
+  --card: #15151d;
+  --bd: #262633;
+  --t1: #e9eaf0;
+  --t2: #8a93a6;
+  --t3: #5b6273;
+  --green: #46d369;
+  --amber: #f5a623;
+  --red-ui: #ff8a8a;
+  --mono: #7ecff5;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --accent: #e50914;
+  --accent-hover: #ff1a25;
+  --accent-soft: rgba(229, 9, 20, 0.16);
+  --focus: var(--accent);
+  --btn-text-on-accent: #fff;
+}
+
+[data-theme="seller"] {
+  --bg: #0f1623;
+  --card: rgba(255, 255, 255, 0.05);
+  --bd: rgba(255, 255, 255, 0.1);
+  --t1: #e9eef5;
+  --t2: #9fb0c3;
+  --t3: #687585;
+  --accent: #46d369;
+  --accent-hover: #5ae07f;
+  --accent-soft: rgba(70, 211, 105, 0.14);
+  --focus: var(--accent);
+  --btn-text-on-accent: #06240f;
+  --mono: #7ef5a0;
+}

@@ -210,25 +210,34 @@ let autoTimer = null;
 
 function setFilter(f) {
   currentFilter = f;
-  document.querySelectorAll('.ftab').forEach(b => b.classList.toggle('active', b.dataset.f === f));
   document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
-  const cardMap = { live:'sc-live', dead:'sc-dead', cancelled:'sc-cancel', pending:'sc-pending', all:'sc-total' };
+  const cardMap = { live: 'sc-live', dead: 'sc-dead', cancelled: 'sc-cancel', pending: 'sc-pending', all: 'sc-total' };
   if (cardMap[f]) document.getElementById(cardMap[f])?.classList.add('active-filter');
   applyFilter();
 }
 
+function rowMatchesStatus(live, filter) {
+  if (filter === 'all') return true;
+  if (filter === 'live') return live?.alive === true && !live?.cancelled;
+  if (filter === 'dead') return live != null && live.alive === false;
+  if (filter === 'cancelled') return live?.alive === true && !!live?.cancelled;
+  if (filter === 'pending') return live === null || live === undefined;
+  return true;
+}
+
 function applyFilter() {
+  const q = (document.getElementById('resultSearch')?.value || '').trim().toLowerCase();
   const rows = document.querySelectorAll('#ckBody tr');
   let visible = 0;
   rows.forEach(tr => {
-    const idx  = parseInt(tr.dataset.idx);
+    const idx  = parseInt(tr.dataset.idx, 10);
     const live = liveResults[idx];
-    let show = true;
-    if (currentFilter !== 'all') {
-      if (currentFilter === 'live')      show = live?.alive === true && !live?.cancelled;
-      else if (currentFilter === 'dead') show = live?.alive === false || (live && !live.alive);
-      else if (currentFilter === 'cancelled') show = live?.alive && live?.cancelled;
-      else if (currentFilter === 'pending')   show = live === null || live === undefined;
+    let show = rowMatchesStatus(live, currentFilter);
+    if (show && q) {
+      const email = (live?.email || '').toLowerCase();
+      const plan = (live?.plan || '').toLowerCase();
+      const line = String(idx + 1);
+      show = email.includes(q) || plan.includes(q) || line === q;
     }
     tr.style.display = show ? '' : 'none';
     if (show) visible++;
@@ -280,26 +289,37 @@ function exportData(filter, format) {
       billing:  live?.billingText || '',
       cookie:   rawSets[i] || '',
     };
-  }).filter(r => {
-    if (filter === 'live') return r.status === 'LIVE';
+  });
+  const q = (document.getElementById('resultSearch')?.value || '').trim().toLowerCase();
+  const filtered = rows.filter(r => {
+    if (filter === 'live' && r.status !== 'LIVE') return false;
+    const idx = r.idx - 1;
+    const live = liveResults[idx];
+    if (!rowMatchesStatus(live, currentFilter)) return false;
+    if (q) {
+      const email = (r.email || '').toLowerCase();
+      const plan = (r.plan || '').toLowerCase();
+      if (!email.includes(q) && !plan.includes(q) && String(r.idx) !== q) return false;
+    }
     return true;
   });
+  const rowsOut = filtered;
 
-  if (!rows.length) { alert('Không có dữ liệu để export.'); return; }
+  if (!rowsOut.length) { alert('Không có dữ liệu để export.'); return; }
 
   let content = '', ext = format, mime = 'text/plain';
 
   if (format === 'txt') {
-    content = rows.map(r => r.cookie).join('\n');
+    content = rowsOut.map(r => r.cookie).join('\n');
   } else if (format === 'csv') {
     const headers = ['#','Status','Plan','Email','Profiles','Billing','Cookie'];
     const escape = v => `"${String(v).replace(/"/g,'""')}"`;
-    content = [headers.join(','), ...rows.map(r =>
+    content = [headers.join(','), ...rowsOut.map(r =>
       [r.idx, r.status, r.plan, r.email, r.profiles, r.billing, r.cookie].map(escape).join(',')
     )].join('\n');
     mime = 'text/csv';
   } else if (format === 'json') {
-    content = JSON.stringify(rows.map(({ cookie, ...rest }) => rest), null, 2);
+    content = JSON.stringify(rowsOut.map(({ cookie, ...rest }) => rest), null, 2);
     mime = 'application/json';
   }
 
@@ -399,7 +419,10 @@ function clearAll() {
   document.getElementById('autoWrap').style.display='none';
   document.getElementById('autoCheck').checked = false;
   clearTimeout(autoTimer); autoTimer = null;
-  sets=[]; rawSets=[]; liveResults=[]; activeDetail=-1; currentFilter='all';
+  sets=[]; rawSets=[]; liveResults=[]; activeDetail=-1;
+  const rs = document.getElementById('resultSearch');
+  if (rs) rs.value = '';
+  setFilter('all');
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────

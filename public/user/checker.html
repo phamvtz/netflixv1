@@ -79,7 +79,7 @@
 
     <!-- Stats cards -->
     <div class="stat-cards" id="statCards" style="display:none">
-      <div class="stat-card stat-card-total"   id="sc-total">
+      <div class="stat-card stat-card-total panel-stat-click" id="sc-total" onclick="setFilter('all')" title="Tất cả">
         <div class="sc-num" id="sc-total-n">0</div>
         <div class="sc-label">Total</div>
       </div>
@@ -101,15 +101,9 @@
       </div>
     </div>
 
-    <!-- Filter bar + progress -->
+    <!-- Toolbar: search + progress (filter qua stat cards) -->
     <div class="toolbar" id="toolbar" style="display:none">
-      <div class="filter-tabs" id="filterTabs">
-        <button class="ftab active" data-f="all"       onclick="setFilter('all')">Tất cả</button>
-        <button class="ftab"        data-f="live"      onclick="setFilter('live')">✓ Live</button>
-        <button class="ftab"        data-f="cancelled" onclick="setFilter('cancelled')">⊘ Cancelled</button>
-        <button class="ftab"        data-f="dead"      onclick="setFilter('dead')">✗ Dead</button>
-        <button class="ftab"        data-f="pending"   onclick="setFilter('pending')">… Pending</button>
-      </div>
+      <input type="search" id="resultSearch" class="result-search" placeholder="Lọc email, plan..." oninput="applyFilter()" />
       <div class="prog-wrap" id="statProgress" style="display:none">
         <span id="progressText"></span>
         <div class="prog-track"><div class="prog-fill" id="progressFill"></div></div>
@@ -156,6 +150,6 @@
 
   </main>
 
-  <script src="/js/checker.js?v=5"></script>
+  <script src="/js/checker.js?v=6"></script>
 </body>
 </html>

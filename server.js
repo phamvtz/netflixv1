@@ -565,6 +565,9 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // CSS/JS user — URL giữ /css, /js (không đổi link trong HTML)
 app.use('/css', express.static(path.join(__dirname, 'public', 'user', 'css')));
 app.use('/js', express.static(path.join(__dirname, 'public', 'user', 'js')));
+app.use('/panel', express.static(path.join(__dirname, 'public', 'panel')));
+app.use('/admin/js', express.static(path.join(__dirname, 'public', 'admin', 'js')));
+app.use('/seller/js', express.static(path.join(__dirname, 'public', 'seller', 'js')));
 
 // ─── Cookie Generation – matching real Netflix formats ─────────────────────────
 
@@ -860,6 +863,10 @@ app.get('/browse', requireAuth, requireProfile, (req, res) => {
 app.get('/getcode.html', (req, res) => {
   res.sendFile(PAGE.user('getcode.html'));
 });
+
+// Panel trên domain chính (redirect API login)
+app.get('/admin', (req, res) => res.sendFile(PAGE.admin));
+app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 

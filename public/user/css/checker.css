@@ -168,6 +168,9 @@ a { text-decoration: none; color: inherit; }
 }
 .stat-card:hover { transform: translateY(-2px); border-color: var(--b2); }
 .stat-card:hover::after { opacity: 1; }
+.stat-card.panel-stat-click,
+.stat-card[id^="sc-"]:not(.stat-card-total) { cursor: pointer; }
+.stat-card-total.panel-stat-click { cursor: pointer; }
 .stat-card.active-filter { border-color: rgba(255,45,85,.35); box-shadow: 0 0 0 1px rgba(255,45,85,.15); }
 
 .stat-card-total::after  { background: var(--t2); }
@@ -197,16 +200,20 @@ a { text-decoration: none; color: inherit; }
   display: flex; align-items: center; gap: 10px;
   flex-wrap: wrap;
 }
-.filter-tabs { display: flex; gap: 3px; }
-.ftab {
-  padding: 5px 13px; border-radius: 20px;
-  font-size: .76rem; font-weight: 600;
-  cursor: pointer; border: 1px solid var(--b);
-  background: transparent; color: var(--t2);
-  transition: all .13s;
+.result-search {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  padding: 8px 14px;
+  border-radius: var(--rr);
+  border: 1px solid var(--b);
+  background: var(--s1);
+  color: var(--t1);
+  font-size: 0.8rem;
+  outline: none;
 }
-.ftab:hover { color: var(--t1); border-color: var(--b2); }
-.ftab.active { background: var(--rg); border-color: rgba(255,45,85,.3); color: var(--red); }
+.result-search:focus { border-color: var(--b2); }
+.result-search::placeholder { color: var(--t3); }
 
 .prog-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 #progressText { font-size: .73rem; color: var(--t2); font-family: var(--mono); }
