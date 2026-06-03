@@ -536,22 +536,23 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 app.use(subdomainMiddleware);
 
-// ─── Static pages (public/admin | seller | user) ─────────────────────────────
+// ─── Static pages (public/admin | seller | me | user) ────────────────────────
 const PAGE = {
   admin: path.join(__dirname, 'public', 'admin', 'index.html'),
   seller: path.join(__dirname, 'public', 'seller', 'index.html'),
+  me: path.join(__dirname, 'public', 'me', 'index.html'),
   user: (name) => path.join(__dirname, 'public', 'user', name),
 };
 
 // ─── Subdomain root routing ────────────────────────────────────────────────────
-// me.domain/      → user/getcode.html
+// me.domain/      → me/index.html (Get Code)
 // seller.domain/  → seller/index.html
 // admin.domain/   → admin/index.html
 // (domain trần)/  → landing (xử lý ở route '/' bên dưới)
 function serveSubdomainRoot(req, res, next) {
   if (req.path !== '/') return next();
   switch (req.subdomain) {
-    case 'me':     return res.sendFile(PAGE.user('getcode.html'));
+    case 'me':     return res.sendFile(PAGE.me);
     case 'seller': return res.sendFile(PAGE.seller);
     case 'admin':  return res.sendFile(PAGE.admin);
     default:       return next();
@@ -861,7 +862,7 @@ app.get('/browse', requireAuth, requireProfile, (req, res) => {
 
 // Legacy URL (footer landing, link cũ)
 app.get('/getcode.html', (req, res) => {
-  res.sendFile(PAGE.user('getcode.html'));
+  res.sendFile(PAGE.me);
 });
 
 // Panel trên domain chính (redirect API login)

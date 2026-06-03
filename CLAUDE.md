@@ -88,3 +88,35 @@ curl http://localhost:PORT/api/ping   # verify
 - Không over-engineer, không abstraction thừa, không ORM phức tạp khi raw SQL đủ
 - Không TODO không có plan, không hỏi lại khi task đã rõ
 - Không commit `.env`, `node_modules`, file build tạm
+
+---
+
+## 9. Cấu trúc `public/` (chuẩn — bám khi sửa UI)
+
+```
+public/
+├── admin/          # subdomain admin.* — dashboard duyệt seller, keys
+│   ├── index.html
+│   └── js/
+├── seller/         # subdomain seller.* — tạo key, auth seller
+│   ├── index.html
+│   └── js/
+├── me/             # subdomain me.* — Get Code (khách lấy mã)
+│   └── index.html
+├── user/           # domain chính — Netflix clone + checker
+│   ├── index.html, login.html, profiles.html, browse.html, checker.html
+│   ├── css/        # serve qua URL /css/*
+│   └── js/         # serve qua URL /js/*
+└── panel/          # CSS/JS dùng chung admin + seller → /panel/*
+```
+
+| Subdomain | Thư mục | Route chính |
+|-----------|---------|-------------|
+| `main` | `user/` | `/`, `/login`, `/browse`, `/checker` |
+| `me` | `me/` | `/` (Get Code) |
+| `seller` | `seller/` | `/` |
+| `admin` | `admin/` | `/` |
+
+**Filter UI:** chip status + search (`panel/js/filters.js`). Checker: stat cards (không tab trùng) + `#resultSearch`.
+
+**Sau feat/fix:** thêm dòng vào `CHANGELOG.md`, `node --check`, `npm test`.
