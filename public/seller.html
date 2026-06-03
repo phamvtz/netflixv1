@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seller · Netflix Key</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #e5e5e5; padding: 40px 20px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; }
+    .brand .dot { width: 12px; height: 12px; border-radius: 50%; background: #46d369; }
+    .nav a { color: #9aa; font-size: .85rem; margin-left: 16px; text-decoration: none; }
+    .nav a:hover { color: #fff; }
+    .card {
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+      border-radius: 16px; padding: 28px; margin-bottom: 20px;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 6px; }
+    .sub { color: #889; font-size: .9rem; margin-bottom: 22px; }
+    label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 8px; color: #bcd; }
+    input {
+      width: 100%; padding: 13px 15px; border-radius: 10px;
+      border: 1.5px solid rgba(255,255,255,.15); background: rgba(0,0,0,.25);
+      color: #fff; font-size: .95rem; outline: none; margin-bottom: 16px;
+    }
+    input:focus { border-color: #46d369; }
+    button {
+      width: 100%; padding: 14px; border: none; border-radius: 50px;
+      background: #46d369; color: #06240f; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: transform .1s, box-shadow .15s;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(70,211,105,.3); }
+    .result { display: none; margin-top: 20px; }
+    .result.show { display: block; }
+    .key-box {
+      background: rgba(70,211,105,.1); border: 1.5px solid rgba(70,211,105,.4);
+      border-radius: 12px; padding: 18px; display: flex; align-items: center;
+      justify-content: space-between; gap: 12px;
+    }
+    .key-val { font-family: monospace; font-size: 1.1rem; font-weight: 700; color: #7ef5a0; word-break: break-all; }
+    .btn-copy { width: auto; padding: 8px 14px; background: rgba(255,255,255,.1); color: #fff; font-size: .8rem; }
+    .err { color: #f57e7e; font-size: .85rem; margin-top: 10px; display: none; }
+    .hint { font-size: .78rem; color: #778; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span> Seller Panel</div>
+      <nav class="nav">
+        <a href="/checker">Checker</a>
+        <a id="meLink" href="#">Get Code</a>
+      </nav>
+    </div>
+
+    <div class="card">
+      <h1>Tạo key bán hàng</h1>
+      <p class="sub">Gắn một email temp-mail với key <code>SK-XXXX</code>. Khách dùng key tại trang Get Code để lấy mã Netflix mà không lộ email.</p>
+
+      <label for="email">Email temp-mail</label>
+      <input id="email" type="email" placeholder="khachhang@tinyhost.shop" />
+
+      <label for="note">Ghi chú (tuỳ chọn)</label>
+      <input id="note" type="text" placeholder="vd: đơn #123, KH Facebook..." />
+
+      <button id="btnCreate" onclick="createKey()">Tạo key</button>
+      <p class="err" id="err"></p>
+
+      <div class="result" id="result">
+        <div class="key-box">
+          <span class="key-val" id="keyVal"></span>
+          <button class="btn-copy" onclick="copyKey()">Sao chép</button>
+        </div>
+        <p class="hint" id="meHint"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Link sang me.* subdomain (đổi seller → me)
+    const meHost = location.host.replace(/^seller\./, 'me.');
+    const meUrl = location.protocol + '//' + meHost + '/getcode.html';
+    document.getElementById('meLink').href = meUrl;
+
+    async function createKey() {
+      const email = document.getElementById('email').value.trim();
+      const note = document.getElementById('note').value.trim();
+      const err = document.getElementById('err');
+      const btn = document.getElementById('btnCreate');
+      err.style.display = 'none';
+
+      if (!email.includes('@')) { err.textContent = 'Email không hợp lệ.'; err.style.display = 'block'; return; }
+
+      btn.disabled = true; btn.textContent = 'Đang tạo...';
+      try {
+        const r = await fetch('/api/key/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, note }),
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Lỗi tạo key');
+
+        document.getElementById('keyVal').textContent = d.key;
+        document.getElementById('meHint').textContent = 'Khách nhập key này tại: ' + meUrl;
+        document.getElementById('result').classList.add('show');
+      } catch (e) {
+        err.textContent = e.message; err.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Tạo key';
+      }
+    }
+
+    async function copyKey() {
+      try { await navigator.clipboard.writeText(document.getElementById('keyVal').textContent); } catch {}
+    }
+  </script>
+</body>
+</html>

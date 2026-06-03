@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Netflix – Đăng nhập</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/login.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+</head>
+<body class="lgn-page">
+
+  <!-- Background -->
+  <div class="lgn-bg">
+    <div class="lgn-bg-gradient"></div>
+    <div class="lgn-bg-grid"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="lgn-header">
+    <a href="/" class="lgn-logo">
+      <svg viewBox="0 0 111 30" fill="#E50914" width="92" height="25">
+        <path d="M105.06 0l-8.4 23.87L88.26 0H79.2l12.6 30-12.6 30h9.06l8.4-23.87L104.66 60h9.06L101.12 30 113.72 0h-8.66zM66.6 0v60h8.4V0H66.6zM51.6 0v60h8.4V0H51.6zM36.6 0v60h8.4V0H36.6zM0 0v60h8.4V0H0zM21.6 0v60h8.4V0H21.6z"/>
+      </svg>
+    </a>
+  </header>
+
+  <!-- Main -->
+  <main class="lgn-main">
+    <div class="lgn-card">
+      <!-- Card glow -->
+      <div class="lgn-card-glow"></div>
+
+      <h1 class="lgn-title">Đăng nhập</h1>
+
+      <!-- Error message -->
+      <div id="errorMsg" class="lgn-error" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span id="errorText"></span>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <!-- Email field -->
+        <div class="lgn-field" id="emailField">
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="lgn-input"
+            placeholder=" "
+            autocomplete="email"
+            required
+          />
+          <label for="email" class="lgn-label">Email hoặc số điện thoại</label>
+          <div class="lgn-field-border"></div>
+        </div>
+
+        <!-- Password field -->
+        <div class="lgn-field" id="passwordField">
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="lgn-input"
+            placeholder=" "
+            autocomplete="current-password"
+            required
+          />
+          <label for="password" class="lgn-label">Mật khẩu</label>
+          <div class="lgn-field-border"></div>
+          <button type="button" class="lgn-pwd-toggle" id="pwdToggle" title="Hiển thị mật khẩu">
+            <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+
+        <button type="submit" class="lgn-btn-submit" id="signInBtn">
+          <span id="btnText">Đăng nhập</span>
+          <div class="lgn-btn-spinner" id="btnSpinner" style="display:none;"></div>
+        </button>
+      </form>
+
+      <div class="lgn-options">
+        <label class="lgn-remember">
+          <input type="checkbox" id="rememberMe" checked />
+          <span class="lgn-checkbox-custom"></span>
+          <span>Nhớ tôi</span>
+        </label>
+        <a href="#" class="lgn-help">Cần trợ giúp?</a>
+      </div>
+
+      <div class="lgn-divider"><span>HOẶC</span></div>
+
+      <button class="lgn-btn-code" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+          <line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+        Sử dụng mã đăng nhập
+      </button>
+
+      <p class="lgn-signup">
+        Bạn chưa có tài khoản Netflix?
+        <a href="#">Đăng ký ngay.</a>
+      </p>
+
+      <p class="lgn-recaptcha">
+        Trang này được bảo vệ bởi Google reCAPTCHA để đảm bảo bạn không phải robot.
+        <a href="#">Tìm hiểu thêm.</a>
+      </p>
+    </div>
+
+    <!-- Demo accounts -->
+    <div class="lgn-demo">
+      <div class="lgn-demo-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Tài khoản demo
+      </div>
+      <div class="lgn-demo-accounts">
+        <button class="lgn-demo-account" onclick="fillCredentials('demo@netflix.com','demo123')">
+          <div class="lgn-demo-avatar" style="background:linear-gradient(135deg,#E50914,#b20710)">D</div>
+          <div class="lgn-demo-info">
+            <div class="lgn-demo-email">demo@netflix.com</div>
+            <div class="lgn-demo-pwd">demo123</div>
+          </div>
+          <span class="lgn-demo-badge lgn-badge-premium">PREMIUM</span>
+        </button>
+        <button class="lgn-demo-account" onclick="fillCredentials('user@netflix.com','user123')">
+          <div class="lgn-demo-avatar" style="background:linear-gradient(135deg,#0071eb,#0050a8)">U</div>
+          <div class="lgn-demo-info">
+            <div class="lgn-demo-email">user@netflix.com</div>
+            <div class="lgn-demo-pwd">user123</div>
+          </div>
+          <span class="lgn-demo-badge lgn-badge-standard">STANDARD</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="lgn-footer">
+    <div class="lgn-footer-links">
+      <a href="#">Câu hỏi thường gặp</a>
+      <a href="#">Trung tâm trợ giúp</a>
+      <a href="#">Điều khoản sử dụng</a>
+      <a href="#">Quyền riêng tư</a>
+      <a href="#">Tuỳ chọn cookie</a>
+      <a href="#">Thông tin công ty</a>
+    </div>
+  </footer>
+
+  <script src="/js/login.js"></script>
+</body>
+</html>

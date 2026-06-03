@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cookie Checker — Netflix</title>
+  <link rel="stylesheet" href="/css/checker.css" />
+</head>
+<body>
+
+  <header class="hdr">
+    <a href="/" class="hdr-logo">NETFLIX</a>
+    <span class="hdr-pipe">|</span>
+    <span class="hdr-title">Cookie Checker</span>
+    <div class="hdr-right">
+      <a href="/browse" class="hdr-link">Browse</a>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- Input card -->
+    <div class="input-card">
+      <div class="input-term-bar">
+        <div class="term-dots">
+          <span class="td td-r"></span><span class="td td-y"></span><span class="td td-g"></span>
+        </div>
+        <span class="term-label">cookie_input</span>
+        <span class="term-hint">Ctrl+Enter to run</span>
+      </div>
+      <div class="input-body">
+        <span class="input-prompt">$</span>
+        <textarea id="cookieInput" class="input-ta"
+          placeholder="Paste cookie string — mỗi dòng 1 bộ (batch)&#10;Hoặc Cookie Editor JSON export"
+          rows="3" spellcheck="false"></textarea>
+      </div>
+      <div class="input-actions">
+        <button class="btn btn-primary" onclick="runCheck()">Analyze</button>
+        <button class="btn btn-success" onclick="checkAllLive()" id="checkAllBtn" style="display:none">
+          <span class="live-dot"></span> Check Live
+        </button>
+        <button class="btn btn-ghost" onclick="pasteClip()">Paste</button>
+        <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        <button class="btn btn-ghost" onclick="runDebug()" id="debugBtn">Debug</button>
+
+        <!-- Export dropdown -->
+        <div class="dropdown" id="exportDropdown" style="display:none">
+          <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown()">
+            Export ▾
+          </button>
+          <div class="dropdown-menu" id="dropdownMenu">
+            <button onclick="exportData('live','txt')">📄 Live → .txt</button>
+            <button onclick="exportData('live','csv')">📊 Live → .csv</button>
+            <button onclick="exportData('all','csv')">📊 All → .csv</button>
+            <button onclick="exportData('all','json')">📋 All → .json</button>
+          </div>
+        </div>
+
+        <!-- Auto-recheck -->
+        <div class="auto-wrap" id="autoWrap" style="display:none">
+          <label class="auto-lbl">
+            <input type="checkbox" id="autoCheck" onchange="toggleAutoCheck()" />
+            Auto
+          </label>
+          <select id="autoInterval" class="auto-sel">
+            <option value="5">5m</option>
+            <option value="10">10m</option>
+            <option value="30" selected>30m</option>
+            <option value="60">1h</option>
+          </select>
+          <span class="auto-next" id="autoNext" style="display:none"></span>
+        </div>
+
+        <label class="demo-lbl">
+          <input type="checkbox" id="useDemoCheck" /> Demo
+        </label>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="stat-cards" id="statCards" style="display:none">
+      <div class="stat-card stat-card-total"   id="sc-total">
+        <div class="sc-num" id="sc-total-n">0</div>
+        <div class="sc-label">Total</div>
+      </div>
+      <div class="stat-card stat-card-live"    id="sc-live" onclick="setFilter('live')">
+        <div class="sc-num" id="sc-live-n">0</div>
+        <div class="sc-label">Live</div>
+      </div>
+      <div class="stat-card stat-card-dead"    id="sc-dead" onclick="setFilter('dead')">
+        <div class="sc-num" id="sc-dead-n">0</div>
+        <div class="sc-label">Dead</div>
+      </div>
+      <div class="stat-card stat-card-cancel"  id="sc-cancel" onclick="setFilter('cancelled')">
+        <div class="sc-num" id="sc-cancel-n">0</div>
+        <div class="sc-label">Cancelled</div>
+      </div>
+      <div class="stat-card stat-card-pending" id="sc-pending" onclick="setFilter('pending')">
+        <div class="sc-num" id="sc-pending-n">0</div>
+        <div class="sc-label">Pending</div>
+      </div>
+    </div>
+
+    <!-- Filter bar + progress -->
+    <div class="toolbar" id="toolbar" style="display:none">
+      <div class="filter-tabs" id="filterTabs">
+        <button class="ftab active" data-f="all"       onclick="setFilter('all')">Tất cả</button>
+        <button class="ftab"        data-f="live"      onclick="setFilter('live')">✓ Live</button>
+        <button class="ftab"        data-f="cancelled" onclick="setFilter('cancelled')">⊘ Cancelled</button>
+        <button class="ftab"        data-f="dead"      onclick="setFilter('dead')">✗ Dead</button>
+        <button class="ftab"        data-f="pending"   onclick="setFilter('pending')">… Pending</button>
+      </div>
+      <div class="prog-wrap" id="statProgress" style="display:none">
+        <span id="progressText"></span>
+        <div class="prog-track"><div class="prog-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="table-card" id="tableWrap" style="display:none">
+      <table class="tbl" id="ckTable">
+        <thead>
+          <tr>
+            <th class="th-num">#</th>
+            <th class="th-status">Status</th>
+            <th class="th-plan">Plan</th>
+            <th class="th-email">Email</th>
+            <th class="th-profiles">Profiles</th>
+            <th class="th-age">Session</th>
+            <th class="th-fmt">Fmt</th>
+            <th class="th-act">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="ckBody"></tbody>
+      </table>
+      <div class="table-empty" id="tableEmpty" style="display:none">
+        Không có kết quả khớp filter này.
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-card" id="detailWrap" style="display:none">
+      <div class="detail-hdr">
+        <span id="detailTitle">Detail</span>
+        <button class="detail-close" onclick="closeDetail()">✕</button>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty" id="emptyState">
+      <div class="empty-icon">🍪</div>
+      <p class="empty-t">Cookie Checker</p>
+      <p class="empty-s">Paste → Analyze → Check Live</p>
+    </div>
+
+  </main>
+
+  <script src="/js/checker.js?v=5"></script>
+</body>
+</html>
