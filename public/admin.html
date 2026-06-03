@@ -6,79 +6,117 @@
   <title>Admin · Netflix v1</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      min-height: 100vh; background: #0d0d12; color: #e5e5e5;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      padding: 32px 24px;
-    }
-    .wrap { max-width: 1000px; margin: 0 auto; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    :root { --bg:#0b0b10; --card:#15151d; --bd:#262633; --t1:#e9eaf0; --t2:#8a93a6; --t3:#5b6273; --red:#E50914; --green:#46d369; --amber:#f5a623; }
+    body { min-height: 100vh; background: var(--bg); color: var(--t1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 30px 22px; }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
     .brand { font-size: 1.3rem; font-weight: 800; color: #fff; }
-    .brand span { color: #E50914; }
-    .login-card {
-      max-width: 360px; margin: 80px auto; background: #16161d;
-      border: 1px solid #2a2a35; border-radius: 14px; padding: 28px;
-    }
-    .login-card h1 { font-size: 1.2rem; margin-bottom: 18px; }
-    input {
-      width: 100%; padding: 12px 14px; border-radius: 8px;
-      border: 1.5px solid #2a2a35; background: #0d0d12; color: #fff;
-      font-size: .95rem; outline: none; margin-bottom: 14px;
-    }
-    input:focus { border-color: #E50914; }
-    button {
-      width: 100%; padding: 12px; border: none; border-radius: 8px;
-      background: #E50914; color: #fff; font-weight: 700; cursor: pointer; font-size: .95rem;
-    }
-    button:hover { background: #b20710; }
-    .err { color: #f57e7e; font-size: .85rem; margin-top: 8px; display: none; }
-    .dash { display: none; }
-    .dash.show { display: block; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px; }
-    .stat { background: #16161d; border: 1px solid #2a2a35; border-radius: 12px; padding: 18px; }
-    .stat-num { font-size: 1.8rem; font-weight: 900; color: #fff; }
-    .stat-label { font-size: .78rem; color: #889; margin-top: 4px; }
-    .section { background: #16161d; border: 1px solid #2a2a35; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-    .section h2 { font-size: 1rem; margin-bottom: 14px; color: #ccd; }
+    .brand span { color: var(--red); }
+    input { width: 100%; padding: 12px 14px; border-radius: 9px; border: 1.5px solid var(--bd); background: #0d0d14; color: #fff; font-size: .95rem; outline: none; margin-bottom: 13px; }
+    input:focus { border-color: var(--red); }
+    button { border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: filter .15s, transform .1s; }
+    button:hover { filter: brightness(1.1); }
+    button:active { transform: scale(.98); }
+    .btn-primary { width: 100%; padding: 12px; background: var(--red); color: #fff; font-size: .95rem; }
+    .btn-sm { padding: 6px 12px; font-size: .76rem; background: #23232f; color: #cdd; border-radius: 7px; }
+    .btn-green { background: rgba(70,211,105,.16); color: var(--green); }
+    .btn-red { background: rgba(229,9,20,.16); color: #ff8a8a; }
+    /* login */
+    .login-card { max-width: 380px; margin: 70px auto; background: var(--card); border: 1px solid var(--bd); border-radius: 14px; padding: 28px; }
+    .login-card h1 { font-size: 1.2rem; margin-bottom: 6px; }
+    .login-card .sub { color: var(--t2); font-size: .85rem; margin-bottom: 18px; }
+    .err { color: #ff8a8a; font-size: .85rem; margin-top: 8px; display: none; }
+    .alt { text-align: center; margin-top: 14px; font-size: .8rem; color: var(--t3); }
+    .alt a { color: var(--t2); cursor: pointer; }
+    .hidden { display: none !important; }
+    /* dashboard */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 13px; margin-bottom: 22px; }
+    .stat { background: var(--card); border: 1px solid var(--bd); border-radius: 12px; padding: 16px; }
+    .stat-num { font-size: 1.7rem; font-weight: 900; color: #fff; }
+    .stat-num.hot { color: var(--amber); }
+    .stat-label { font-size: .74rem; color: var(--t2); margin-top: 3px; }
+    .section { background: var(--card); border: 1px solid var(--bd); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
+    .section.warn { border-color: rgba(245,166,35,.4); background: linear-gradient(180deg, rgba(245,166,35,.06), var(--card)); }
+    .section h2 { font-size: .98rem; margin-bottom: 14px; color: #ccd; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pill { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; background: #23232f; color: var(--t2); }
+    .pill.amber { background: rgba(245,166,35,.18); color: var(--amber); }
     table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-    th { text-align: left; color: #889; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid #2a2a35; }
-    td { padding: 8px 10px; border-bottom: 1px solid #1a1a22; color: #ccd; }
-    td.mono { font-family: monospace; color: #7ecff5; }
-    .btn-del { width: auto; padding: 4px 10px; background: #3a1a1a; color: #f57e7e; font-size: .72rem; border-radius: 6px; }
-    .btn-del:hover { background: #5a2020; }
-    .empty { color: #667; font-size: .85rem; padding: 12px; text-align: center; }
-    .logout { width: auto; padding: 8px 16px; background: #2a2a35; font-size: .82rem; }
+    th { text-align: left; color: var(--t2); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--bd); }
+    td { padding: 9px 10px; border-bottom: 1px solid #16161d; color: #cdd; vertical-align: middle; }
+    td.mono { font-family: monospace; color: #7ecff5; word-break: break-all; }
+    .badge { padding: 2px 9px; border-radius: 20px; font-size: .72rem; font-weight: 700; }
+    .b-active { background: rgba(70,211,105,.16); color: var(--green); }
+    .b-pending { background: rgba(245,166,35,.18); color: var(--amber); }
+    .b-rejected { background: rgba(229,9,20,.16); color: #ff8a8a; }
+    .empty { color: var(--t3); font-size: .85rem; padding: 12px; text-align: center; }
+    .search input { margin-bottom: 12px; }
+    .logout { padding: 8px 16px; background: #23232f; color: #cdd; font-size: .82rem; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1c1c28; border: 1px solid var(--bd); padding: 11px 20px; border-radius: 9px; font-size: .85rem; z-index: 999; display: none; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <!-- Login -->
+    <!-- ░░ LOGIN ░░ -->
     <div class="login-card" id="loginCard">
       <h1>🔐 Admin đăng nhập</h1>
-      <input id="token" type="password" placeholder="Admin token" />
-      <button onclick="login()">Đăng nhập</button>
+      <p class="sub">Đăng nhập bằng tài khoản admin.</p>
+      <div id="acctLogin">
+        <input id="username" type="text" placeholder="Username" autocomplete="username" />
+        <input id="password" type="password" placeholder="Mật khẩu" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
+        <button class="btn-primary" onclick="login()">Đăng nhập</button>
+        <p class="alt">hoặc <a onclick="toggleTokenMode(true)">đăng nhập bằng token</a></p>
+      </div>
+      <div id="tokenLogin" class="hidden">
+        <input id="token" type="password" placeholder="Admin token" onkeydown="if(event.key==='Enter')loginToken()" />
+        <button class="btn-primary" onclick="loginToken()">Vào bằng token</button>
+        <p class="alt">hoặc <a onclick="toggleTokenMode(false)">đăng nhập bằng tài khoản</a></p>
+      </div>
       <p class="err" id="loginErr"></p>
     </div>
 
-    <!-- Dashboard -->
-    <div class="dash" id="dash">
+    <!-- ░░ DASHBOARD ░░ -->
+    <div class="hidden" id="dash">
       <div class="topbar">
         <div class="brand"><span>●</span> Admin Dashboard</div>
-        <button class="logout" onclick="logout()">Đăng xuất</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="loadAll()">↻ Tải lại</button>
+          <button class="logout" onclick="logout()">Đăng xuất</button>
+        </div>
       </div>
 
       <div class="stats" id="stats"></div>
 
-      <div class="section">
-        <h2>Keys (<span id="keyCount">0</span>)</h2>
+      <!-- Pending sellers -->
+      <div class="section warn hidden" id="pendingSec">
+        <h2>⏳ Seller chờ duyệt <span class="pill amber" id="pendCount">0</span></h2>
         <table>
-          <thead><tr><th>Key</th><th>Email</th><th>Ghi chú</th><th>Lượt dùng</th><th></th></tr></thead>
+          <thead><tr><th>Username</th><th>Email</th><th>Đăng ký</th><th></th></tr></thead>
+          <tbody id="pendBody"></tbody>
+        </table>
+      </div>
+
+      <!-- All sellers -->
+      <div class="section">
+        <h2>Sellers <span class="pill" id="sellerCount">0</span></h2>
+        <table>
+          <thead><tr><th>Username</th><th>Email</th><th>Trạng thái</th><th></th></tr></thead>
+          <tbody id="sellersBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Keys -->
+      <div class="section">
+        <h2>Keys <span class="pill" id="keyCount">0</span></h2>
+        <div class="search"><input id="keySearch" type="text" placeholder="🔍 Tìm key / email / seller..." oninput="renderKeys()" /></div>
+        <table>
+          <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Dùng</th><th></th></tr></thead>
           <tbody id="keysBody"></tbody>
         </table>
       </div>
 
+      <!-- Users -->
       <div class="section">
-        <h2>Users</h2>
+        <h2>Users (Netflix demo)</h2>
         <table>
           <thead><tr><th>ID</th><th>Email</th><th>Tên</th><th>Plan</th></tr></thead>
           <tbody id="usersBody"></tbody>
@@ -87,15 +125,43 @@
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
+    // Token chỉ set khi đăng nhập bằng token (legacy). Mặc định dùng cookie session.
     let TOKEN = sessionStorage.getItem('adminToken') || '';
+    let allKeys = [];
 
-    function authHeaders() { return { 'X-Admin-Token': TOKEN, 'Content-Type': 'application/json' }; }
+    const $ = id => document.getElementById(id);
+    function show(el, on) { $(el).classList.toggle('hidden', !on); }
+    function toast(m) { const t = $('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 2600); }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+    function authHeaders(extra) { const h = Object.assign({}, extra || {}); if (TOKEN) h['X-Admin-Token'] = TOKEN; return h; }
+    function fmtTs(sec) { try { return new Date(sec * 1000).toLocaleDateString('vi-VN'); } catch { return '—'; } }
 
+    async function jget(url) { const r = await fetch(url, { headers: authHeaders() }); return r.ok ? r.json() : { success: false, status: r.status }; }
+    async function jpost(url) { const r = await fetch(url, { method: 'POST', headers: authHeaders() }); return r.ok ? r.json() : { success: false, status: r.status }; }
+
+    function toggleTokenMode(on) { show('acctLogin', !on); show('tokenLogin', on); $('loginErr').style.display = 'none'; }
+
+    // ── Login bằng tài khoản (cookie session) ──
     async function login() {
-      const t = document.getElementById('token').value.trim();
-      const err = document.getElementById('loginErr');
-      err.style.display = 'none';
+      const username = $('username').value.trim(), password = $('password').value;
+      const err = $('loginErr'); err.style.display = 'none';
+      if (!username || !password) { err.textContent = 'Nhập username và mật khẩu.'; err.style.display = 'block'; return; }
+      try {
+        const r = await fetch('/api/panel/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Đăng nhập thất bại');
+        if (d.account.role !== 'admin') throw new Error('Tài khoản này không phải admin.');
+        TOKEN = ''; sessionStorage.removeItem('adminToken');
+        showDash();
+      } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+    }
+
+    // ── Login bằng token (legacy) ──
+    async function loginToken() {
+      const t = $('token').value.trim(), err = $('loginErr'); err.style.display = 'none';
       try {
         const r = await fetch('/api/admin/stats', { headers: { 'X-Admin-Token': t } });
         if (r.status === 401) throw new Error('Token sai');
@@ -105,48 +171,79 @@
       } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
     }
 
-    function logout() { sessionStorage.removeItem('adminToken'); TOKEN = ''; location.reload(); }
-
-    async function showDash() {
-      document.getElementById('loginCard').style.display = 'none';
-      document.getElementById('dash').classList.add('show');
-      await Promise.all([loadStats(), loadKeys(), loadUsers()]);
+    async function logout() {
+      sessionStorage.removeItem('adminToken'); TOKEN = '';
+      try { await fetch('/api/panel/logout', { method: 'POST' }); } catch {}
+      location.reload();
     }
 
+    async function showDash() {
+      show('loginCard', false); show('dash', true);
+      await loadAll();
+    }
+
+    async function loadAll() { await Promise.all([loadStats(), loadSellers(), loadKeys(), loadUsers()]); }
+
     async function loadStats() {
-      const d = await fetch('/api/admin/stats', { headers: authHeaders() }).then(r => r.json());
-      const s = d.stats || {};
+      const d = await jget('/api/admin/stats'); const s = d.stats || {};
       const items = [
-        ['Users', s.users], ['Profiles', s.profiles], ['Sessions', s.sessions],
-        ['Content', s.content], ['Keys', s.keys], ['Keys đã dùng', s.keysUsed],
+        ['Users', s.users, false], ['Profiles', s.profiles, false], ['Sessions', s.sessions, false],
+        ['Content', s.content, false], ['Keys', s.keys, false], ['Keys đã dùng', s.keysUsed, false],
+        ['Sellers', s.sellers, false], ['Chờ duyệt', s.pendingSellers, s.pendingSellers > 0],
       ];
-      document.getElementById('stats').innerHTML = items.map(([l, n]) =>
-        `<div class="stat"><div class="stat-num">${n ?? 0}</div><div class="stat-label">${l}</div></div>`
+      $('stats').innerHTML = items.map(([l, n, hot]) =>
+        `<div class="stat"><div class="stat-num ${hot ? 'hot' : ''}">${n ?? 0}</div><div class="stat-label">${l}</div></div>`
       ).join('');
     }
 
-    async function loadKeys() {
-      const d = await fetch('/api/admin/keys', { headers: authHeaders() }).then(r => r.json());
-      const keys = d.keys || [];
-      document.getElementById('keyCount').textContent = keys.length;
-      const body = document.getElementById('keysBody');
-      if (!keys.length) { body.innerHTML = '<tr><td colspan="5" class="empty">Chưa có key</td></tr>'; return; }
-      body.innerHTML = keys.map(k => `
+    async function loadSellers() {
+      const d = await jget('/api/admin/sellers');
+      const pending = d.pending || [], sellers = d.sellers || [];
+      // Pending
+      show('pendingSec', pending.length > 0);
+      $('pendCount').textContent = pending.length;
+      $('pendBody').innerHTML = pending.map(s => `
         <tr>
-          <td class="mono">${esc(k.key)}</td>
-          <td>${esc(k.email)}</td>
-          <td>${esc(k.note || '—')}</td>
-          <td>${k.usedCount}</td>
-          <td><button class="btn-del" onclick="delKey('${esc(k.key)}')">Xoá</button></td>
+          <td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtTs(s.createdAt)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn-sm btn-green" onclick="approve('${esc(s.id)}')">✓ Duyệt</button>
+            <button class="btn-sm btn-red" onclick="reject('${esc(s.id)}')">✕ Từ chối</button>
+          </td>
         </tr>`).join('');
+      // All sellers
+      $('sellerCount').textContent = sellers.length;
+      $('sellersBody').innerHTML = sellers.length ? sellers.map(s => {
+        const cls = s.status === 'active' ? 'b-active' : s.status === 'rejected' ? 'b-rejected' : 'b-pending';
+        const act = s.status !== 'active' ? `<button class="btn-sm btn-green" onclick="approve('${esc(s.id)}')">Duyệt</button>` :
+                    `<button class="btn-sm btn-red" onclick="reject('${esc(s.id)}')">Khoá</button>`;
+        return `<tr><td>${esc(s.username)}</td><td>${esc(s.email)}</td>
+                <td><span class="badge ${cls}">${s.status}${s.emailVerified ? '' : ' · chưa verify'}</span></td>
+                <td>${act}</td></tr>`;
+      }).join('') : '<tr><td colspan="4" class="empty">Chưa có seller</td></tr>';
     }
 
-    async function loadUsers() {
-      const d = await fetch('/api/admin/users', { headers: authHeaders() }).then(r => r.json());
-      const users = d.users || [];
-      document.getElementById('usersBody').innerHTML = users.map(u => `
-        <tr><td class="mono">${esc(u.id)}</td><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td>${esc(u.plan)}</td></tr>
-      `).join('');
+    async function approve(id) { const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve'); if (d.success) { toast('Đã duyệt seller'); loadSellers(); loadStats(); } else toast('Lỗi duyệt'); }
+    async function reject(id) { if (!confirm('Từ chối / khoá seller này?')) return; const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/reject'); if (d.success) { toast('Đã cập nhật'); loadSellers(); loadStats(); } else toast('Lỗi'); }
+
+    async function loadKeys() {
+      const d = await jget('/api/admin/keys'); allKeys = d.keys || [];
+      $('keyCount').textContent = allKeys.length;
+      renderKeys();
+    }
+
+    function renderKeys() {
+      const q = ($('keySearch').value || '').trim().toLowerCase();
+      const rows = allKeys.filter(k => !q || k.key.toLowerCase().includes(q) || (k.email || '').toLowerCase().includes(q) || (k.sellerUsername || '').toLowerCase().includes(q));
+      const body = $('keysBody');
+      if (!rows.length) { body.innerHTML = `<tr><td colspan="5" class="empty">${allKeys.length ? 'Không khớp' : 'Chưa có key'}</td></tr>`; return; }
+      body.innerHTML = rows.map(k => `
+        <tr>
+          <td class="mono">${esc(k.key)}<div style="color:var(--t3);font-family:inherit;font-size:.7rem;margin-top:2px">${esc(k.note || '')}</div></td>
+          <td>${esc(k.email)}</td>
+          <td>${k.sellerUsername ? esc(k.sellerUsername) : '<span style="color:var(--t3)">—</span>'}</td>
+          <td>${k.usedCount}</td>
+          <td><button class="btn-sm btn-red" onclick="delKey('${esc(k.key)}')">Xoá</button></td>
+        </tr>`).join('');
     }
 
     async function delKey(key) {
@@ -155,10 +252,19 @@
       await loadKeys(); await loadStats();
     }
 
-    function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    async function loadUsers() {
+      const d = await jget('/api/admin/users'); const users = d.users || [];
+      $('usersBody').innerHTML = users.map(u =>
+        `<tr><td class="mono">${esc(u.id)}</td><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td>${esc(u.plan)}</td></tr>`
+      ).join('');
+    }
 
-    // Auto-login nếu đã có token
-    if (TOKEN) showDash();
+    // ── Init: cookie session (admin) hoặc token cũ → vào dashboard ──
+    (async () => {
+      if (TOKEN) { showDash(); return; }
+      const r = await fetch('/api/panel/me');
+      if (r.ok) { const d = await r.json(); if (d.success && d.account.role === 'admin') showDash(); }
+    })();
   </script>
 </body>
 </html>

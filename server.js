@@ -24,12 +24,26 @@ const {
   createKey,
   resolveKeyEmail,
   getAllKeys,
+  getKeysBySeller,
   deleteKey,
   getAdminStats,
   getAllUsers,
+  createAccount,
+  getAccountByUsername,
+  getAccountByEmail,
+  getAccountById,
+  setVerifyCode,
+  markEmailVerified,
+  setAccountStatus,
+  getSellers,
+  getPendingSellers,
+  createPanelSession,
+  getPanelSession,
+  deletePanelSession,
 } = require('./db/queries');
 const { subdomainMiddleware } = require('./subdomain');
-const { verifyPassword } = require('./auth');
+const { verifyPassword, hashPassword } = require('./auth');
+const { sendVerificationEmail } = require('./mailer');
 
 // Chỉ tắt verify TLS khi thật sự cần debug cert lỗi — mặc định GIỮ bảo mật.
 // Các site dùng (netflix.com, cloudflare, nftoken.site...) đều có cert hợp lệ.
@@ -1167,12 +1181,149 @@ function parseNetflixEmail(raw) {
   return { id, subject, from, time, extracted_code: code, reset_link, family_code, priority };
 }
 
-app.post('/api/key/register', (req, res) => {
+// ─── Panel auth (admin/seller accounts) ───────────────────────────────────────
+const PANEL_COOKIE = 'panelSession';
+
+function setPanelCookie(res, sessionId) {
+  res.cookie(PANEL_COOKIE, sessionId, {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+}
+
+// Lấy account từ panelSession cookie (null nếu chưa đăng nhập / hết hạn)
+function getPanelAccount(req) {
+  const sid = req.cookies[PANEL_COOKIE];
+  if (!sid) return null;
+  const row = getPanelSession(sid);
+  if (!row) return null;
+  const acc = getAccountById(row.account_id);
+  if (acc) acc._sessionId = sid;
+  return acc;
+}
+
+// Bắt buộc seller đã đăng nhập + active
+function requireSeller(req, res, next) {
+  const acc = getPanelAccount(req);
+  if (!acc || acc.role !== 'seller') return res.status(401).json({ success: false, error: 'Chưa đăng nhập seller' });
+  if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản chưa được duyệt' });
+  req.account = acc;
+  next();
+}
+
+// Đăng nhập panel (admin hoặc seller)
+app.post('/api/panel/login', (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ success: false, error: 'Thiếu tài khoản hoặc mật khẩu' });
+    const acc = getAccountByUsername(String(username).trim());
+    if (!acc || !verifyPassword(acc.password, password)) {
+      return res.status(401).json({ success: false, error: 'Sai tài khoản hoặc mật khẩu' });
+    }
+    if (acc.role === 'seller') {
+      if (!acc.emailVerified) return res.status(403).json({ success: false, error: 'Chưa xác minh email', needVerify: true, accountId: acc.id });
+      if (acc.status === 'pending')  return res.status(403).json({ success: false, error: 'Tài khoản đang chờ admin duyệt' });
+      if (acc.status === 'rejected') return res.status(403).json({ success: false, error: 'Tài khoản đã bị từ chối' });
+    }
+    if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản không hoạt động' });
+
+    const sid = uuidv4();
+    createPanelSession(sid, acc.id);
+    setPanelCookie(res, sid);
+    return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role }, redirect: acc.role === 'admin' ? '/admin' : '/seller' });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/panel/logout', (req, res) => {
+  const sid = req.cookies[PANEL_COOKIE];
+  if (sid) deletePanelSession(sid);
+  res.clearCookie(PANEL_COOKIE, { path: '/' });
+  return res.json({ success: true });
+});
+
+app.get('/api/panel/me', (req, res) => {
+  const acc = getPanelAccount(req);
+  if (!acc) return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
+  return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role, status: acc.status } });
+});
+
+// Seller tự đăng ký → tạo account pending + gửi mã xác minh email
+app.post('/api/seller/register', async (req, res) => {
+  try {
+    const username = String(req.body.username || '').trim();
+    const email    = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username tối thiểu 3 ký tự' });
+    if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+    if (password.length < 6)   return res.status(400).json({ success: false, error: 'Mật khẩu tối thiểu 6 ký tự' });
+    if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username đã tồn tại' });
+    if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email đã được dùng' });
+
+    const code    = String(Math.floor(100000 + Math.random() * 900000)); // mã 6 số
+    const expires = Math.floor(Date.now() / 1000) + 15 * 60;             // hết hạn 15 phút
+    const id      = 'sel_' + crypto.randomBytes(6).toString('hex');
+    createAccount({ id, username, email, password: hashPassword(password), role: 'seller', verifyCode: code, verifyExpires: expires });
+
+    const mail = await sendVerificationEmail(email, code).catch(() => ({ sent: false }));
+    return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Đã tạo tài khoản. Nhập mã xác minh gửi tới email.' });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Xác minh email bằng mã 6 số
+app.post('/api/seller/verify-email', (req, res) => {
+  try {
+    const acc = getAccountById(String(req.body.accountId || ''));
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
+    if (!acc.verifyCode || acc.verifyCode !== String(req.body.code || '').trim()) {
+      return res.status(400).json({ success: false, error: 'Mã không đúng' });
+    }
+    if (acc.verifyExpires && Math.floor(Date.now() / 1000) > acc.verifyExpires) {
+      return res.status(400).json({ success: false, error: 'Mã đã hết hạn, hãy gửi lại' });
+    }
+    markEmailVerified(acc.id);
+    return res.json({ success: true, message: 'Xác minh thành công. Chờ admin duyệt tài khoản.' });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Gửi lại mã xác minh
+app.post('/api/seller/resend-code', async (req, res) => {
+  try {
+    const acc = getAccountById(String(req.body.accountId || ''));
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
+    const code    = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = Math.floor(Date.now() / 1000) + 15 * 60;
+    setVerifyCode(acc.id, code, expires);
+    const mail = await sendVerificationEmail(acc.email, code).catch(() => ({ sent: false }));
+    return res.json({ success: true, emailSent: mail.sent });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Danh sách key của seller + tổng quan
+app.get('/api/seller/keys', requireSeller, (req, res) => {
+  const keys = getKeysBySeller(req.account.id);
+  const used = keys.filter(k => k.usedCount > 0).length;
+  return res.json({ success: true, keys, summary: { total: keys.length, used, unused: keys.length - used } });
+});
+
+// Tạo key — yêu cầu seller đăng nhập, gắn seller_id
+app.post('/api/key/register', requireSeller, (req, res) => {
   try {
     const { email, note } = req.body;
     if (!email?.includes('@')) return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
     const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
-    createKey(key, email.trim().toLowerCase(), (note || '').trim() || null);
+    createKey(key, email.trim().toLowerCase(), (note || '').trim() || null, req.account.id);
     return res.json({ success: true, key, email });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -1187,11 +1338,16 @@ app.get('/api/key/resolve', (req, res) => {
 
 // ─── Admin API (X-Admin-Token) ────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
+  // 1) Token cũ (backward-compat)
   const token = req.headers['x-admin-token'] || req.query.token || '';
-  if (token !== ADMIN_TOKEN) {
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  if (token && token === ADMIN_TOKEN) return next();
+  // 2) Hoặc session tài khoản admin
+  const acc = getPanelAccount(req);
+  if (acc && acc.role === 'admin' && acc.status === 'active') {
+    req.account = acc;
+    return next();
   }
-  next();
+  return res.status(401).json({ success: false, error: 'Unauthorized' });
 }
 
 app.get('/api/admin/stats', requireAdmin, (req, res) => {
@@ -1209,6 +1365,18 @@ app.delete('/api/admin/keys/:key', requireAdmin, (req, res) => {
 
 app.get('/api/admin/users', requireAdmin, (req, res) => {
   return res.json({ success: true, users: getAllUsers() });
+});
+
+app.get('/api/admin/sellers', requireAdmin, (req, res) => {
+  return res.json({ success: true, sellers: getSellers(), pending: getPendingSellers() });
+});
+
+app.post('/api/admin/sellers/:id/approve', requireAdmin, (req, res) => {
+  return res.json({ success: setAccountStatus(req.params.id, 'active') });
+});
+
+app.post('/api/admin/sellers/:id/reject', requireAdmin, (req, res) => {
+  return res.json({ success: setAccountStatus(req.params.id, 'rejected') });
 });
 
 app.get('/api/domains', async (req, res) => {

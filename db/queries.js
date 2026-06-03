@@ -92,15 +92,15 @@ function getAllContent(db) {
 }
 
 // ─── Keys (seller bán key → email; admin quản lý) ─────────────────────────────
-function createKey(key, email, note, db) {
+function createKey(key, email, note, sellerId, db) {
   const conn = db || defaultDb();
-  conn.prepare('INSERT INTO keys (key, email, note) VALUES (?, ?, ?)').run(key, email, note ?? null);
+  conn.prepare('INSERT INTO keys (key, email, note, seller_id) VALUES (?, ?, ?, ?)').run(key, email, note ?? null, sellerId ?? null);
   return getKey(key, conn);
 }
 
 function getKey(key, db) {
   const conn = db || defaultDb();
-  return conn.prepare('SELECT key, email, note, used_count AS usedCount, created_at AS createdAt FROM keys WHERE key = ?').get(key) ?? null;
+  return conn.prepare('SELECT key, email, note, used_count AS usedCount, created_at AS createdAt, seller_id AS sellerId FROM keys WHERE key = ?').get(key) ?? null;
 }
 
 function resolveKeyEmail(key, db) {
@@ -113,7 +113,18 @@ function resolveKeyEmail(key, db) {
 
 function getAllKeys(db) {
   const conn = db || defaultDb();
-  return conn.prepare('SELECT key, email, note, used_count AS usedCount, created_at AS createdAt FROM keys ORDER BY created_at DESC').all();
+  return conn.prepare(`
+    SELECT k.key, k.email, k.note, k.used_count AS usedCount, k.created_at AS createdAt,
+           k.seller_id AS sellerId, a.username AS sellerUsername
+    FROM keys k
+    LEFT JOIN accounts a ON a.id = k.seller_id
+    ORDER BY k.created_at DESC
+  `).all();
+}
+
+function getKeysBySeller(sellerId, db) {
+  const conn = db || defaultDb();
+  return conn.prepare('SELECT key, email, note, used_count AS usedCount, created_at AS createdAt FROM keys WHERE seller_id = ? ORDER BY created_at DESC').all(sellerId);
 }
 
 function deleteKey(key, db) {
@@ -132,12 +143,107 @@ function getAdminStats(db) {
     content:      count('SELECT COUNT(*) AS c FROM content'),
     keys:         count('SELECT COUNT(*) AS c FROM keys'),
     keysUsed:     count('SELECT COUNT(*) AS c FROM keys WHERE used_count > 0'),
+    sellers:        count("SELECT COUNT(*) AS c FROM accounts WHERE role = 'seller'"),
+    pendingSellers: count("SELECT COUNT(*) AS c FROM accounts WHERE role = 'seller' AND status = 'pending'"),
   };
 }
 
 function getAllUsers(db) {
   const conn = db || defaultDb();
   return conn.prepare('SELECT id, email, name, plan, created_at AS createdAt FROM users ORDER BY id ASC').all();
+}
+
+// ─── Accounts (admin + seller panel) ──────────────────────────────────────────
+function mapAccount(row) {
+  if (!row) return null;
+  return {
+    id: row.id, username: row.username, email: row.email, password: row.password,
+    role: row.role, status: row.status, emailVerified: row.email_verified === 1,
+    verifyCode: row.verify_code, verifyExpires: row.verify_expires, createdAt: row.created_at,
+  };
+}
+
+// Bản rút gọn cho danh sách — không lộ password/verify_code
+function mapAccountSafe(row) {
+  if (!row) return null;
+  return {
+    id: row.id, username: row.username, email: row.email, role: row.role,
+    status: row.status, emailVerified: row.email_verified === 1, createdAt: row.created_at,
+  };
+}
+
+function createAccount({ id, username, email, password, role, verifyCode, verifyExpires }, db) {
+  const conn = db || defaultDb();
+  conn.prepare(`
+    INSERT INTO accounts (id, username, email, password, role, status, email_verified, verify_code, verify_expires)
+    VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)
+  `).run(id, username, email, password, role, verifyCode ?? null, verifyExpires ?? null);
+  return mapAccount(conn.prepare('SELECT * FROM accounts WHERE id = ?').get(id));
+}
+
+function getAccountByUsername(username, db) {
+  const conn = db || defaultDb();
+  return mapAccount(conn.prepare('SELECT * FROM accounts WHERE username = ?').get(username));
+}
+
+function getAccountByEmail(email, db) {
+  const conn = db || defaultDb();
+  return mapAccount(conn.prepare('SELECT * FROM accounts WHERE email = ?').get(email));
+}
+
+function getAccountById(id, db) {
+  const conn = db || defaultDb();
+  return mapAccount(conn.prepare('SELECT * FROM accounts WHERE id = ?').get(id));
+}
+
+function setVerifyCode(id, code, expires, db) {
+  const conn = db || defaultDb();
+  conn.prepare('UPDATE accounts SET verify_code = ?, verify_expires = ? WHERE id = ?').run(code, expires, id);
+}
+
+function markEmailVerified(id, db) {
+  const conn = db || defaultDb();
+  conn.prepare('UPDATE accounts SET email_verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?').run(id);
+}
+
+function setAccountStatus(id, status, db) {
+  const conn = db || defaultDb();
+  const info = conn.prepare('UPDATE accounts SET status = ? WHERE id = ?').run(status, id);
+  return info.changes > 0;
+}
+
+function getSellers(db) {
+  const conn = db || defaultDb();
+  return conn.prepare("SELECT * FROM accounts WHERE role = 'seller' ORDER BY created_at DESC").all().map(mapAccountSafe);
+}
+
+function getPendingSellers(db) {
+  const conn = db || defaultDb();
+  return conn.prepare("SELECT * FROM accounts WHERE role = 'seller' AND status = 'pending' ORDER BY created_at DESC").all().map(mapAccountSafe);
+}
+
+// ─── Panel sessions (admin/seller) ────────────────────────────────────────────
+function createPanelSession(sessionId, accountId, db) {
+  const conn = db || defaultDb();
+  const expiresAt = Math.floor(Date.now() / 1000) + 2592000; // 30 ngày
+  conn.prepare('INSERT INTO panel_sessions (session_id, account_id, expires_at) VALUES (?, ?, ?)').run(sessionId, accountId, expiresAt);
+}
+
+function getPanelSession(sessionId, db) {
+  const conn = db || defaultDb();
+  const row = conn.prepare('SELECT * FROM panel_sessions WHERE session_id = ?').get(sessionId);
+  if (!row) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (row.expires_at <= now) {
+    conn.prepare('DELETE FROM panel_sessions WHERE session_id = ?').run(sessionId);
+    return null;
+  }
+  return row;
+}
+
+function deletePanelSession(sessionId, db) {
+  const conn = db || defaultDb();
+  conn.prepare('DELETE FROM panel_sessions WHERE session_id = ?').run(sessionId);
 }
 
 module.exports = {
@@ -154,7 +260,20 @@ module.exports = {
   getKey,
   resolveKeyEmail,
   getAllKeys,
+  getKeysBySeller,
   deleteKey,
   getAdminStats,
   getAllUsers,
+  createAccount,
+  getAccountByUsername,
+  getAccountByEmail,
+  getAccountById,
+  setVerifyCode,
+  markEmailVerified,
+  setAccountStatus,
+  getSellers,
+  getPendingSellers,
+  createPanelSession,
+  getPanelSession,
+  deletePanelSession,
 };

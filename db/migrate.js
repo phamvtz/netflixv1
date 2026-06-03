@@ -99,6 +99,56 @@ const migrations = [
       db.exec('DROP TABLE IF EXISTS keys');
     },
   },
+  {
+    version: 6,
+    up(db) {
+      // Tài khoản panel (admin + seller) — tách khỏi bảng users (Netflix demo)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS accounts (
+          id             TEXT PRIMARY KEY,
+          username       TEXT UNIQUE NOT NULL,
+          email          TEXT UNIQUE NOT NULL,
+          password       TEXT NOT NULL,
+          role           TEXT NOT NULL,                    -- 'admin' | 'seller'
+          status         TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'active' | 'rejected'
+          email_verified INTEGER NOT NULL DEFAULT 0,
+          verify_code    TEXT,
+          verify_expires INTEGER,
+          created_at     INTEGER DEFAULT (unixepoch())
+        )
+      `);
+    },
+    down(db) {
+      db.exec('DROP TABLE IF EXISTS accounts');
+    },
+  },
+  {
+    version: 7,
+    up(db) {
+      // Session panel (admin/seller) — UUID cookie tra ngược, tách khỏi sessions Netflix
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS panel_sessions (
+          session_id TEXT PRIMARY KEY,
+          account_id TEXT NOT NULL REFERENCES accounts(id),
+          created_at INTEGER DEFAULT (unixepoch()),
+          expires_at INTEGER NOT NULL
+        )
+      `);
+    },
+    down(db) {
+      db.exec('DROP TABLE IF EXISTS panel_sessions');
+    },
+  },
+  {
+    version: 8,
+    up(db) {
+      // Gắn key với seller tạo ra nó (NULL = key legacy hoặc do admin tạo)
+      db.exec('ALTER TABLE keys ADD COLUMN seller_id TEXT REFERENCES accounts(id)');
+    },
+    down(db) {
+      // SQLite cũ không hỗ trợ DROP COLUMN — rollback bỏ qua (không quan trọng)
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {

@@ -16,11 +16,23 @@ const {
   createKey,
   resolveKeyEmail,
   getAllKeys,
+  getKeysBySeller,
   deleteKey,
   getAdminStats,
+  createAccount,
+  getAccountByUsername,
+  getAccountById,
+  markEmailVerified,
+  setAccountStatus,
+  getPendingSellers,
+  getSellers,
+  createPanelSession,
+  getPanelSession,
+  deletePanelSession,
 } = require('../db/queries');
 const { parseSubdomain } = require('../subdomain');
 const { content } = require('../data/content');
+const { hashPassword, verifyPassword } = require('../auth');
 
 function createTestDb() {
   const db = new DatabaseSync(':memory:');
@@ -85,7 +97,7 @@ describe('SQLite database layer', () => {
   });
 
   it('keys: create → resolve (tăng used_count) → list → delete', () => {
-    createKey('SK-TEST-0001', 'buyer@tinyhost.shop', 'đơn test', db);
+    createKey('SK-TEST-0001', 'buyer@tinyhost.shop', 'đơn test', null, db);
     const email = resolveKeyEmail('SK-TEST-0001', db);
     assert.equal(email, 'buyer@tinyhost.shop');
 
@@ -106,6 +118,57 @@ describe('SQLite database layer', () => {
     assert.equal(s.profiles, 6);
     assert.equal(s.content, 37);
     assert.equal(typeof s.keys, 'number');
+  });
+});
+
+describe('Accounts, panel sessions & seller keys', () => {
+  let db;
+  before(() => { db = createTestDb(); });
+
+  it('admin account được seed: admin / Admin2026, active, verified', () => {
+    const admin = getAccountByUsername('admin', db);
+    assert.ok(admin);
+    assert.equal(admin.role, 'admin');
+    assert.equal(admin.status, 'active');
+    assert.equal(admin.emailVerified, true);
+    assert.equal(admin.email, 'hcjx125@gmail.com');
+    assert.equal(verifyPassword(admin.password, 'Admin2026'), true);
+    assert.equal(verifyPassword(admin.password, 'sai'), false);
+  });
+
+  it('seller flow: đăng ký pending → verify email → admin duyệt → active', () => {
+    const acc = createAccount({
+      id: 'sel_test', username: 'seller1', email: 's1@tinyhost.shop',
+      password: hashPassword('seller123'), role: 'seller', verifyCode: '123456',
+      verifyExpires: Math.floor(Date.now() / 1000) + 900,
+    }, db);
+    assert.equal(acc.status, 'pending');
+    assert.equal(acc.emailVerified, false);
+    assert.ok(getPendingSellers(db).some(s => s.id === 'sel_test'));
+
+    markEmailVerified('sel_test', db);
+    assert.equal(getAccountById('sel_test', db).emailVerified, true);
+
+    assert.equal(setAccountStatus('sel_test', 'active', db), true);
+    assert.equal(getAccountById('sel_test', db).status, 'active');
+    assert.equal(getPendingSellers(db).some(s => s.id === 'sel_test'), false);
+    assert.ok(getSellers(db).some(s => s.id === 'sel_test'));
+  });
+
+  it('panel session round-trip và delete', () => {
+    createPanelSession('ps-1', 'acc_admin', db);
+    const row = getPanelSession('ps-1', db);
+    assert.ok(row);
+    assert.equal(row.account_id, 'acc_admin');
+    deletePanelSession('ps-1', db);
+    assert.equal(getPanelSession('ps-1', db), null);
+  });
+
+  it('key gắn seller_id → getKeysBySeller trả đúng', () => {
+    createKey('SK-SELLER-1', 'buyer@tinyhost.shop', null, 'sel_test', db);
+    const keys = getKeysBySeller('sel_test', db);
+    assert.equal(keys.length, 1);
+    assert.equal(keys[0].key, 'SK-SELLER-1');
   });
 });
 

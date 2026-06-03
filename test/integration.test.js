@@ -31,9 +31,9 @@ describe('Integration: startup sequence', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('schema_migrations có 5 version', () => {
+  it('schema_migrations có 8 version', () => {
     const rows = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5]);
+    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
   it('PRAGMA journal_mode = wal và foreign_keys = ON', () => {
@@ -45,6 +45,7 @@ describe('Integration: startup sequence', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM users').get().c, 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM profiles').get().c, 6);
     assert.equal(getAllContent(db).length, 37);
+    assert.equal(db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE role='admin'").get().c, 1);
   });
 
   it('.gitignore chứa netflix.db và wal/shm', () => {

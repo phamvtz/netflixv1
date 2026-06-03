@@ -91,11 +91,21 @@ function seedContent(db) {
   }
 }
 
+function seedAccounts(db) {
+  if (tableCount(db, 'accounts') > 0) return;
+  // Tài khoản admin mặc định — admin / Admin2026 (active, đã xác minh)
+  db.prepare(`
+    INSERT INTO accounts (id, username, email, password, role, status, email_verified)
+    VALUES (?, ?, ?, ?, 'admin', 'active', 1)
+  `).run('acc_admin', 'admin', 'hcjx125@gmail.com', hashPassword('Admin2026'));
+}
+
 function runSeed(db) {
   const conn = db || defaultDb();
   seedUsers(conn);
   seedProfiles(conn);
   seedContent(conn);
+  seedAccounts(conn);
 }
 
 module.exports = { runSeed };

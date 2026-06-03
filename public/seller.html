@@ -6,48 +6,69 @@
   <title>Seller · Netflix Key</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green: #46d369; --green-d: #2fae52; --bg: #0f1623; --card: rgba(255,255,255,.04);
+      --bd: rgba(255,255,255,.1); --t1: #e9eef5; --t2: #9fb0c3; --t3: #687585; --red: #f57e7e;
+    }
     body {
-      min-height: 100vh;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      color: #e5e5e5; padding: 40px 20px;
+      min-height: 100vh; color: var(--t1);
+      background: radial-gradient(1200px 600px at 80% -10%, #1b2b4a 0%, transparent 60%), linear-gradient(135deg, #0f1623 0%, #131d30 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 32px 18px;
     }
-    .wrap { max-width: 720px; margin: 0 auto; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
-    .brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; }
-    .brand .dot { width: 12px; height: 12px; border-radius: 50%; background: #46d369; }
-    .nav a { color: #9aa; font-size: .85rem; margin-left: 16px; text-decoration: none; }
+    .wrap { max-width: 940px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; letter-spacing: .3px; }
+    .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .nav a { color: var(--t2); font-size: .85rem; margin-left: 16px; text-decoration: none; }
     .nav a:hover { color: #fff; }
-    .card {
-      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
-      border-radius: 16px; padding: 28px; margin-bottom: 20px;
-    }
-    h1 { font-size: 1.5rem; margin-bottom: 6px; }
-    .sub { color: #889; font-size: .9rem; margin-bottom: 22px; }
-    label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 8px; color: #bcd; }
+    .card { background: var(--card); border: 1px solid var(--bd); border-radius: 16px; padding: 26px; margin-bottom: 18px; backdrop-filter: blur(6px); }
+    h1 { font-size: 1.45rem; margin-bottom: 6px; }
+    .sub { color: var(--t2); font-size: .9rem; margin-bottom: 20px; line-height: 1.5; }
+    label { display: block; font-size: .8rem; font-weight: 600; margin-bottom: 7px; color: #bcd; }
     input {
-      width: 100%; padding: 13px 15px; border-radius: 10px;
-      border: 1.5px solid rgba(255,255,255,.15); background: rgba(0,0,0,.25);
-      color: #fff; font-size: .95rem; outline: none; margin-bottom: 16px;
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--bd);
+      background: rgba(0,0,0,.28); color: #fff; font-size: .95rem; outline: none; margin-bottom: 15px;
     }
-    input:focus { border-color: #46d369; }
+    input:focus { border-color: var(--green); }
     button {
-      width: 100%; padding: 14px; border: none; border-radius: 50px;
-      background: #46d369; color: #06240f; font-size: 1rem; font-weight: 700;
-      cursor: pointer; transition: transform .1s, box-shadow .15s;
+      border: none; border-radius: 50px; background: var(--green); color: #06240f;
+      font-weight: 700; cursor: pointer; transition: transform .1s, box-shadow .15s, background .15s;
     }
     button:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(70,211,105,.3); }
-    .result { display: none; margin-top: 20px; }
-    .result.show { display: block; }
-    .key-box {
-      background: rgba(70,211,105,.1); border: 1.5px solid rgba(70,211,105,.4);
-      border-radius: 12px; padding: 18px; display: flex; align-items: center;
-      justify-content: space-between; gap: 12px;
-    }
-    .key-val { font-family: monospace; font-size: 1.1rem; font-weight: 700; color: #7ef5a0; word-break: break-all; }
-    .btn-copy { width: auto; padding: 8px 14px; background: rgba(255,255,255,.1); color: #fff; font-size: .8rem; }
-    .err { color: #f57e7e; font-size: .85rem; margin-top: 10px; display: none; }
-    .hint { font-size: .78rem; color: #778; margin-top: 8px; }
+    button:disabled { opacity: .55; cursor: default; transform: none; box-shadow: none; }
+    .btn-full { width: 100%; padding: 13px; font-size: 1rem; }
+    .btn-sm { padding: 8px 14px; font-size: .8rem; background: rgba(255,255,255,.1); color: #fff; border-radius: 8px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 22px; }
+    .tab { flex: 1; padding: 11px; text-align: center; border-radius: 10px; background: rgba(255,255,255,.05); color: var(--t2); font-weight: 600; font-size: .9rem; cursor: pointer; border: 1.5px solid transparent; }
+    .tab.active { background: rgba(70,211,105,.12); color: var(--green); border-color: rgba(70,211,105,.4); }
+    .err { color: var(--red); font-size: .85rem; margin: 4px 0 12px; display: none; }
+    .ok-msg { color: var(--green); font-size: .88rem; margin: 4px 0 12px; display: none; }
+    .hint { font-size: .78rem; color: var(--t3); margin-top: 6px; line-height: 1.5; }
+    .auth-box { max-width: 420px; margin: 4vh auto 0; }
+    .hidden { display: none !important; }
+    /* dashboard */
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+    .scard { background: var(--card); border: 1px solid var(--bd); border-radius: 14px; padding: 18px; text-align: center; }
+    .scard .n { font-size: 1.9rem; font-weight: 900; }
+    .scard .l { font-size: .75rem; color: var(--t2); margin-top: 3px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .row-2 { grid-template-columns: 1fr; } .summary { grid-template-columns: 1fr 1fr; } }
+    .sec-title { font-size: 1rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th { text-align: left; color: var(--t2); font-weight: 600; padding: 8px 9px; border-bottom: 1px solid var(--bd); }
+    td { padding: 9px; border-bottom: 1px solid rgba(255,255,255,.05); color: #cdd9e6; vertical-align: middle; }
+    td.mono { font-family: monospace; color: #7ef5a0; word-break: break-all; }
+    .badge { padding: 2px 9px; border-radius: 20px; font-size: .72rem; font-weight: 700; }
+    .badge.used { background: rgba(70,211,105,.15); color: var(--green); }
+    .badge.new { background: rgba(255,255,255,.08); color: var(--t2); }
+    .key-box { background: rgba(70,211,105,.1); border: 1.5px solid rgba(70,211,105,.4); border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+    .key-val { font-family: monospace; font-size: 1.05rem; font-weight: 700; color: #7ef5a0; word-break: break-all; }
+    .search { margin-bottom: 12px; }
+    .search input { margin-bottom: 0; }
+    .empty { color: var(--t3); font-size: .85rem; text-align: center; padding: 16px; }
+    .acct-pill { font-size: .8rem; color: var(--t2); }
+    .acct-pill b { color: #fff; }
+    .toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: #16223a; border: 1px solid var(--bd); padding: 12px 20px; border-radius: 10px; font-size: .85rem; z-index: 999; display: none; }
   </style>
 </head>
 <body>
@@ -57,69 +78,256 @@
       <nav class="nav">
         <a href="/checker">Checker</a>
         <a id="meLink" href="#">Get Code</a>
+        <a href="#" id="logoutLink" class="hidden" onclick="logout();return false;">Đăng xuất</a>
       </nav>
     </div>
 
-    <div class="card">
-      <h1>Tạo key bán hàng</h1>
-      <p class="sub">Gắn một email temp-mail với key <code>SK-XXXX</code>. Khách dùng key tại trang Get Code để lấy mã Netflix mà không lộ email.</p>
-
-      <label for="email">Email temp-mail</label>
-      <input id="email" type="email" placeholder="khachhang@tinyhost.shop" />
-
-      <label for="note">Ghi chú (tuỳ chọn)</label>
-      <input id="note" type="text" placeholder="vd: đơn #123, KH Facebook..." />
-
-      <button id="btnCreate" onclick="createKey()">Tạo key</button>
-      <p class="err" id="err"></p>
-
-      <div class="result" id="result">
-        <div class="key-box">
-          <span class="key-val" id="keyVal"></span>
-          <button class="btn-copy" onclick="copyKey()">Sao chép</button>
+    <!-- ░░ AUTH ░░ -->
+    <div id="authView" class="auth-box">
+      <div class="card">
+        <div class="tabs">
+          <div class="tab active" id="tabLogin" onclick="showTab('login')">Đăng nhập</div>
+          <div class="tab" id="tabReg" onclick="showTab('reg')">Đăng ký</div>
         </div>
-        <p class="hint" id="meHint"></p>
+
+        <!-- Login -->
+        <div id="paneLogin">
+          <h1 style="font-size:1.25rem">Đăng nhập Seller</h1>
+          <p class="sub">Đăng nhập để tạo & quản lý key bán hàng.</p>
+          <label>Username</label>
+          <input id="lgUser" type="text" placeholder="username" autocomplete="username" />
+          <label>Mật khẩu</label>
+          <input id="lgPass" type="password" placeholder="••••••" autocomplete="current-password" />
+          <p class="err" id="lgErr"></p>
+          <p class="ok-msg" id="lgOk"></p>
+          <button class="btn-full" id="lgBtn" onclick="doLogin()">Đăng nhập</button>
+        </div>
+
+        <!-- Register -->
+        <div id="paneReg" class="hidden">
+          <h1 style="font-size:1.25rem">Đăng ký Seller</h1>
+          <p class="sub">Tạo tài khoản → xác minh email → chờ admin duyệt → đăng nhập.</p>
+          <label>Username</label>
+          <input id="rgUser" type="text" placeholder="tối thiểu 3 ký tự" />
+          <label>Email</label>
+          <input id="rgEmail" type="email" placeholder="ban@example.com" />
+          <label>Mật khẩu</label>
+          <input id="rgPass" type="password" placeholder="tối thiểu 6 ký tự" />
+          <p class="err" id="rgErr"></p>
+          <button class="btn-full" id="rgBtn" onclick="doRegister()">Tạo tài khoản</button>
+        </div>
+
+        <!-- Verify -->
+        <div id="paneVerify" class="hidden">
+          <h1 style="font-size:1.25rem">Xác minh email</h1>
+          <p class="sub">Nhập mã 6 số đã gửi tới <b id="vEmail"></b>.</p>
+          <label>Mã xác minh</label>
+          <input id="vCode" type="text" inputmode="numeric" maxlength="6" placeholder="______" style="letter-spacing:6px;text-align:center;font-size:1.2rem" />
+          <p class="err" id="vErr"></p>
+          <p class="ok-msg" id="vOk"></p>
+          <button class="btn-full" id="vBtn" onclick="doVerify()">Xác minh</button>
+          <p class="hint">Không nhận được mã? <a href="#" onclick="doResend();return false;" style="color:var(--green)">Gửi lại</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░ DASHBOARD ░░ -->
+    <div id="dashView" class="hidden">
+      <div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="acct-pill">Xin chào, <b id="acctName">seller</b> · <span id="acctEmail"></span></div>
+        <button class="btn-sm" onclick="logout()">Đăng xuất</button>
+      </div>
+
+      <div class="summary">
+        <div class="scard"><div class="n" id="smTotal">0</div><div class="l">Tổng key</div></div>
+        <div class="scard"><div class="n" style="color:var(--green)" id="smUsed">0</div><div class="l">Đã dùng</div></div>
+        <div class="scard"><div class="n" id="smUnused">0</div><div class="l">Chưa dùng</div></div>
+      </div>
+
+      <div class="row-2">
+        <!-- Create -->
+        <div class="card">
+          <div class="sec-title">Tạo key mới</div>
+          <p class="sub" style="margin-bottom:14px">Gắn email temp-mail với key <code>SK-XXXX</code>. Khách dùng key tại Get Code để lấy mã Netflix mà không lộ email.</p>
+          <label>Email temp-mail</label>
+          <input id="ckEmail" type="email" placeholder="khachhang@tinyhost.shop" />
+          <label>Ghi chú (tuỳ chọn)</label>
+          <input id="ckNote" type="text" placeholder="vd: đơn #123, KH Facebook..." />
+          <p class="err" id="ckErr"></p>
+          <button class="btn-full" id="ckBtn" onclick="createKey()">Tạo key</button>
+          <div class="key-box hidden" id="ckResult">
+            <span class="key-val" id="ckKeyVal"></span>
+            <button class="btn-sm" onclick="copyText(document.getElementById('ckKeyVal').textContent)">Sao chép</button>
+          </div>
+        </div>
+
+        <!-- List -->
+        <div class="card">
+          <div class="sec-title">Key của tôi <button class="btn-sm" onclick="loadDash()">↻ Tải lại</button></div>
+          <div class="search"><input id="kSearch" type="text" placeholder="🔍 Tìm key / email / ghi chú..." oninput="renderKeys()" /></div>
+          <div style="max-height:420px;overflow:auto">
+            <table>
+              <thead><tr><th>Key</th><th>Email</th><th>Dùng</th><th></th></tr></thead>
+              <tbody id="kBody"><tr><td colspan="4" class="empty">Đang tải…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
-    // Link sang me.* subdomain (đổi seller → me)
     const meHost = location.host.replace(/^seller\./, 'me.');
     const meUrl = location.protocol + '//' + meHost + '/getcode.html';
     document.getElementById('meLink').href = meUrl;
 
-    async function createKey() {
-      const email = document.getElementById('email').value.trim();
-      const note = document.getElementById('note').value.trim();
-      const err = document.getElementById('err');
-      const btn = document.getElementById('btnCreate');
-      err.style.display = 'none';
+    let pendingAccountId = null; // dùng cho verify
+    let allKeys = [];
 
-      if (!email.includes('@')) { err.textContent = 'Email không hợp lệ.'; err.style.display = 'block'; return; }
+    const $ = id => document.getElementById(id);
+    function show(el, on) { $(el).classList.toggle('hidden', !on); }
+    function setErr(id, msg) { const e = $(id); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
+    function setOk(id, msg) { const e = $(id); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
+    function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 2600); }
+    async function copyText(s) { try { await navigator.clipboard.writeText(s); toast('Đã sao chép'); } catch {} }
 
-      btn.disabled = true; btn.textContent = 'Đang tạo...';
-      try {
-        const r = await fetch('/api/key/register', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, note }),
-        });
-        const d = await r.json();
-        if (!d.success) throw new Error(d.error || 'Lỗi tạo key');
+    async function api(url, body, method) {
+      const opt = { method: method || (body ? 'POST' : 'GET'), headers: {} };
+      if (body) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+      const r = await fetch(url, opt);
+      let d = {}; try { d = await r.json(); } catch {}
+      return { status: r.status, ...d };
+    }
 
-        document.getElementById('keyVal').textContent = d.key;
-        document.getElementById('meHint').textContent = 'Khách nhập key này tại: ' + meUrl;
-        document.getElementById('result').classList.add('show');
-      } catch (e) {
-        err.textContent = e.message; err.style.display = 'block';
-      } finally {
-        btn.disabled = false; btn.textContent = 'Tạo key';
+    function showTab(t) {
+      $('tabLogin').classList.toggle('active', t === 'login');
+      $('tabReg').classList.toggle('active', t === 'reg');
+      show('paneLogin', t === 'login');
+      show('paneReg', t === 'reg');
+      show('paneVerify', false);
+    }
+
+    // ── Login ──
+    async function doLogin() {
+      setErr('lgErr'); setOk('lgOk');
+      const username = $('lgUser').value.trim(), password = $('lgPass').value;
+      if (!username || !password) return setErr('lgErr', 'Nhập username và mật khẩu.');
+      $('lgBtn').disabled = true;
+      const d = await api('/api/panel/login', { username, password });
+      $('lgBtn').disabled = false;
+      if (d.success) {
+        if (d.account.role !== 'seller') return setErr('lgErr', 'Tài khoản này không phải seller.');
+        return enterDash(d.account);
       }
+      if (d.needVerify) { pendingAccountId = d.accountId; openVerify($('lgUser').value); return setErr('lgErr', 'Tài khoản chưa xác minh email — nhập mã bên dưới.'); }
+      setErr('lgErr', d.error || 'Đăng nhập thất bại.');
     }
 
-    async function copyKey() {
-      try { await navigator.clipboard.writeText(document.getElementById('keyVal').textContent); } catch {}
+    // ── Register ──
+    async function doRegister() {
+      setErr('rgErr');
+      const username = $('rgUser').value.trim(), email = $('rgEmail').value.trim(), password = $('rgPass').value;
+      if (username.length < 3) return setErr('rgErr', 'Username tối thiểu 3 ký tự.');
+      if (!email.includes('@')) return setErr('rgErr', 'Email không hợp lệ.');
+      if (password.length < 6) return setErr('rgErr', 'Mật khẩu tối thiểu 6 ký tự.');
+      $('rgBtn').disabled = true;
+      const d = await api('/api/seller/register', { username, email, password });
+      $('rgBtn').disabled = false;
+      if (!d.success) return setErr('rgErr', d.error || 'Đăng ký thất bại.');
+      pendingAccountId = d.accountId;
+      openVerify(email);
+      if (!d.emailSent) toast('SMTP chưa cấu hình — xem mã trong console server.');
     }
+
+    function openVerify(email) {
+      show('paneLogin', false); show('paneReg', false); show('paneVerify', true);
+      $('vEmail').textContent = email || '';
+      setErr('vErr'); setOk('vOk');
+    }
+
+    async function doVerify() {
+      setErr('vErr'); setOk('vOk');
+      const code = $('vCode').value.trim();
+      if (!/^\d{6}$/.test(code)) return setErr('vErr', 'Mã gồm 6 chữ số.');
+      $('vBtn').disabled = true;
+      const d = await api('/api/seller/verify-email', { accountId: pendingAccountId, code });
+      $('vBtn').disabled = false;
+      if (!d.success) return setErr('vErr', d.error || 'Xác minh thất bại.');
+      setOk('vOk', '✓ Xác minh thành công! Tài khoản đang chờ admin duyệt.');
+      setTimeout(() => { showTab('login'); setErr('lgErr'); setOk('lgOk', 'Đã xác minh — chờ admin duyệt rồi đăng nhập.'); }, 1800);
+    }
+
+    async function doResend() {
+      const d = await api('/api/seller/resend-code', { accountId: pendingAccountId });
+      if (d.success) toast(d.emailSent ? 'Đã gửi lại mã.' : 'SMTP chưa cấu hình — xem mã ở console server.');
+      else toast(d.error || 'Lỗi gửi lại mã.');
+    }
+
+    // ── Dashboard ──
+    function enterDash(acct) {
+      show('authView', false); show('dashView', true); show('logoutLink', true);
+      $('acctName').textContent = acct.username;
+      $('acctEmail').textContent = acct.email || '';
+      loadDash();
+    }
+
+    async function loadDash() {
+      const d = await api('/api/seller/keys');
+      if (!d.success) { allKeys = []; }
+      else {
+        allKeys = d.keys || [];
+        $('smTotal').textContent = d.summary.total;
+        $('smUsed').textContent = d.summary.used;
+        $('smUnused').textContent = d.summary.unused;
+      }
+      renderKeys();
+    }
+
+    function renderKeys() {
+      const q = $('kSearch').value.trim().toLowerCase();
+      const rows = allKeys.filter(k =>
+        !q || k.key.toLowerCase().includes(q) || (k.email || '').toLowerCase().includes(q) || (k.note || '').toLowerCase().includes(q)
+      );
+      const body = $('kBody');
+      if (!rows.length) { body.innerHTML = `<tr><td colspan="4" class="empty">${allKeys.length ? 'Không khớp tìm kiếm' : 'Chưa có key nào'}</td></tr>`; return; }
+      body.innerHTML = rows.map(k => `
+        <tr>
+          <td class="mono">${esc(k.key)}<div style="color:var(--t3);font-family:inherit;font-size:.7rem;margin-top:2px">${esc(k.note || '')}</div></td>
+          <td>${esc(k.email)}</td>
+          <td><span class="badge ${k.usedCount > 0 ? 'used' : 'new'}">${k.usedCount > 0 ? k.usedCount + '×' : 'mới'}</span></td>
+          <td><button class="btn-sm" onclick="copyText('${esc(k.key)}')">Copy</button></td>
+        </tr>`).join('');
+    }
+
+    async function createKey() {
+      setErr('ckErr');
+      const email = $('ckEmail').value.trim(), note = $('ckNote').value.trim();
+      if (!email.includes('@')) return setErr('ckErr', 'Email không hợp lệ.');
+      $('ckBtn').disabled = true;
+      const d = await api('/api/key/register', { email, note });
+      $('ckBtn').disabled = false;
+      if (!d.success) return setErr('ckErr', d.error || 'Lỗi tạo key.');
+      $('ckKeyVal').textContent = d.key;
+      show('ckResult', true);
+      $('ckEmail').value = ''; $('ckNote').value = '';
+      toast('Đã tạo key. Khách nhập tại: ' + meUrl);
+      loadDash();
+    }
+
+    async function logout() {
+      await api('/api/panel/logout', {});
+      location.reload();
+    }
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+
+    // ── Init: nếu đã đăng nhập seller → vào dashboard ──
+    (async () => {
+      const d = await api('/api/panel/me');
+      if (d.success && d.account.role === 'seller' && d.account.status === 'active') enterDash(d.account);
+    })();
   </script>
 </body>
 </html>

@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.100.1",
     "cookie-parser": "^1.4.6",
     "express": "^4.18.2",
+    "nodemailer": "^8.0.10",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
