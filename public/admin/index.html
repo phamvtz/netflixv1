@@ -10,6 +10,11 @@
 <body data-theme="admin">
   <div class="panel-wrap">
     <div class="panel-login panel-card" id="loginCard">
+      <nav class="panel-nav" style="margin-bottom:16px">
+        <a href="/">Lấy mã</a>
+        <a href="/seller">Seller</a>
+        <a href="/admin" class="is-active">Admin</a>
+      </nav>
       <h1>Admin đăng nhập</h1>
       <p class="sub">Quản lý seller, key và users demo.</p>
       <div id="acctLogin">
@@ -33,8 +38,9 @@
       <header class="panel-topbar">
         <div class="panel-brand"><span class="mark">●</span> Admin Dashboard</div>
         <nav class="panel-nav" id="panelNav">
-          <a href="/checker">Checker</a>
-          <a href="/" class="is-active">Admin</a>
+          <a href="/">Lấy mã</a>
+          <a href="/seller">Seller</a>
+          <a href="/admin" class="is-active">Admin</a>
         </nav>
         <div class="panel-actions">
           <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="loadAll()">↻ Tải lại</button>

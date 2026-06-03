@@ -22,10 +22,20 @@ const {
   deleteExpiredSessions,
   getAllContent,
   createKey,
+  getKey,
   resolveKeyEmail,
+  incrementKeyUsage,
+  updateKey,
+  clampKeyPerms,
+  clampKeyPermsFull,
+  getSellerMaxPerms,
+  setSellerPerms,
   getAllKeys,
   getKeysBySeller,
+  getKeysBySellerEnriched,
   deleteKey,
+  deleteKeyForSeller,
+  syncKeyFromOrder,
   getAdminStats,
   getAllUsers,
   createAccount,
@@ -41,6 +51,29 @@ const {
   getPanelSession,
   deletePanelSession,
 } = require('./db/queries');
+const {
+  getProducts,
+  upsertProduct,
+  getSellerBalance,
+  adjustBalance,
+  getTransactions,
+  getTransactionSummary,
+  getSellerOrders,
+  getSellerOrderById,
+  updateSellerOrder,
+  renewSellerOrder,
+  getOrderHistory,
+  getSellerEmails,
+  getSellerDashboardStats,
+  purchaseProduct,
+  migrateOrphanKeysToOrders,
+  updateSellerProfile,
+  getSellerProfile,
+  adminCreateOrderForSeller,
+  getOrderByEmailForInbox,
+  getProductById,
+  logOrderEvent,
+} = require('./db/queries-orders');
 const { subdomainMiddleware } = require('./subdomain');
 const { verifyPassword, hashPassword } = require('./auth');
 const { sendVerificationEmail } = require('./mailer');
@@ -827,40 +860,21 @@ function requireProfile(req, res, next) {
 
 // ─── Page Routes ───────────────────────────────────────────────────────────────
 
+// Trang chủ user: chỉ lấy mã (email hoặc key) — không còn landing Netflix demo
 app.get('/', (req, res) => {
-  setAnonymousCookies(req, res);
-  if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(PAGE.user('index.html'));
+  res.sendFile(PAGE.me);
 });
 
-app.get('/login', (req, res) => {
-  setAnonymousCookies(req, res);
-  if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(PAGE.user('login.html'));
-});
-
-app.get('/profiles', requireAuth, (req, res) => {
-  res.sendFile(PAGE.user('profiles.html'));
-});
+app.get('/login', (req, res) => res.redirect('/'));
+app.get('/profiles', (req, res) => res.redirect('/'));
+app.get('/browse', (req, res) => res.redirect('/'));
 
 app.get('/checker', (req, res) => {
   setAnonymousCookies(req, res);
   res.sendFile(PAGE.user('checker.html'));
 });
 
-app.get('/browse', requireAuth, requireProfile, (req, res) => {
-  // netflix-sans-normal-3-loaded: set when user reaches browse (font loading marker)
-  if (!req.cookies['netflix-sans-normal-3-loaded']) {
-    res.cookie('netflix-sans-normal-3-loaded', 'true', {
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-  res.sendFile(PAGE.user('browse.html'));
-});
-
-// Legacy URL (footer landing, link cũ)
+// Alias cũ → cùng trang lấy mã
 app.get('/getcode.html', (req, res) => {
   res.sendFile(PAGE.me);
 });
@@ -1115,7 +1129,29 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || req.ip || '';
 }
 
-async function fetchInboxForEmail(email) {
+// Chỉ trả loại mã key được phép — seller/admin cấp qua key
+function filterEmailsByPerms(emails, perms) {
+  const p = perms || { permLogin: true, permReset: true, permFamily: true };
+  return emails
+    .map((e) => {
+      const out = { ...e };
+      if (!p.permLogin) out.extracted_code = null;
+      if (!p.permReset) out.reset_link = null;
+      if (!p.permFamily) out.family_code = null;
+      const has = out.extracted_code || out.reset_link || out.family_code;
+      if (!has) return null;
+      let priority = 0;
+      if (out.extracted_code) priority = 10;
+      else if (out.family_code) priority = 9;
+      else if (out.reset_link) priority = 8;
+      out.priority = priority;
+      return out;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+}
+
+async function fetchInboxForEmail(email, perms) {
   const [user, domain] = email.split('@');
   const url = `https://tinyhost.shop/api/email/${encodeURIComponent(domain)}/${encodeURIComponent(user)}/?limit=20`;
   const r   = await nodeRequest(url, {
@@ -1129,7 +1165,8 @@ async function fetchInboxForEmail(email) {
   if (r.status !== 200) return { success: true, emails: [], total: 0 };
 
   const raw    = data.emails || data.data || [];
-  const emails = raw.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  let emails = raw.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  if (perms) emails = filterEmailsByPerms(emails, perms);
   return { success: true, emails, total: emails.length };
 }
 
@@ -1158,6 +1195,7 @@ app.get('/api/inbox', async (req, res) => {
 app.post('/api/inbox', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
+    const keyStr = (req.body.key || '').trim();
     const turnstileToken = req.body.turnstileToken || req.body.token || '';
 
     if (!email || !email.includes('@'))
@@ -1168,7 +1206,32 @@ app.post('/api/inbox', async (req, res) => {
       return res.status(403).json({ success: false, error: captcha.error || 'Captcha không hợp lệ' });
     }
 
-    const result = await fetchInboxForEmail(email);
+    let perms = null;
+    const orderRow = getOrderByEmailForInbox(email);
+
+    if (keyStr) {
+      const row = getKey(keyStr);
+      if (!row) return res.status(403).json({ success: false, error: 'Key không hợp lệ' });
+      if (row.email !== email) return res.status(403).json({ success: false, error: 'Key không khớp email' });
+      if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
+        return res.status(403).json({ success: false, error: 'Key đã hết hạn' });
+      }
+      perms = { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily };
+      incrementKeyUsage(keyStr);
+    } else if (orderRow) {
+      if (!orderRow.viaEmail) {
+        return res.status(403).json({ success: false, error: 'Đơn này chưa bật lấy mã qua email — dùng key' });
+      }
+      if (orderRow.status === 'expired') {
+        return res.status(403).json({ success: false, error: 'Đơn đã hết hạn' });
+      }
+      perms = { permLogin: orderRow.permLogin, permReset: orderRow.permReset, permFamily: orderRow.permFamily };
+    }
+
+    const result = await fetchInboxForEmail(email, perms);
+    if (keyStr && perms) {
+      result.permissions = perms;
+    }
     return res.json(result);
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -1271,7 +1334,18 @@ app.post('/api/panel/logout', (req, res) => {
 app.get('/api/panel/me', (req, res) => {
   const acc = getPanelAccount(req);
   if (!acc) return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
-  return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role, status: acc.status } });
+  const out = { username: acc.username, email: acc.email, role: acc.role, status: acc.status };
+  if (acc.role === 'seller') {
+    Object.assign(out, getSellerMaxPerms(acc.id));
+    const prof = getSellerProfile(acc.id);
+    if (prof) {
+      out.balance = prof.balance;
+      out.contactName = prof.contactName;
+      out.contactType = prof.contactType;
+      out.contactInfo = prof.contactInfo;
+    }
+  }
+  return res.json({ success: true, account: out });
 });
 
 // Seller tự đăng ký → tạo account pending + gửi mã xác minh email
@@ -1333,30 +1407,329 @@ app.post('/api/seller/resend-code', async (req, res) => {
   }
 });
 
-// Danh sách key của seller + tổng quan
-app.get('/api/seller/keys', requireSeller, (req, res) => {
-  const keys = getKeysBySeller(req.account.id);
-  const used = keys.filter(k => k.usedCount > 0).length;
-  return res.json({ success: true, keys, summary: { total: keys.length, used, unused: keys.length - used } });
+// ─── Seller workspace API ─────────────────────────────────────────────────────
+app.get('/api/seller/dashboard', requireSeller, (req, res) => {
+  const sellerId = req.account.id;
+  return res.json({
+    success: true,
+    stats: getSellerDashboardStats(sellerId),
+    balance: getSellerBalance(sellerId),
+    sellerPerms: getSellerMaxPerms(sellerId),
+    profile: getSellerProfile(sellerId),
+  });
 });
 
-// Tạo key — yêu cầu seller đăng nhập, gắn seller_id
-app.post('/api/key/register', requireSeller, (req, res) => {
+app.get('/api/seller/orders', requireSeller, (req, res) => {
+  const orders = getSellerOrders(req.account.id);
+  const keys = getKeysBySeller(req.account.id);
+  const keysByOrder = {};
+  for (const k of keys) {
+    if (k.orderId) {
+      if (!keysByOrder[k.orderId]) keysByOrder[k.orderId] = [];
+      keysByOrder[k.orderId].push(k);
+    }
+  }
+  const enriched = orders.map((o) => ({ ...o, keys: keysByOrder[o.id] || [] }));
+  const status = (req.query.status || 'all').toLowerCase();
+  const q = (req.query.q || '').trim().toLowerCase();
+  let filtered = enriched;
+  if (status !== 'all') filtered = filtered.filter((o) => o.status === status);
+  if (q) {
+    filtered = filtered.filter((o) =>
+      [o.id, o.productName, o.publicCode, o.accountEmail, o.note].some(
+        (f) => String(f || '').toLowerCase().includes(q),
+      ),
+    );
+  }
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const perPage = Math.min(50, Math.max(5, parseInt(req.query.perPage, 10) || 20));
+  const total = filtered.length;
+  const start = (page - 1) * perPage;
+  return res.json({
+    success: true,
+    orders: filtered.slice(start, start + perPage),
+    pagination: { page, perPage, total, pages: Math.ceil(total / perPage) || 1 },
+    sellerPerms: getSellerMaxPerms(req.account.id),
+  });
+});
+
+app.get('/api/seller/orders/:id', requireSeller, (req, res) => {
+  const order = getSellerOrderById(req.params.id, req.account.id);
+  if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+  const keys = getKeysBySeller(req.account.id).filter((k) => k.orderId === order.id);
+  return res.json({ success: true, order, keys });
+});
+
+app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
   try {
-    const { email, note } = req.body;
-    if (!email?.includes('@')) return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
-    const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
-    createKey(key, email.trim().toLowerCase(), (note || '').trim() || null, req.account.id);
-    return res.json({ success: true, key, email });
+    const { accountPassword, viaEmail, note, permLogin, permReset, permFamily } = req.body;
+    const order = updateSellerOrder(req.params.id, req.account.id, {
+      accountPassword, viaEmail, note, permLogin, permReset, permFamily,
+    });
+    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    return res.json({ success: true, order });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
 });
 
+app.post('/api/seller/orders/:id/renew', requireSeller, (req, res) => {
+  const order = renewSellerOrder(req.params.id, req.account.id);
+  if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+  return res.json({ success: true, order });
+});
+
+app.get('/api/seller/orders/:id/history', requireSeller, (req, res) => {
+  const events = getOrderHistory(req.params.id, req.account.id);
+  if (!events.length && !getSellerOrderById(req.params.id, req.account.id)) {
+    return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+  }
+  return res.json({ success: true, events });
+});
+
+app.post('/api/seller/orders/:id/keys', requireSeller, (req, res) => {
+  try {
+    const order = getSellerOrderById(req.params.id, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    const max = getSellerMaxPerms(req.account.id);
+    const perms = clampKeyPerms({
+      permLogin: req.body.permLogin ?? order.permLogin,
+      permReset: req.body.permReset ?? order.permReset,
+      permFamily: req.body.permFamily ?? order.permFamily,
+    }, max);
+    const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
+    const row = createKey(key, order.accountEmail, {
+      keyName: (req.body.keyName || order.productName || '').trim() || null,
+      note: order.note,
+      expiresAt: order.expiresAt,
+      orderId: order.id,
+      ...perms,
+    }, req.account.id);
+    logOrderEvent(order.id, 'key_created', key, null);
+    return res.json({ success: true, key: row });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/seller/products', requireSeller, (req, res) => {
+  return res.json({ success: true, products: getProducts(true), balance: getSellerBalance(req.account.id) });
+});
+
+app.post('/api/seller/store/buy', requireSeller, (req, res) => {
+  try {
+    const { productId, accountEmail, accountPassword } = req.body;
+    const result = purchaseProduct(req.account.id, productId, { accountEmail, accountPassword });
+    if (result.error) return res.status(400).json({ success: false, error: result.error });
+    return res.json({ success: true, order: result.order, balance: result.balance });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/seller/transactions', requireSeller, (req, res) => {
+  return res.json({
+    success: true,
+    transactions: getTransactions(req.account.id),
+    summary: getTransactionSummary(req.account.id),
+  });
+});
+
+app.get('/api/seller/emails', requireSeller, (req, res) => {
+  return res.json({ success: true, emails: getSellerEmails(req.account.id) });
+});
+
+app.patch('/api/seller/profile', requireSeller, (req, res) => {
+  const profile = updateSellerProfile(req.account.id, {
+    contactName: req.body.contactName,
+    contactType: req.body.contactType,
+    contactInfo: req.body.contactInfo,
+  });
+  return res.json({ success: true, profile });
+});
+
+app.get('/api/seller/profile', requireSeller, (req, res) => {
+  const profile = getSellerProfile(req.account.id);
+  return res.json({ success: true, profile });
+});
+
+// Danh sách key của seller + tổng quan
+app.get('/api/seller/keys', requireSeller, (req, res) => {
+  const keys = getKeysBySellerEnriched(req.account.id);
+  const used = keys.filter(k => k.usedCount > 0).length;
+  const sellerPerms = getSellerMaxPerms(req.account.id);
+  return res.json({
+    success: true, keys, sellerPerms,
+    summary: { total: keys.length, used, unused: keys.length - used },
+  });
+});
+
+function keyPermContext(sellerId, order) {
+  const max = getSellerMaxPerms(sellerId);
+  const orderMax = order ? {
+    permLogin: order.permLogin,
+    permReset: order.permReset,
+    permFamily: order.permFamily,
+  } : null;
+  return { max, orderMax };
+}
+
+// Tạo key — quyền key ⊆ quyền admin cấp seller
+app.post('/api/key/register', requireSeller, (req, res) => {
+  try {
+    const { email, note, keyName, expiresAt, permLogin, permReset, permFamily, orderId } = req.body;
+    let emailAddr = email?.trim().toLowerCase();
+    let order = null;
+    if (orderId) {
+      order = getSellerOrderById(orderId, req.account.id);
+      if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+      emailAddr = order.accountEmail;
+    }
+    if (!emailAddr?.includes('@')) return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const perms = clampKeyPermsFull({
+      permLogin: permLogin ?? order?.permLogin,
+      permReset: permReset ?? order?.permReset,
+      permFamily: permFamily ?? order?.permFamily,
+    }, max, orderMax);
+    const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
+    let exp = order?.expiresAt ?? null;
+    if (expiresAt) {
+      const t = new Date(expiresAt).getTime();
+      if (!Number.isNaN(t)) exp = Math.floor(t / 1000);
+    }
+    const row = createKey(key, emailAddr, {
+      note: (note || order?.note || '').trim() || null,
+      keyName: (keyName || '').trim() || null,
+      expiresAt: exp,
+      orderId: order?.id ?? orderId ?? null,
+      ...perms,
+    }, req.account.id);
+    if (order) logOrderEvent(order.id, 'key_created', key, null);
+    return res.json({ success: true, key, email: row.email, permissions: perms });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/seller/keys/batch', requireSeller, (req, res) => {
+  try {
+    const { orderId, items, syncName, syncExpires, syncPerms } = req.body;
+    if (!orderId) return res.status(400).json({ success: false, error: 'Chọn tài khoản (đơn hàng)' });
+    const order = getSellerOrderById(orderId, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+
+    const list = Array.isArray(items) ? items : [{ keyName: req.body.keyName }];
+    if (!list.length || list.length > 5) {
+      return res.status(400).json({ success: false, error: 'Tạo từ 1 đến 5 key mỗi lần' });
+    }
+
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const sharedName = syncName !== false ? (list[0].keyName || '').trim() || null : null;
+    let sharedExp = order.expiresAt;
+    if (syncExpires === false && list[0].expiresAt) {
+      const t = new Date(list[0].expiresAt).getTime();
+      if (!Number.isNaN(t)) sharedExp = Math.floor(t / 1000);
+    } else if (syncExpires !== false && list[0].expiresAt) {
+      const t = new Date(list[0].expiresAt).getTime();
+      if (!Number.isNaN(t)) sharedExp = Math.floor(t / 1000);
+    }
+    const sharedPerms = clampKeyPermsFull({
+      permLogin: req.body.permLogin ?? order.permLogin,
+      permReset: req.body.permReset ?? order.permReset,
+      permFamily: req.body.permFamily ?? order.permFamily,
+    }, max, orderMax);
+
+    const created = [];
+    for (const item of list) {
+      const perms = syncPerms !== false ? sharedPerms : clampKeyPermsFull({
+        permLogin: item.permLogin ?? sharedPerms.permLogin,
+        permReset: item.permReset ?? sharedPerms.permReset,
+        permFamily: item.permFamily ?? sharedPerms.permFamily,
+      }, max, orderMax);
+      let exp = sharedExp;
+      if (syncExpires === false && item.expiresAt) {
+        const t = new Date(item.expiresAt).getTime();
+        if (!Number.isNaN(t)) exp = Math.floor(t / 1000);
+      }
+      const keyId = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
+      const row = createKey(keyId, order.accountEmail, {
+        keyName: syncName !== false ? sharedName : ((item.keyName || '').trim() || null),
+        expiresAt: exp,
+        orderId: order.id,
+        note: order.note,
+        ...perms,
+      }, req.account.id);
+      created.push(row);
+      logOrderEvent(order.id, 'key_created', keyId, null);
+    }
+    return res.json({ success: true, keys: created, count: created.length });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
+  try {
+    const keyId = (req.params.key || '').trim();
+    const { note, keyName, expiresAt, permLogin, permReset, permFamily } = req.body;
+    const existing = getKey(keyId);
+    if (!existing || existing.sellerId !== req.account.id) {
+      return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+    }
+    const order = existing.orderId ? getSellerOrderById(existing.orderId, req.account.id) : null;
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const updates = {};
+    if (note !== undefined) updates.note = (note || '').trim() || null;
+    if (keyName !== undefined) updates.keyName = (keyName || '').trim() || null;
+    if (expiresAt !== undefined) {
+      if (!expiresAt) updates.expiresAt = null;
+      else {
+        const t = new Date(expiresAt).getTime();
+        updates.expiresAt = Number.isNaN(t) ? null : Math.floor(t / 1000);
+      }
+    }
+    if (permLogin !== undefined || permReset !== undefined || permFamily !== undefined) {
+      const merged = clampKeyPermsFull({
+        permLogin: permLogin !== undefined ? permLogin : existing.permLogin,
+        permReset: permReset !== undefined ? permReset : existing.permReset,
+        permFamily: permFamily !== undefined ? permFamily : existing.permFamily,
+      }, max, orderMax);
+      Object.assign(updates, merged);
+    }
+    const row = updateKey(keyId, req.account.id, updates);
+    if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+    return res.json({ success: true, key: row, orderPerms: order ? {
+      permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily,
+    } : null });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/seller/keys/:key/sync', requireSeller, (req, res) => {
+  const row = syncKeyFromOrder(req.params.key, req.account.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại hoặc chưa gắn đơn' });
+  return res.json({ success: true, key: row });
+});
+
+app.delete('/api/seller/keys/:key', requireSeller, (req, res) => {
+  const ok = deleteKeyForSeller(req.params.key, req.account.id);
+  if (!ok) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+  return res.json({ success: true });
+});
+
 app.get('/api/key/resolve', (req, res) => {
-  const email = resolveKeyEmail((req.query.key || '').trim());
-  if (!email) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
-  return res.json({ success: true, email });
+  const row = getKey((req.query.key || '').trim());
+  if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+  if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
+    return res.status(403).json({ success: false, error: 'Key đã hết hạn' });
+  }
+  return res.json({
+    success: true,
+    email: row.email,
+    permissions: { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily },
+  });
 });
 
 // ─── Admin API (X-Admin-Token) ────────────────────────────────────────────────
@@ -1395,11 +1768,93 @@ app.get('/api/admin/sellers', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/sellers/:id/approve', requireAdmin, (req, res) => {
-  return res.json({ success: setAccountStatus(req.params.id, 'active') });
+  const ok = setAccountStatus(req.params.id, 'active');
+  if (ok) {
+    const body = req.body || {};
+    setSellerPerms(req.params.id, {
+      permLogin: body.permLogin !== false,
+      permReset: !!body.permReset,
+      permFamily: body.permFamily !== false,
+    });
+  }
+  return res.json({ success: ok });
+});
+
+app.patch('/api/admin/sellers/:id/perms', requireAdmin, (req, res) => {
+  const { permLogin, permReset, permFamily } = req.body || {};
+  const ok = setSellerPerms(req.params.id, {
+    permLogin: permLogin !== false,
+    permReset: !!permReset,
+    permFamily: permFamily !== false,
+  });
+  if (!ok) return res.status(404).json({ success: false, error: 'Seller không tồn tại' });
+  return res.json({ success: true, sellerPerms: getSellerMaxPerms(req.params.id) });
 });
 
 app.post('/api/admin/sellers/:id/reject', requireAdmin, (req, res) => {
   return res.json({ success: setAccountStatus(req.params.id, 'rejected') });
+});
+
+app.post('/api/admin/sellers/:id/topup', requireAdmin, (req, res) => {
+  try {
+    const amount = parseInt(req.body.amount, 10);
+    if (!amount || amount < 1000) return res.status(400).json({ success: false, error: 'Số tiền tối thiểu 1.000đ' });
+    const r = adjustBalance(req.params.id, amount, {
+      type: 'topup',
+      description: req.body.description || 'Admin nạp tiền',
+    });
+    if (!r || r.error) return res.status(400).json({ success: false, error: r?.error || 'Lỗi nạp' });
+    return res.json({ success: true, balance: r.balance });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/products', requireAdmin, (req, res) => {
+  return res.json({ success: true, products: getProducts(false) });
+});
+
+app.post('/api/admin/products', requireAdmin, (req, res) => {
+  try {
+    const b = req.body;
+    const id = b.id || 'prod_' + crypto.randomBytes(4).toString('hex');
+    const p = upsertProduct({
+      id,
+      name: b.name,
+      durationLabel: b.durationLabel,
+      durationDays: parseInt(b.durationDays, 10) || 30,
+      price: parseInt(b.price, 10),
+      warrantyNote: b.warrantyNote,
+      active: b.active !== false,
+    });
+    return res.json({ success: true, product: p });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/sellers/:id/orders', requireAdmin, (req, res) => {
+  try {
+    const b = req.body;
+    const product = b.productId ? getProductById(b.productId) : null;
+    const order = adminCreateOrderForSeller({
+      sellerId: req.params.id,
+      productId: product?.id,
+      productName: b.productName || product?.name || 'Netflix Premium',
+      durationLabel: product?.durationLabel || b.durationLabel,
+      durationDays: product?.durationDays || 30,
+      accountEmail: b.accountEmail,
+      accountPassword: b.accountPassword,
+      viaEmail: b.viaEmail !== false,
+      permLogin: b.permLogin !== false,
+      permReset: !!b.permReset,
+      permFamily: b.permFamily !== false,
+      note: b.note,
+    });
+    return res.json({ success: true, order });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 app.get('/api/domains', async (req, res) => {
@@ -1508,6 +1963,8 @@ app.use((err, req, res, next) => {
 try {
   runMigrations();
   runSeed();
+  const migrated = migrateOrphanKeysToOrders();
+  if (migrated > 0) console.log(`[DB] Đã gắn ${migrated} key cũ vào đơn hàng`);
   deleteExpiredSessions();
 } catch (err) {
   console.error('[FATAL] Database initialization failed:', err.message);

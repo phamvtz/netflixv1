@@ -100,12 +100,50 @@ function seedAccounts(db) {
   `).run('acc_admin', 'admin', 'hcjx125@gmail.com', hashPassword('Admin2026'));
 }
 
+const PRODUCTS = [
+  {
+    id: 'prod_nf_fam_1m',
+    name: 'Netflix Premium FAM 1 Tháng - Bảo hành full',
+    durationLabel: '1 tháng',
+    durationDays: 30,
+    price: 150000,
+    warrantyNote: 'Bảo hành full',
+  },
+  {
+    id: 'prod_nf_fam_3m',
+    name: 'Netflix Premium FAM 3 Tháng',
+    durationLabel: '3 tháng',
+    durationDays: 90,
+    price: 400000,
+    warrantyNote: 'Bảo hành full',
+  },
+];
+
+function seedProducts(db) {
+  if (tableCount(db, 'products') > 0) return;
+  const stmt = db.prepare(`
+    INSERT INTO products (id, name, duration_label, duration_days, price, warranty_note, active)
+    VALUES (?, ?, ?, ?, ?, ?, 1)
+  `);
+  db.exec('BEGIN');
+  try {
+    for (const p of PRODUCTS) {
+      stmt.run(p.id, p.name, p.durationLabel, p.durationDays, p.price, p.warrantyNote ?? null);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function runSeed(db) {
   const conn = db || defaultDb();
   seedUsers(conn);
   seedProfiles(conn);
   seedContent(conn);
   seedAccounts(conn);
+  seedProducts(conn);
 }
 
 module.exports = { runSeed };

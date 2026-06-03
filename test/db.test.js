@@ -14,7 +14,13 @@ const {
   deleteSession,
   getAllContent,
   createKey,
+  getKey,
   resolveKeyEmail,
+  incrementKeyUsage,
+  updateKey,
+  clampKeyPerms,
+  getSellerMaxPerms,
+  setSellerPerms,
   getAllKeys,
   getKeysBySeller,
   deleteKey,
@@ -169,6 +175,29 @@ describe('Accounts, panel sessions & seller keys', () => {
     const keys = getKeysBySeller('sel_test', db);
     assert.equal(keys.length, 1);
     assert.equal(keys[0].key, 'SK-SELLER-1');
+  });
+
+  it('quyền seller → key clamp → update key', () => {
+    setSellerPerms('sel_test', { permLogin: true, permReset: false, permFamily: true }, db);
+    const max = getSellerMaxPerms('sel_test', db);
+    assert.equal(max.permFamily, true);
+    assert.equal(max.permReset, false);
+
+    const clamped = clampKeyPerms({ permLogin: true, permReset: true, permFamily: true }, max);
+    assert.equal(clamped.permReset, false);
+    assert.equal(clamped.permFamily, true);
+
+    createKey('SK-PERM-1', 'fam@tinyhost.shop', { permLogin: true, permFamily: true }, 'sel_test', db);
+    const k = getKey('SK-PERM-1', db);
+    assert.equal(k.permFamily, true);
+    assert.equal(k.permReset, false);
+
+    updateKey('SK-PERM-1', 'sel_test', { permFamily: false, keyName: 'test-key' }, db);
+    const k2 = getKey('SK-PERM-1', db);
+    assert.equal(k2.permFamily, false);
+    assert.equal(k2.keyName, 'test-key');
+    assert.equal(incrementKeyUsage('SK-PERM-1', db), true);
+    assert.equal(getKey('SK-PERM-1', db).usedCount, 1);
   });
 });
 

@@ -5,7 +5,8 @@
 | `admin/` | Panel admin | `admin.*` |
 | `seller/` | Panel seller | `seller.*` |
 | `me/` | Get Code (temp mail) | `me.*` |
-| `user/` | Landing, login, browse, checker | domain chính |
+| `user/` | Checker (tuỳ chọn) | `/checker` |
+| `/` (file `me/`) | Lấy mã email/key | domain chính + `me.*` |
 | `panel/` | CSS/JS shared cho admin & seller | `/panel/*` |
 
 Chi tiết quy ước: xem `CLAUDE.md` mục 9.

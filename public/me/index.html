@@ -159,14 +159,38 @@
     .email-item-code { font-size: 1.5rem; font-weight: 900; color: #2563eb; letter-spacing: .1em; margin: 6px 0; }
     .email-item-from { font-size: .75rem; color: #888; }
     .email-item-time { font-size: .72rem; color: #aaa; margin-top: 4px; }
+
+    .top-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 4px 4px; max-width: 500px; width: 100%; margin: 0 auto;
+    }
+    .top-nav .logo { font-size: 1rem; font-weight: 800; color: #1a1a2e; text-decoration: none; }
+    .top-nav .logo span { color: #e50914; }
+    .top-nav-links { display: flex; gap: 6px; flex-wrap: wrap; }
+    .top-nav-links a {
+      font-size: .78rem; font-weight: 600; color: #555; text-decoration: none;
+      padding: 6px 12px; border-radius: 20px; border: 1px solid #e5e7eb; background: #fff;
+    }
+    .top-nav-links a:hover { color: #2563eb; border-color: #2563eb; }
+    .top-nav-links a.active { background: #2563eb; color: #fff; border-color: #2563eb; }
   </style>
 </head>
 <body>
+
+<header class="top-nav">
+  <a href="/" class="logo"><span>N</span> Lấy mã Netflix</a>
+  <nav class="top-nav-links">
+    <a href="/" class="active">Lấy mã</a>
+    <a href="/seller">Seller</a>
+    <a href="/admin">Admin</a>
+  </nav>
+</header>
+
 <div class="page">
 
   <!-- Input Card -->
   <div class="card">
-    <h1>Kiểm tra hộp thư</h1>
+    <h1>Lấy mã Netflix</h1>
     <p class="subtitle">Nhập <strong>email</strong> hoặc <strong>key</strong> để lấy mã đăng nhập, mã hộ gia đình hoặc link reset mật khẩu Netflix.</p>
 
     <!-- Tabs -->
@@ -294,12 +318,17 @@ function resolveKey(key) {
   const keys = JSON.parse(localStorage.getItem('mailKeys') || '{}');
   return keys[key] || null;
 }
+let keyPermissions = null;
+let activeKeyStr = '';
+
 async function resolveKeyServer(key) {
   try {
     const r = await fetch('/api/key/resolve?key=' + encodeURIComponent(key));
     if (!r.ok) return null;
     const d = await r.json();
-    return d.success ? d.email : null;
+    if (!d.success) return null;
+    keyPermissions = d.permissions || null;
+    return d.email;
   } catch { return null; }
 }
 function generateKey() {
@@ -333,11 +362,15 @@ async function fetchCode() {
   } else {
     const key = document.getElementById('inputKey').value.trim();
     if (!key) { showError('Vui lòng nhập key.'); return; }
-    // Ưu tiên resolve qua server (key do seller tạo, lưu DB); fallback localStorage
+    activeKeyStr = key;
+    keyPermissions = null;
     emailAddr = await resolveKeyServer(key) || resolveKey(key);
     if (!emailAddr) {
       showError('Key không hợp lệ hoặc chưa được đăng ký.');
       return;
+    }
+    if (!keyPermissions && emailAddr) {
+      keyPermissions = { permLogin: true, permReset: true, permFamily: true };
     }
   }
 
@@ -353,19 +386,20 @@ async function fetchCode() {
     const [user, domain] = emailAddr.split('@');
     if (!user || !domain) throw new Error('Email không hợp lệ');
 
+    const payload = { email: emailAddr, turnstileToken: turnstileToken };
+    if (mode === 'key' && activeKeyStr) payload.key = activeKeyStr;
+
     const resp = await fetch('/api/inbox', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: emailAddr,
-        turnstileToken: turnstileToken,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await resp.json();
 
     if (!data.success) throw new Error(data.error || 'Không lấy được email');
 
-    displayResult(data.emails, emailAddr);
+    const perms = data.permissions || keyPermissions;
+    displayResult(data.emails, emailAddr, perms);
   } catch (e) {
     showError('Lỗi: ' + e.message);
   } finally {
@@ -377,15 +411,19 @@ async function fetchCode() {
 }
 
 // ── Display results ────────────────────────────────────────────────────────────
-function displayResult(emails, emailAddr) {
+function displayResult(emails, emailAddr, perms) {
   const card    = document.getElementById('resultCard');
   const header  = document.getElementById('resultHeader');
   const content = document.getElementById('resultContent');
 
   if (!emails.length) {
     header.className = 'result-header error';
-    header.innerHTML = '✕ Không tìm thấy email nào';
-    content.innerHTML = `<p style="font-size:.85rem;color:#888;">Hộp thư <strong>${emailAddr}</strong> trống hoặc chưa nhận được email.<br>Hãy thử lại sau vài giây.</p>`;
+    header.innerHTML = '✕ Không tìm thấy mã phù hợp';
+    let hint = `Hộp thư <strong>${emailAddr}</strong> trống hoặc chưa có email Netflix.`;
+    if (perms && !perms.permFamily && mode === 'key') {
+      hint += '<br><span style="color:#c9a227">Key này chưa được cấp quyền xem mã gia đình — liên hệ seller.</span>';
+    }
+    content.innerHTML = `<p style="font-size:.85rem;color:#888;">${hint}<br>Hãy thử lại sau vài giây.</p>`;
     card.classList.add('show');
     return;
   }
@@ -394,15 +432,16 @@ function displayResult(emails, emailAddr) {
   header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg> Đã tìm thấy ${emails.length} email`;
 
   // Show most relevant first (Netflix code emails)
-  const html = emails.map(email => buildEmailItem(email)).join('');
+  const html = emails.map(email => buildEmailItem(email, perms)).join('');
   content.innerHTML = `<div class="emails-list">${html}</div>`;
   card.classList.add('show');
 }
 
-function buildEmailItem(email) {
-  const code     = email.extracted_code || '';
-  const resetLink= email.reset_link || '';
-  const fam      = email.family_code || '';
+function buildEmailItem(email, perms) {
+  const p = perms || { permLogin: true, permReset: true, permFamily: true };
+  const code     = p.permLogin ? (email.extracted_code || '') : '';
+  const resetLink= p.permReset ? (email.reset_link || '') : '';
+  const fam      = p.permFamily ? (email.family_code || '') : '';
   const time     = email.time ? new Date(email.time).toLocaleString('vi-VN') : '';
 
   let bodyHtml = '';

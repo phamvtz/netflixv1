@@ -149,6 +149,86 @@ const migrations = [
       // SQLite cũ không hỗ trợ DROP COLUMN — rollback bỏ qua (không quan trọng)
     },
   },
+  {
+    version: 9,
+    up(db) {
+      // Quyền tối đa admin cấp cho seller (key ⊆ seller perms)
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_reset INTEGER NOT NULL DEFAULT 0');
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_family INTEGER NOT NULL DEFAULT 1');
+      // Quyền từng key — seller chọn subset khi tạo/sửa
+      db.exec('ALTER TABLE keys ADD COLUMN key_name TEXT');
+      db.exec('ALTER TABLE keys ADD COLUMN expires_at INTEGER');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_reset INTEGER NOT NULL DEFAULT 0');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_family INTEGER NOT NULL DEFAULT 0');
+    },
+    down(db) {},
+  },
+  {
+    version: 10,
+    up(db) {
+      db.exec(`
+        ALTER TABLE accounts ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE accounts ADD COLUMN contact_name TEXT;
+        ALTER TABLE accounts ADD COLUMN contact_type TEXT;
+        ALTER TABLE accounts ADD COLUMN contact_info TEXT;
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS products (
+          id              TEXT PRIMARY KEY,
+          name            TEXT NOT NULL,
+          duration_label  TEXT,
+          duration_days   INTEGER NOT NULL DEFAULT 30,
+          price           INTEGER NOT NULL,
+          warranty_note   TEXT,
+          active          INTEGER NOT NULL DEFAULT 1,
+          created_at      INTEGER DEFAULT (unixepoch())
+        );
+        CREATE TABLE IF NOT EXISTS seller_orders (
+          id               TEXT PRIMARY KEY,
+          seller_id        TEXT NOT NULL REFERENCES accounts(id),
+          product_id       TEXT REFERENCES products(id),
+          product_name     TEXT NOT NULL,
+          duration_label   TEXT,
+          public_code      TEXT NOT NULL UNIQUE,
+          account_email    TEXT NOT NULL,
+          account_password TEXT,
+          expires_at       INTEGER NOT NULL,
+          renewal_count    INTEGER NOT NULL DEFAULT 0,
+          via_email        INTEGER NOT NULL DEFAULT 1,
+          perm_login       INTEGER NOT NULL DEFAULT 1,
+          perm_reset       INTEGER NOT NULL DEFAULT 0,
+          perm_family      INTEGER NOT NULL DEFAULT 0,
+          note             TEXT,
+          created_at       INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_orders_seller ON seller_orders(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_email ON seller_orders(account_email);
+        CREATE TABLE IF NOT EXISTS order_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    TEXT NOT NULL REFERENCES seller_orders(id),
+          event_type  TEXT NOT NULL,
+          detail      TEXT,
+          created_at  INTEGER DEFAULT (unixepoch())
+        );
+        CREATE TABLE IF NOT EXISTS transactions (
+          id            TEXT PRIMARY KEY,
+          account_id    TEXT NOT NULL REFERENCES accounts(id),
+          type          TEXT NOT NULL,
+          amount        INTEGER NOT NULL,
+          balance_after INTEGER,
+          ref_id        TEXT,
+          description   TEXT,
+          status        TEXT NOT NULL DEFAULT 'completed',
+          created_at    INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_txn_account ON transactions(account_id);
+      `);
+      db.exec('ALTER TABLE keys ADD COLUMN order_id TEXT REFERENCES seller_orders(id)');
+    },
+    down(db) {},
+  },
 ];
 
 function ensureMigrationsTable(db) {

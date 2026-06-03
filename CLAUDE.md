@@ -103,8 +103,8 @@ public/
 │   └── js/
 ├── me/             # subdomain me.* — Get Code (khách lấy mã)
 │   └── index.html
-├── user/           # domain chính — Netflix clone + checker
-│   ├── index.html, login.html, profiles.html, browse.html, checker.html
+├── user/           # domain chính — checker (tùy chọn); trang chủ = me/
+│   ├── checker.html (+ login/browse cũ redirect về /)
 │   ├── css/        # serve qua URL /css/*
 │   └── js/         # serve qua URL /js/*
 └── panel/          # CSS/JS dùng chung admin + seller → /panel/*
@@ -112,7 +112,7 @@ public/
 
 | Subdomain | Thư mục | Route chính |
 |-----------|---------|-------------|
-| `main` | `user/` | `/`, `/login`, `/browse`, `/checker` |
+| `main` | `me/` (/) | `/` lấy mã; `/admin`, `/seller`; `/checker` |
 | `me` | `me/` | `/` (Get Code) |
 | `seller` | `seller/` | `/` |
 | `admin` | `admin/` | `/` |

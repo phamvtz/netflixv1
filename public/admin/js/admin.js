@@ -49,9 +49,24 @@ async function jget(url) {
   return r.ok ? r.json() : { success: false, status: r.status };
 }
 
-async function jpost(url) {
-  const r = await fetch(url, { method: 'POST', headers: authHeaders() });
+async function jpost(url, body) {
+  const h = authHeaders({ 'Content-Type': 'application/json' });
+  const r = await fetch(url, { method: 'POST', headers: h, body: body ? JSON.stringify(body) : undefined });
   return r.ok ? r.json() : { success: false, status: r.status };
+}
+
+async function jpatch(url, body) {
+  const r = await fetch(url, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return r.ok ? r.json() : { success: false, status: r.status };
+}
+
+function sellerPermBadges(s) {
+  const b = (on, l) => `<span class="perm-badge ${on ? 'perm-badge--on' : 'perm-badge--off'}">${l}</span>`;
+  return `<div class="perm-badges">${b(s.permLogin, 'ĐN')}${b(s.permReset, 'Reset')}${b(s.permFamily, 'GĐ')}</div>`;
 }
 
 function toggleTokenMode(on) {
@@ -158,7 +173,7 @@ async function loadSellers() {
         <tr>
           <td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtTs(s.createdAt)}</td>
           <td style="white-space:nowrap">
-            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}')">✓ Duyệt</button>
+            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">✓ Duyệt</button>
             <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">✕ Từ chối</button>
           </td>
         </tr>`
@@ -189,22 +204,57 @@ function renderSellers() {
         s.status === 'active' ? 'panel-badge--active' : s.status === 'rejected' ? 'panel-badge--rejected' : 'panel-badge--pending';
       const act =
         s.status !== 'active'
-          ? `<button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}')">Duyệt</button>`
-          : `<button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">Khoá</button>`;
+          ? `<button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">Duyệt</button>`
+          : `<button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="editSellerPerms('${esc(s.id)}', '${esc(s.username)}')">Quyền</button>
+             <button class="panel-btn panel-btn--sm panel-btn--green" onclick="topupSeller('${esc(s.id)}', '${esc(s.username)}')">Nạp tiền</button>
+             <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">Khoá</button>`;
+      const perms = s.status === 'active' ? sellerPermBadges(s) : '';
       return `<tr><td>${esc(s.username)}</td><td>${esc(s.email)}</td>
-              <td><span class="panel-badge ${cls}">${s.status}${s.emailVerified ? '' : ' · chưa verify'}</span></td>
+              <td><span class="panel-badge ${cls}">${s.status}${s.emailVerified ? '' : ' · chưa verify'}</span>${perms ? '<br>' + perms : ''}</td>
               <td>${act}</td></tr>`;
     })
     .join('');
 }
 
-async function approve(id) {
-  const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve');
+async function pickSellerPerms(username) {
+  const login = confirm(`Seller "${username}" — cho phép Mã đăng nhập?\nOK = có, Cancel = không`);
+  const reset = confirm(`Cho phép Link đổi mật khẩu?`);
+  const family = confirm(`Cho phép Mã hộ gia đình?`);
+  return { permLogin: login, permReset: reset, permFamily: family };
+}
+
+async function approve(id, username) {
+  const perms = await pickSellerPerms(username || id);
+  const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve', perms);
   if (d.success) {
     toast('Đã duyệt seller');
     loadSellers();
     loadStats();
   } else toast('Lỗi duyệt');
+}
+
+async function topupSeller(id, username) {
+  const raw = prompt(`Nạp tiền cho seller "${username}" (VNĐ):`, '300000');
+  if (raw == null) return;
+  const amount = parseInt(String(raw).replace(/\D/g, ''), 10);
+  if (!amount || amount < 1000) return toast('Số tiền tối thiểu 1.000đ');
+  const r = await fetch('/api/admin/sellers/' + encodeURIComponent(id) + '/topup', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ amount, description: 'Admin nạp tiền' }),
+  });
+  const d = await r.json();
+  if (d.success) toast('Đã nạp ' + amount.toLocaleString('vi-VN') + 'đ — số dư: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
+  else toast(d.error || 'Lỗi nạp');
+}
+
+async function editSellerPerms(id, username) {
+  const perms = await pickSellerPerms(username || id);
+  const d = await jpatch('/api/admin/sellers/' + encodeURIComponent(id) + '/perms', perms);
+  if (d.success) {
+    toast('Đã cập nhật quyền seller');
+    loadSellers();
+  } else toast(d.error || 'Lỗi cập nhật');
 }
 
 async function reject(id) {
@@ -242,8 +292,8 @@ function renderKeys() {
     .map(
       (k) => `
         <tr>
-          <td class="mono">${esc(k.key)}${k.note ? `<div class="note-sub">${esc(k.note)}</div>` : ''}</td>
-          <td>${esc(k.email)}</td>
+          <td class="mono">${esc(k.key)}${k.keyName ? `<div class="note-sub">${esc(k.keyName)}</div>` : ''}${k.note ? `<div class="note-sub">${esc(k.note)}</div>` : ''}</td>
+          <td>${esc(k.email)}<br>${sellerPermBadges(k)}</td>
           <td>${k.sellerUsername ? esc(k.sellerUsername) : '<span style="color:var(--t3)">—</span>'}</td>
           <td>${k.usedCount}</td>
           <td><button class="panel-btn panel-btn--sm panel-btn--red" onclick="delKey('${esc(k.key)}')">Xoá</button></td>
@@ -296,6 +346,8 @@ window.loginToken = loginToken;
 window.logout = logout;
 window.toggleTokenMode = toggleTokenMode;
 window.approve = approve;
+window.editSellerPerms = editSellerPerms;
+window.topupSeller = topupSeller;
 window.reject = reject;
 window.delKey = delKey;
 window.renderKeys = renderKeys;

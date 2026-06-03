@@ -31,9 +31,9 @@ describe('Integration: startup sequence', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('schema_migrations có 8 version', () => {
+  it('schema_migrations có 10 version', () => {
     const rows = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it('PRAGMA journal_mode = wal và foreign_keys = ON', () => {
