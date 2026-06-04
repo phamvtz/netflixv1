@@ -122,7 +122,7 @@ function adjustBalance(accountId, delta, meta, db) {
   const row = conn.prepare('SELECT balance FROM accounts WHERE id = ?').get(accountId);
   if (!row) return null;
   const next = row.balance + delta;
-  if (next < 0) return { error: 'Số dư không đủ' };
+  if (next < 0) return { error: 'Insufficient balance' };
   conn.prepare('UPDATE accounts SET balance = ? WHERE id = ?').run(next, accountId);
   const txnId = genTxnId();
   conn.prepare(`
@@ -342,8 +342,8 @@ function getSellerDashboardStats(sellerId, db) {
 function purchaseProduct(sellerId, productId, { accountEmail, accountPassword }, db) {
   const conn = db || defaultDb();
   const product = getProductById(productId, conn);
-  if (!product || !product.active) return { error: 'Sản phẩm không tồn tại' };
-  if (!accountEmail?.includes('@')) return { error: 'Email tài khoản không hợp lệ' };
+  if (!product || !product.active) return { error: 'Product not found' };
+  if (!accountEmail?.includes('@')) return { error: 'Invalid account email' };
 
   const bal = adjustBalance(sellerId, -product.price, {
     type: 'purchase',
@@ -377,7 +377,7 @@ function migrateOrphanKeysToOrders(db) {
   for (const k of orphans) {
     const order = createSellerOrder({
       sellerId: k.seller_id,
-      productName: 'Netflix · Temp mail (nhập tay)',
+      productName: 'Netflix · Temp mail (manual)',
       durationLabel: '—',
       durationDays: 30,
       accountEmail: k.email,

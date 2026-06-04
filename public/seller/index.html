@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Đơn hàng | Seller · Netflix Key</title>
+  <title>Orders | Seller · Netflix Key</title>
   <link rel="stylesheet" href="/panel/css/tokens.css" />
   <link rel="stylesheet" href="/panel/css/components.css" />
   <link rel="stylesheet" href="/panel/css/seller-workspace.css" />
@@ -14,43 +14,43 @@
       <div class="auth-hero">
         <div class="sw-brand-icon" style="margin:0 auto 12px;width:48px;height:48px;font-size:1rem">NK</div>
         <h1>Seller Workspace</h1>
-        <p>Tạo key, cấp quyền mã Netflix cho khách</p>
+        <p>Create keys, grant Netflix code permissions to customers</p>
       </div>
       <div class="panel-tabs">
-        <div class="panel-tab active" id="tabLogin" onclick="showTab('login')">Đăng nhập</div>
-        <div class="panel-tab" id="tabReg" onclick="showTab('reg')">Đăng ký</div>
+        <div class="panel-tab active" id="tabLogin" onclick="showTab('login')">Log in</div>
+        <div class="panel-tab" id="tabReg" onclick="showTab('reg')">Sign up</div>
       </div>
 
       <div id="paneLogin">
         <label class="panel-label">Username</label>
         <input id="lgUser" type="text" class="panel-input" placeholder="username" autocomplete="username" />
-        <label class="panel-label">Mật khẩu</label>
+        <label class="panel-label">Password</label>
         <input id="lgPass" type="password" class="panel-input" placeholder="••••••" autocomplete="current-password" />
         <p class="panel-msg-err" id="lgErr"></p>
         <p class="panel-msg-ok" id="lgOk"></p>
-        <button class="panel-btn panel-btn--primary" id="lgBtn" onclick="doLogin()">Đăng nhập</button>
+        <button class="panel-btn panel-btn--primary" id="lgBtn" onclick="doLogin()">Log in</button>
       </div>
 
       <div id="paneReg" class="hidden">
         <label class="panel-label">Username</label>
-        <input id="rgUser" type="text" class="panel-input" placeholder="tối thiểu 3 ký tự" />
+        <input id="rgUser" type="text" class="panel-input" placeholder="at least 3 characters" />
         <label class="panel-label">Email</label>
-        <input id="rgEmail" type="email" class="panel-input" placeholder="ban@example.com" />
-        <label class="panel-label">Mật khẩu</label>
-        <input id="rgPass" type="password" class="panel-input" placeholder="tối thiểu 6 ký tự" />
+        <input id="rgEmail" type="email" class="panel-input" placeholder="you@example.com" />
+        <label class="panel-label">Password</label>
+        <input id="rgPass" type="password" class="panel-input" placeholder="at least 6 characters" />
         <p class="panel-msg-err" id="rgErr"></p>
-        <button class="panel-btn panel-btn--primary" id="rgBtn" onclick="doRegister()">Tạo tài khoản</button>
+        <button class="panel-btn panel-btn--primary" id="rgBtn" onclick="doRegister()">Create account</button>
       </div>
 
       <div id="paneVerify" class="hidden">
-        <h2 style="font-size:1.1rem;color:#fff;margin-bottom:6px">Xác minh email</h2>
-        <p class="sub">Mã 6 số gửi tới <b id="vEmail"></b></p>
-        <label class="panel-label">Mã xác minh</label>
+        <h2 style="font-size:1.1rem;color:#fff;margin-bottom:6px">Verify email</h2>
+        <p class="sub">6-digit code sent to <b id="vEmail"></b></p>
+        <label class="panel-label">Verification code</label>
         <input id="vCode" type="text" class="panel-input" inputmode="numeric" maxlength="6" placeholder="______" style="letter-spacing:6px;text-align:center;font-size:1.2rem" />
         <p class="panel-msg-err" id="vErr"></p>
         <p class="panel-msg-ok" id="vOk"></p>
-        <button class="panel-btn panel-btn--primary" id="vBtn" onclick="doVerify()">Xác minh</button>
-        <p class="panel-hint" style="margin-top:12px">Không nhận được mã? <a href="#" onclick="doResend();return false;" style="color:var(--accent)">Gửi lại</a></p>
+        <button class="panel-btn panel-btn--primary" id="vBtn" onclick="doVerify()">Verify</button>
+        <p class="panel-hint" style="margin-top:12px">Didn't receive the code? <a href="#" onclick="doResend();return false;" style="color:var(--accent)">Resend</a></p>
       </div>
     </div>
   </div>
@@ -70,47 +70,47 @@
       <nav class="sw-nav">
         <a href="#" data-view="stats" onclick="switchView('stats');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-9"/></svg>
-          Thống kê
+          Stats
         </a>
         <a href="#" data-view="orders" class="is-active" onclick="switchView('orders');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-          Đơn hàng của tôi
+          My orders
         </a>
         <a href="#" data-view="keys" onclick="switchView('keys');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-          Quản lý Keys
+          Manage Keys
         </a>
         <a href="#" data-view="emails" onclick="switchView('emails');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          Quản lý email
+          Manage email
         </a>
         <a href="#" data-view="store" onclick="switchView('store');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          Cửa hàng
+          Store
         </a>
         <a href="#" data-view="transactions" onclick="switchView('transactions');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
-          Lịch sử giao dịch
+          Transaction history
         </a>
         <a href="#" data-view="checker" onclick="switchView('checker');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Checker cookie
+          Cookie checker
         </a>
         <a href="/" target="_blank" rel="noopener">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Trang lấy mã (khách)
+          Customer get-code page
         </a>
         <a href="#" data-view="profile" onclick="switchView('profile');return false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Thông tin tài khoản
+          Profile
         </a>
       </nav>
 
       <div class="sw-support">
-        <strong>Hỗ trợ Seller</strong>
-        Liên hệ admin qua panel Admin nếu cần mở quyền Mã GĐ.
+        <strong>Seller support</strong>
+        Contact the admin via the Admin panel if you need household code permission unlocked.
       </div>
-      <button type="button" class="panel-btn panel-btn--sm panel-btn--ghost" style="margin-top:10px;width:100%" onclick="logout()">Đăng xuất</button>
+      <button type="button" class="panel-btn panel-btn--sm panel-btn--ghost" style="margin-top:10px;width:100%" onclick="logout()">Log out</button>
     </aside>
 
     <div class="sw-main">
@@ -120,17 +120,17 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
           <div>
-            <h1 id="pageTitle">Đơn hàng của bạn</h1>
-            <div class="sw-caption" id="pageCaption">Quản lý tài khoản đã bán — tạo key, copy, cấp quyền mã cho khách.</div>
+            <h1 id="pageTitle">Your orders</h1>
+            <div class="sw-caption" id="pageCaption">Manage sold accounts — create keys, copy, grant code permissions to customers.</div>
           </div>
         </div>
         <div class="sw-top-actions">
-          <a href="#" class="sw-btn sw-btn--primary" onclick="switchView('store');return false" style="text-decoration:none">Tới cửa hàng</a>
-          <a href="/" class="sw-btn sw-btn--outline" target="_blank" rel="noopener" style="text-decoration:none">Lấy mã (khách)</a>
+          <a href="#" class="sw-btn sw-btn--primary" onclick="switchView('store');return false" style="text-decoration:none">Go to store</a>
+          <a href="/" class="sw-btn sw-btn--outline" target="_blank" rel="noopener" style="text-decoration:none">Get code (customer)</a>
           <div class="sw-user-chip">
             <div class="sw-avatar" id="userAvatar">S</div>
             <span id="topUserName">seller</span>
-            <span class="sw-status-badge">Đã duyệt</span>
+            <span class="sw-status-badge">Approved</span>
           </div>
         </div>
       </header>
@@ -139,13 +139,13 @@
         <!-- Thống kê -->
         <section id="viewStats" class="hidden">
           <div class="sw-stats">
-            <div class="sw-stat"><div class="n" id="stTotal">0</div><div class="l">Tổng key</div></div>
-            <div class="sw-stat"><div class="n accent" id="stUsed">0</div><div class="l">Đã dùng (lấy mã)</div></div>
-            <div class="sw-stat"><div class="n" id="stUnused">0</div><div class="l">Chưa dùng</div></div>
-            <div class="sw-stat"><div class="n" id="stFamily">0</div><div class="l">Key có Mã GĐ</div></div>
+            <div class="sw-stat"><div class="n" id="stTotal">0</div><div class="l">Total keys</div></div>
+            <div class="sw-stat"><div class="n accent" id="stUsed">0</div><div class="l">Used (got code)</div></div>
+            <div class="sw-stat"><div class="n" id="stUnused">0</div><div class="l">Unused</div></div>
+            <div class="sw-stat"><div class="n" id="stFamily">0</div><div class="l">Keys with household code</div></div>
           </div>
           <div class="sw-card">
-            <h2 class="panel-section-title" style="color:#0f172a">Quyền admin cấp cho bạn</h2>
+            <h2 class="panel-section-title" style="color:#0f172a">Permissions the admin granted you</h2>
             <div id="statsPermBadges" class="perm-badges" style="margin-bottom:12px"></div>
             <p class="perm-hint" id="statsPermHint"></p>
           </div>
@@ -154,17 +154,17 @@
         <!-- Đơn hàng (card) -->
         <section id="viewOrders">
           <div class="sw-balance-bar">
-            <div>Số dư: <span class="amt" id="hdrBalance">0 đ</span></div>
-            <button type="button" class="sw-btn sw-btn--outline" onclick="switchView('transactions')">Lịch sử GD</button>
+            <div>Balance: <span class="amt" id="hdrBalance">0 đ</span></div>
+            <button type="button" class="sw-btn sw-btn--outline" onclick="switchView('transactions')">Transaction history</button>
           </div>
           <div class="sw-toolbar">
-            <input id="orderSearch" type="search" class="panel-input panel-input--search" placeholder="ORD-... / email / mã định danh / sản phẩm..." oninput="debounceLoadOrders()" />
+            <input id="orderSearch" type="search" class="panel-input panel-input--search" placeholder="ORD-... / email / public code / product..." oninput="debounceLoadOrders()" />
             <select id="orderStatusSelect" class="panel-input" style="width:auto;margin:0;min-width:160px" onchange="loadOrders()">
-              <option value="all">Tất cả</option>
-              <option value="active" selected>Đang còn hạn</option>
-              <option value="expired">Hết hạn</option>
+              <option value="all">All</option>
+              <option value="active" selected>Active</option>
+              <option value="expired">Expired</option>
             </select>
-            <button type="button" class="sw-btn sw-btn--outline" onclick="loadOrders()">↻ Tải lại</button>
+            <button type="button" class="sw-btn sw-btn--outline" onclick="loadOrders()">↻ Reload</button>
           </div>
           <div id="ordersList"></div>
           <div class="sw-pagination" id="ordersPagination"></div>
@@ -172,17 +172,17 @@
 
         <section id="viewStore" class="hidden">
           <div class="sw-balance-bar">
-            <div>Số dư khả dụng: <span class="amt" id="storeBalance">0 đ</span></div>
+            <div>Available balance: <span class="amt" id="storeBalance">0 đ</span></div>
           </div>
-          <p class="sub" style="margin-bottom:16px">Mua tài khoản — hệ thống tạo đơn tự động. Nạp tiền: liên hệ admin.</p>
+          <p class="sub" style="margin-bottom:16px">Buy accounts — the system creates orders automatically. Top up: contact the admin.</p>
           <div class="sw-store-grid" id="storeGrid"></div>
         </section>
 
         <section id="viewEmails" class="hidden">
-          <p class="sub" style="margin-bottom:14px">Email từ các đơn đã mua.</p>
+          <p class="sub" style="margin-bottom:14px">Emails from purchased orders.</p>
           <div class="sw-table-wrap panel-table-wrap">
             <table class="panel-table">
-              <thead><tr><th>Email</th><th>Số đơn</th><th>Hết hạn gần nhất</th><th></th></tr></thead>
+              <thead><tr><th>Email</th><th>Orders</th><th>Nearest expiry</th><th></th></tr></thead>
               <tbody id="emailsBody"></tbody>
             </table>
           </div>
@@ -192,7 +192,7 @@
           <div class="sw-stats" id="txnSummary"></div>
           <div class="sw-table-wrap panel-table-wrap">
             <table class="panel-table">
-              <thead><tr><th>Thời gian</th><th>Loại</th><th>Số tiền</th><th>Số dư sau</th><th>Mô tả</th></tr></thead>
+              <thead><tr><th>Time</th><th>Type</th><th>Amount</th><th>Balance after</th><th>Description</th></tr></thead>
               <tbody id="txnBody"></tbody>
             </table>
           </div>
@@ -201,22 +201,22 @@
         <!-- Checker cookie -->
         <section id="viewChecker" class="hidden">
           <div class="sw-card">
-            <p class="sub" style="margin-bottom:12px">Dán cookie Netflix (mỗi tài khoản 1 dòng) để kiểm tra còn LIVE không. Mặc định chế độ Ẩn — an toàn nhất, có thể mất ~1 phút/cookie.</p>
-            <textarea id="chkInput" class="panel-input" rows="6" placeholder="NetflixId=...; SecureNetflixId=...;   (mỗi cookie 1 dòng)" style="resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:0.82rem"></textarea>
+            <p class="sub" style="margin-bottom:12px">Paste Netflix cookies (one account per line) to check if they're still LIVE. Default is Stealth mode — safest, may take ~1 minute per cookie.</p>
+            <textarea id="chkInput" class="panel-input" rows="6" placeholder="NetflixId=...; SecureNetflixId=...;   (one cookie per line)" style="resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:0.82rem"></textarea>
             <div class="sw-toolbar" style="margin-top:10px">
               <select id="chkPace" class="panel-input" style="max-width:230px;margin:0">
-                <option value="stealth" selected>🛡 Ẩn — an toàn nhất</option>
-                <option value="slow">Chậm</option>
-                <option value="normal">Nhanh — dễ bị quét</option>
+                <option value="stealth" selected>🛡 Stealth — safest</option>
+                <option value="slow">Slow</option>
+                <option value="normal">Fast — easier to get flagged</option>
               </select>
-              <button type="button" class="sw-btn sw-btn--primary" id="chkBtn" onclick="runChecker()">Kiểm tra</button>
-              <button type="button" class="sw-btn sw-btn--outline" onclick="document.getElementById('chkInput').value='';document.getElementById('chkResults').innerHTML='<tr><td colspan=4 class=panel-empty>Chưa có kết quả</td></tr>'">Xoá</button>
+              <button type="button" class="sw-btn sw-btn--primary" id="chkBtn" onclick="runChecker()">Check</button>
+              <button type="button" class="sw-btn sw-btn--outline" onclick="document.getElementById('chkInput').value='';document.getElementById('chkResults').innerHTML='<tr><td colspan=4 class=panel-empty>No results yet</td></tr>'">Clear</button>
             </div>
           </div>
           <div class="sw-table-wrap panel-table-wrap" style="margin-top:14px">
             <table class="panel-table">
-              <thead><tr><th>#</th><th>Trạng thái</th><th>Gói</th><th>Email</th></tr></thead>
-              <tbody id="chkResults"><tr><td colspan="4" class="panel-empty">Chưa có kết quả</td></tr></tbody>
+              <thead><tr><th>#</th><th>Status</th><th>Plan</th><th>Email</th></tr></thead>
+              <tbody id="chkResults"><tr><td colspan="4" class="panel-empty">No results yet</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -225,23 +225,23 @@
         <section id="viewKeys" class="hidden">
           <div class="sw-page-head">
             <div>
-              <p class="sub">Tạo key gắn tài khoản đã mua, gán quyền truy cập. Thay thế email khi cần.</p>
-              <p class="sub" style="margin-top:6px;font-size:0.78rem">Danh sách Keys — Quyền key luôn bị giới hạn bởi quyền đơn hàng (admin có thể thu hồi).</p>
+              <p class="sub">Create keys tied to purchased accounts and assign access permissions. Replace email when needed.</p>
+              <p class="sub" style="margin-top:6px;font-size:0.78rem">Keys list — key permissions are always limited by the order's permissions (the admin can revoke them).</p>
             </div>
-            <button type="button" class="sw-btn sw-btn--primary" onclick="openCreateKeyModal()">+ Tạo Key</button>
+            <button type="button" class="sw-btn sw-btn--primary" onclick="openCreateKeyModal()">+ Create Key</button>
           </div>
           <div class="sw-toolbar">
-            <input id="kSearch" type="search" class="panel-input panel-input--search" placeholder="Tìm theo tên key, mã, email..." oninput="debounceRenderKeys()" />
-            <button type="button" class="sw-btn sw-btn--outline" onclick="loadKeys()">↻ Làm mới</button>
+            <input id="kSearch" type="search" class="panel-input panel-input--search" placeholder="Search by key name, code, email..." oninput="debounceRenderKeys()" />
+            <button type="button" class="sw-btn sw-btn--outline" onclick="loadKeys()">↻ Refresh</button>
           </div>
           <div class="sw-table-wrap panel-table-wrap">
             <table class="panel-table sw-keys-table">
               <thead>
                 <tr>
-                  <th>Tài khoản</th><th>Tên key</th><th>Mã key</th><th>Thời hạn</th><th>Quyền</th><th>Thao tác</th>
+                  <th>Account</th><th>Key name</th><th>Key code</th><th>Duration</th><th>Permissions</th><th>Actions</th>
                 </tr>
               </thead>
-              <tbody id="kBody"><tr><td colspan="6" class="panel-empty">Đang tải…</td></tr></tbody>
+              <tbody id="kBody"><tr><td colspan="6" class="panel-empty">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -250,23 +250,23 @@
         <section id="viewProfile" class="hidden">
           <div class="sw-form-grid">
             <div class="sw-card sw-form">
-              <h2 class="panel-section-title" style="color:#0f172a">Thông tin liên hệ</h2>
-              <p class="sub" style="margin-bottom:14px">Lưu trên trình duyệt — dùng khi hỗ trợ khách.</p>
-              <label class="panel-label">Họ và tên</label>
-              <input id="pfName" type="text" class="panel-input" placeholder="Tên hiển thị" />
-              <label class="panel-label">Loại liên hệ</label>
+              <h2 class="panel-section-title" style="color:#0f172a">Contact info</h2>
+              <p class="sub" style="margin-bottom:14px">Saved in the browser — used when supporting customers.</p>
+              <label class="panel-label">Full name</label>
+              <input id="pfName" type="text" class="panel-input" placeholder="Display name" />
+              <label class="panel-label">Contact type</label>
               <select id="pfType" class="panel-input">
                 <option value="telegram">Telegram</option>
                 <option value="zalo">Zalo</option>
                 <option value="facebook">Facebook</option>
                 <option value="email">Email</option>
               </select>
-              <label class="panel-label">Thông tin liên hệ</label>
-              <input id="pfContact" type="text" class="panel-input" placeholder="@username hoặc SĐT" />
-              <button type="button" class="sw-btn sw-btn--primary" onclick="saveProfile()">Lưu thông tin</button>
+              <label class="panel-label">Contact info</label>
+              <input id="pfContact" type="text" class="panel-input" placeholder="@username or phone number" />
+              <button type="button" class="sw-btn sw-btn--primary" onclick="saveProfile()">Save info</button>
             </div>
             <div class="sw-card">
-              <h3 style="font-size:0.95rem;color:#0f172a;margin-bottom:8px">Tài khoản đăng nhập</h3>
+              <h3 style="font-size:0.95rem;color:#0f172a;margin-bottom:8px">Login account</h3>
               <p style="font-size:0.88rem;color:#64748b"><b id="pfUser">—</b><br><span id="pfEmail">—</span></p>
             </div>
           </div>
@@ -277,26 +277,26 @@
 
   <div class="panel-modal-backdrop" id="buyModal">
     <div class="panel-modal sw-modal-wide">
-      <h3 id="buyTitle">Mua sản phẩm</h3>
+      <h3 id="buyTitle">Buy product</h3>
       <p class="sub" id="buyPrice"></p>
-      <label class="panel-label">Email tài khoản (temp-mail)</label>
-      <input id="buyEmail" type="email" class="panel-input" placeholder="khach@tinyhost.shop" />
-      <label class="panel-label">Mật khẩu Netflix (tuỳ chọn)</label>
-      <input id="buyPass" type="text" class="panel-input" placeholder="để trống nếu chưa có" />
+      <label class="panel-label">Account email (temp-mail)</label>
+      <input id="buyEmail" type="email" class="panel-input" placeholder="customer@tinyhost.shop" />
+      <label class="panel-label">Netflix password (optional)</label>
+      <input id="buyPass" type="text" class="panel-input" placeholder="leave empty if none yet" />
       <p class="panel-msg-err" id="buyErr"></p>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeBuyModal()">Hủy</button>
-        <button type="button" class="sw-btn sw-btn--primary" id="buyBtn" onclick="confirmBuy()">Xác nhận mua</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeBuyModal()">Cancel</button>
+        <button type="button" class="sw-btn sw-btn--primary" id="buyBtn" onclick="confirmBuy()">Confirm purchase</button>
       </div>
     </div>
   </div>
 
   <div class="panel-modal-backdrop" id="historyModal">
     <div class="panel-modal sw-modal-wide">
-      <h3 id="histTitle">Lịch sử đơn</h3>
+      <h3 id="histTitle">Order history</h3>
       <div id="histList"></div>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeHistoryModal()">Đóng</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeHistoryModal()">Close</button>
       </div>
     </div>
   </div>
@@ -304,30 +304,30 @@
   <div class="panel-modal-backdrop" id="createKeyModal">
     <div class="panel-modal sw-modal-wide">
       <div class="sw-modal-head">
-        <h3>Tạo Key mới</h3>
+        <h3>Create new Key</h3>
         <button type="button" class="sw-modal-close" onclick="closeCreateKeyModal()">×</button>
       </div>
-      <p class="sub">Quyền chọn cho key sẽ bị giới hạn bởi quyền admin cấp cho đơn hàng.</p>
-      <label class="panel-label">Tài khoản (email đã mua)</label>
-      <input id="crOrderSearch" type="search" class="panel-input" placeholder="Tìm và chọn tài khoản..." list="crOrderList" />
+      <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
+      <label class="panel-label">Account (purchased email)</label>
+      <input id="crOrderSearch" type="search" class="panel-input" placeholder="Search and select an account..." list="crOrderList" />
       <datalist id="crOrderList"></datalist>
       <input type="hidden" id="crOrderId" />
-      <p class="perm-hint">Gõ để tìm đơn theo email hoặc mã ORD.</p>
+      <p class="perm-hint">Type to search orders by email or ORD code.</p>
       <div class="sw-sync-box">
-        <div class="title">🔗 Đồng bộ giữa các key</div>
-        <label><input type="checkbox" id="crSyncName" checked /> Tên</label>
-        <label><input type="checkbox" id="crSyncExpires" checked /> Thời hạn</label>
-        <label><input type="checkbox" id="crSyncPerms" checked /> Quyền</label>
-        <p class="perm-hint">Bật: dùng chung 1 giá trị cho mọi key. Tắt: mỗi key có giá trị riêng.</p>
+        <div class="title">🔗 Sync across keys</div>
+        <label><input type="checkbox" id="crSyncName" checked /> Name</label>
+        <label><input type="checkbox" id="crSyncExpires" checked /> Duration</label>
+        <label><input type="checkbox" id="crSyncPerms" checked /> Permissions</label>
+        <p class="perm-hint">On: share one value across all keys. Off: each key has its own value.</p>
       </div>
       <div id="crKeyRows"></div>
-      <button type="button" class="sw-btn sw-btn--outline" id="crAddRowBtn" onclick="addCreateKeyRow()">⊕ Thêm key</button>
+      <button type="button" class="sw-btn sw-btn--outline" id="crAddRowBtn" onclick="addCreateKeyRow()">⊕ Add key</button>
       <p class="panel-msg-err" id="crErr"></p>
       <div class="panel-modal-actions sw-modal-foot-split">
-        <span id="crKeyCount" class="perm-hint">1/5 key</span>
+        <span id="crKeyCount" class="perm-hint">1/5 keys</span>
         <div>
-          <button type="button" class="sw-btn sw-btn--outline" onclick="closeCreateKeyModal()">Hủy</button>
-          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()">💾 Lưu Key</button>
+          <button type="button" class="sw-btn sw-btn--outline" onclick="closeCreateKeyModal()">Cancel</button>
+          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()">💾 Save Key</button>
         </div>
       </div>
     </div>
@@ -336,29 +336,29 @@
   <div class="panel-modal-backdrop" id="editModal">
     <div class="panel-modal sw-modal-wide">
       <div class="sw-modal-head">
-        <h3 id="editTitle">Sửa Key</h3>
+        <h3 id="editTitle">Edit Key</h3>
         <button type="button" class="sw-modal-close" onclick="closeEditModal()">×</button>
       </div>
-      <p class="sub">Quyền chọn cho key sẽ bị giới hạn bởi quyền admin cấp cho đơn hàng.</p>
-      <label class="panel-label">Tài khoản (email đã mua)</label>
+      <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
+      <label class="panel-label">Account (purchased email)</label>
       <input id="edEmail" type="text" class="panel-input" readonly />
-      <p class="perm-hint">Khi sửa key sẽ không đổi được tài khoản.</p>
+      <p class="perm-hint">The account cannot be changed when editing a key.</p>
       <div class="sw-form-row-2">
         <div>
-          <label class="panel-label">Tên Key</label>
+          <label class="panel-label">Key name</label>
           <input id="edName" type="text" class="panel-input" />
         </div>
         <div>
-          <label class="panel-label">Thời hạn key</label>
+          <label class="panel-label">Key duration</label>
           <input id="edExpires" type="datetime-local" class="panel-input" />
         </div>
       </div>
-      <p class="panel-label" style="margin-top:8px">Quyền key</p>
+      <p class="panel-label" style="margin-top:8px">Key permissions</p>
       <div class="sw-perm-checks" id="edPermChecks"></div>
       <p class="sw-perm-note" id="edPermHint"></p>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeEditModal()">Hủy</button>
-        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()">💾 Lưu thay đổi</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeEditModal()">Cancel</button>
+        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()">💾 Save changes</button>
       </div>
     </div>
   </div>

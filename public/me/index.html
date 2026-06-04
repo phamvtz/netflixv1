@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kiểm tra hộp thư Netflix</title>
+  <title>Get Netflix Code</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -178,9 +178,9 @@
 <body>
 
 <header class="top-nav">
-  <a href="/" class="logo"><span>N</span> Lấy mã Netflix</a>
+  <a href="/" class="logo"><span>N</span> Get Netflix Code</a>
   <nav class="top-nav-links">
-    <a href="/" class="active">Lấy mã</a>
+    <a href="/" class="active">Get code</a>
     <a href="/seller">Seller</a>
     <a href="/admin">Admin</a>
   </nav>
@@ -190,24 +190,24 @@
 
   <!-- Input Card -->
   <div class="card">
-    <h1>Lấy mã Netflix</h1>
-    <p class="subtitle">Nhập <strong>email</strong> hoặc <strong>key</strong> để lấy mã đăng nhập, mã hộ gia đình hoặc link reset mật khẩu Netflix.</p>
+    <h1>Get Netflix Code</h1>
+    <p class="subtitle">Enter your <strong>email</strong> or <strong>key</strong> to get your Netflix login code, household code, or password reset link.</p>
 
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" id="tabEmail" onclick="switchTab('email')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-        Theo email
+        By email
       </button>
       <button class="tab" id="tabKey" onclick="switchTab('key')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3"/></svg>
-        Theo key
+        By key
       </button>
     </div>
 
     <!-- Email input -->
     <div id="fieldEmail">
-      <div class="field-label">Địa chỉ email</div>
+      <div class="field-label">Email address</div>
       <div class="input-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
         <input id="inputEmail" type="email" placeholder="netflix@example.com" />
@@ -230,7 +230,7 @@
 
     <button class="btn-submit" id="btnSubmit" onclick="fetchCode()" disabled>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      Lấy mã
+      Get code
     </button>
   </div>
 
@@ -238,7 +238,7 @@
   <div class="card result-card" id="resultCard">
     <div id="resultHeader" class="result-header">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-      Đã tìm thấy email
+      Email found
     </div>
     <div id="resultContent"></div>
   </div>
@@ -302,7 +302,7 @@ async function initTurnstile() {
       'error-callback': resetTurnstile,
     });
   } catch (e) {
-    showError('Không tải được Cloudflare Turnstile: ' + e.message);
+    showError('Could not load Cloudflare Turnstile: ' + e.message);
   }
 }
 
@@ -356,17 +356,17 @@ async function fetchCode() {
   if (mode === 'email') {
     emailAddr = document.getElementById('inputEmail').value.trim();
     if (!emailAddr || !emailAddr.includes('@')) {
-      showError('Vui lòng nhập địa chỉ email hợp lệ.');
+      showError('Please enter a valid email address.');
       return;
     }
   } else {
     const key = document.getElementById('inputKey').value.trim();
-    if (!key) { showError('Vui lòng nhập key.'); return; }
+    if (!key) { showError('Please enter a key.'); return; }
     activeKeyStr = key;
     keyPermissions = null;
     emailAddr = await resolveKeyServer(key) || resolveKey(key);
     if (!emailAddr) {
-      showError('Key không hợp lệ hoặc chưa được đăng ký.');
+      showError('Invalid key or key not registered.');
       return;
     }
     if (!keyPermissions && emailAddr) {
@@ -375,16 +375,16 @@ async function fetchCode() {
   }
 
   if (turnstileEnabled && !turnstileToken) {
-    showError('Vui lòng hoàn thành xác minh Cloudflare.');
+    showError('Please complete the Cloudflare verification.');
     return;
   }
 
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Đang tìm...';
+  btn.innerHTML = '<div class="spinner"></div> Searching...';
 
   try {
     const [user, domain] = emailAddr.split('@');
-    if (!user || !domain) throw new Error('Email không hợp lệ');
+    if (!user || !domain) throw new Error('Invalid email');
 
     const payload = { email: emailAddr, turnstileToken: turnstileToken };
     if (mode === 'key' && activeKeyStr) payload.key = activeKeyStr;
@@ -396,17 +396,17 @@ async function fetchCode() {
     });
     const data = await resp.json();
 
-    if (!data.success) throw new Error(data.error || 'Không lấy được email');
+    if (!data.success) throw new Error(data.error || 'Could not retrieve email');
 
     const perms = data.permissions || keyPermissions;
     displayResult(data.emails, emailAddr, perms);
   } catch (e) {
-    showError('Lỗi: ' + e.message);
+    showError('Error: ' + e.message);
   } finally {
     resetTurnstile();
     btn.innerHTML = `
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      Lấy mã`;
+      Get code`;
   }
 }
 
@@ -418,18 +418,18 @@ function displayResult(emails, emailAddr, perms) {
 
   if (!emails.length) {
     header.className = 'result-header error';
-    header.innerHTML = '✕ Không tìm thấy mã phù hợp';
-    let hint = `Hộp thư <strong>${emailAddr}</strong> trống hoặc chưa có email Netflix.`;
+    header.innerHTML = '✕ No matching code found';
+    let hint = `Inbox <strong>${emailAddr}</strong> is empty or has no Netflix email yet.`;
     if (perms && !perms.permFamily && mode === 'key') {
-      hint += '<br><span style="color:#c9a227">Key này chưa được cấp quyền xem mã gia đình — liên hệ seller.</span>';
+      hint += '<br><span style="color:#c9a227">This key does not have permission to view the household code — contact your seller.</span>';
     }
-    content.innerHTML = `<p style="font-size:.85rem;color:#888;">${hint}<br>Hãy thử lại sau vài giây.</p>`;
+    content.innerHTML = `<p style="font-size:.85rem;color:#888;">${hint}<br>Please try again in a few seconds.</p>`;
     card.classList.add('show');
     return;
   }
 
   header.className = 'result-header';
-  header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg> Đã tìm thấy ${emails.length} email`;
+  header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg> Found ${emails.length} email(s)`;
 
   // Show most relevant first (Netflix code emails)
   const html = emails.map(email => buildEmailItem(email, perms)).join('');
@@ -450,34 +450,34 @@ function buildEmailItem(email, perms) {
     bodyHtml = `
       <div class="result-box">
         <div class="result-box-inner">
-          <div class="result-box-label">Mã đăng nhập</div>
+          <div class="result-box-label">Login code</div>
           <div class="result-code">${code.split('').join(' ')}</div>
         </div>
         <button class="btn-copy" onclick="copyText('${code}', this)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-          Sao chép
+          Copy
         </button>
       </div>`;
   } else if (resetLink) {
     bodyHtml = `
       <div class="result-box" style="flex-direction:column;align-items:flex-start;gap:10px;">
-        <div class="result-box-label">Link reset mật khẩu</div>
+        <div class="result-box-label">Password reset link</div>
         <div class="result-link"><a href="${escHtml(resetLink)}" target="_blank">${escHtml(resetLink.substring(0,60))}…</a></div>
         <button class="btn-copy" onclick="copyText('${escHtml(resetLink)}', this)" style="align-self:flex-end">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-          Sao chép link
+          Copy link
         </button>
       </div>`;
   } else if (fam) {
     bodyHtml = `
       <div class="result-box">
         <div class="result-box-inner">
-          <div class="result-box-label">Mã hộ gia đình</div>
+          <div class="result-box-label">Household code</div>
           <div class="result-code" style="font-size:1.5rem">${fam}</div>
         </div>
         <button class="btn-copy" onclick="copyText('${fam}', this)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-          Sao chép
+          Copy
         </button>
       </div>`;
   } else {
@@ -503,10 +503,10 @@ async function copyText(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
     const orig = btn.innerHTML;
-    btn.textContent = '✓ Đã copy';
+    btn.textContent = '✓ Copied';
     btn.classList.add('copied');
     setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
-  } catch { alert('Copy thủ công: ' + text); }
+  } catch { alert('Copy manually: ' + text); }
 }
 
 function showError(msg) {

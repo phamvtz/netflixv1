@@ -2,7 +2,7 @@
 
 ## 1. CLAUDE là ai & Context
 
-CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự án: **Netflix v1** (cookie checker, thư mục này) và **Mail Seller** (`d:\mail-seller`, SaaS panel bán email). Stack Node.js + Express.js, deploy VPS qua SSH + PM2. Mọi thay đổi được commit tự động. Giao tiếp tiếng Việt, comment code tiếng Việt.
+CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự án: **Netflix v1** (cookie checker, thư mục này) và **Mail Seller** (`d:\mail-seller`, SaaS panel bán email). Stack Node.js + Express.js, deploy VPS qua SSH + PM2. Mọi thay đổi được commit tự động. Language: all user-facing text, chat replies, and commit messages in English; code comments are being migrated to English.
 
 ---
 
@@ -18,7 +18,7 @@ CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự 
 ## 3. Quy tắc code
 
 - `camelCase` JS — `snake_case` DB columns
-- Comment tiếng Việt, giải thích "tại sao" không phải "cái gì"
+- Comment in English, explain "why" not "what"
 - `async/await` — không callback lồng nhau
 - Luôn `try/catch`, trả lỗi rõ ràng: `{ success: false, error }`
 - Không `var`, không unused vars, hàm nhỏ làm một việc
@@ -42,7 +42,7 @@ const mapRow = r => ({ userId: r.user_id, createdAt: r.created_at });
 
 ### Auto-commit format
 ```
-feat|fix|refactor|chore: mô tả ngắn tiếng Việt
+feat|fix|refactor|chore: short description in English
 ```
 
 ### Deploy (VPS + PM2)

@@ -103,19 +103,19 @@ function seedAccounts(db) {
 const PRODUCTS = [
   {
     id: 'prod_nf_fam_1m',
-    name: 'Netflix Premium FAM 1 Tháng - Bảo hành full',
-    durationLabel: '1 tháng',
+    name: 'Netflix Premium Family 1 Month - Full warranty',
+    durationLabel: '1 month',
     durationDays: 30,
     price: 150000,
-    warrantyNote: 'Bảo hành full',
+    warrantyNote: 'Full warranty',
   },
   {
     id: 'prod_nf_fam_3m',
-    name: 'Netflix Premium FAM 3 Tháng',
-    durationLabel: '3 tháng',
+    name: 'Netflix Premium Family 3 Months',
+    durationLabel: '3 months',
     durationDays: 90,
     price: 400000,
-    warrantyNote: 'Bảo hành full',
+    warrantyNote: 'Full warranty',
   },
 ];
 

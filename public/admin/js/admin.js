@@ -74,7 +74,7 @@ async function jpatch(url, body) {
 
 function sellerPermBadges(s) {
   const b = (on, l) => `<span class="perm-badge ${on ? 'perm-badge--on' : 'perm-badge--off'}">${l}</span>`;
-  return `<div class="perm-badges">${b(s.permLogin, 'ĐN')}${b(s.permReset, 'Reset')}${b(s.permFamily, 'GĐ')}</div>`;
+  return `<div class="perm-badges">${b(s.permLogin, 'Login')}${b(s.permReset, 'Reset')}${b(s.permFamily, 'Household')}</div>`;
 }
 
 function toggleTokenMode(on) {
@@ -89,7 +89,7 @@ async function login() {
   const err = $('loginErr');
   err.style.display = 'none';
   if (!username || !password) {
-    err.textContent = 'Nhập username và mật khẩu.';
+    err.textContent = 'Enter username and password.';
     err.style.display = 'block';
     return;
   }
@@ -100,8 +100,8 @@ async function login() {
       body: JSON.stringify({ username, password }),
     });
     const d = await r.json();
-    if (!d.success) throw new Error(d.error || 'Đăng nhập thất bại');
-    if (d.account.role !== 'admin') throw new Error('Tài khoản này không phải admin.');
+    if (!d.success) throw new Error(d.error || 'Log in failed');
+    if (d.account.role !== 'admin') throw new Error('This account is not an admin.');
     TOKEN = '';
     sessionStorage.removeItem('adminToken');
     showDash();
@@ -117,8 +117,8 @@ async function loginToken() {
   err.style.display = 'none';
   try {
     const r = await fetch('/api/admin/stats', { headers: { 'X-Admin-Token': t } });
-    if (r.status === 401) throw new Error('Token sai');
-    if (!r.ok) throw new Error('Lỗi ' + r.status);
+    if (r.status === 401) throw new Error('Invalid token');
+    if (!r.ok) throw new Error('Error ' + r.status);
     TOKEN = t;
     sessionStorage.setItem('adminToken', t);
     showDash();
@@ -156,9 +156,9 @@ async function loadStats() {
     ['Sessions', s.sessions, false],
     ['Content', s.content, false],
     ['Keys', s.keys, false],
-    ['Keys đã dùng', s.keysUsed, false],
+    ['Keys used', s.keysUsed, false],
     ['Sellers', s.sellers, false],
-    ['Chờ duyệt', s.pendingSellers, s.pendingSellers > 0],
+    ['Pending approval', s.pendingSellers, s.pendingSellers > 0],
   ];
   $('stats').innerHTML = items
     .map(
@@ -181,8 +181,8 @@ async function loadSellers() {
         <tr>
           <td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtTs(s.createdAt)}</td>
           <td style="white-space:nowrap">
-            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">✓ Duyệt</button>
-            <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">✕ Từ chối</button>
+            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">✓ Approve</button>
+            <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">✕ Reject</button>
           </td>
         </tr>`
     )
@@ -203,7 +203,7 @@ function renderSellers() {
   $('sellerCount').textContent = rows.length;
   const body = $('sellersBody');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="4" class="panel-empty">${allSellers.length ? 'Không khớp filter' : 'Chưa có seller'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="4" class="panel-empty">${allSellers.length ? 'No matches for filter' : 'No sellers yet'}</td></tr>`;
     return;
   }
   body.innerHTML = rows
@@ -212,22 +212,22 @@ function renderSellers() {
         s.status === 'active' ? 'panel-badge--active' : s.status === 'rejected' ? 'panel-badge--rejected' : 'panel-badge--pending';
       const act =
         s.status !== 'active'
-          ? `<button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">Duyệt</button>`
-          : `<button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="editSellerPerms('${esc(s.id)}', '${esc(s.username)}')">Quyền</button>
-             <button class="panel-btn panel-btn--sm panel-btn--green" onclick="topupSeller('${esc(s.id)}', '${esc(s.username)}')">Nạp tiền</button>
-             <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">Khoá</button>`;
+          ? `<button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">Approve</button>`
+          : `<button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="editSellerPerms('${esc(s.id)}', '${esc(s.username)}')">Permissions</button>
+             <button class="panel-btn panel-btn--sm panel-btn--green" onclick="topupSeller('${esc(s.id)}', '${esc(s.username)}')">Top up</button>
+             <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">Lock</button>`;
       const perms = s.status === 'active' ? sellerPermBadges(s) : '';
       return `<tr><td>${esc(s.username)}</td><td>${esc(s.email)}</td>
-              <td><span class="panel-badge ${cls}">${s.status}${s.emailVerified ? '' : ' · chưa verify'}</span>${perms ? '<br>' + perms : ''}</td>
+              <td><span class="panel-badge ${cls}">${s.status}${s.emailVerified ? '' : ' · not verified'}</span>${perms ? '<br>' + perms : ''}</td>
               <td>${act}</td></tr>`;
     })
     .join('');
 }
 
 async function pickSellerPerms(username) {
-  const login = confirm(`Seller "${username}" — cho phép Mã đăng nhập?\nOK = có, Cancel = không`);
-  const reset = confirm(`Cho phép Link đổi mật khẩu?`);
-  const family = confirm(`Cho phép Mã hộ gia đình?`);
+  const login = confirm(`Seller "${username}" — allow Login code?\nOK = yes, Cancel = no`);
+  const reset = confirm(`Allow Password reset link?`);
+  const family = confirm(`Allow Household code?`);
   return { permLogin: login, permReset: reset, permFamily: family };
 }
 
@@ -235,44 +235,44 @@ async function approve(id, username) {
   const perms = await pickSellerPerms(username || id);
   const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve', perms);
   if (d.success) {
-    toast('Đã duyệt seller');
+    toast('Seller approved');
     loadSellers();
     loadStats();
-  } else toast('Lỗi duyệt');
+  } else toast('Approve failed');
 }
 
 async function topupSeller(id, username) {
-  const raw = prompt(`Nạp tiền cho seller "${username}" (VNĐ):`, '300000');
+  const raw = prompt(`Top up for seller "${username}" (VND):`, '300000');
   if (raw == null) return;
   const amount = parseInt(String(raw).replace(/\D/g, ''), 10);
-  if (!amount || amount < 1000) return toast('Số tiền tối thiểu 1.000đ');
+  if (!amount || amount < 1000) return toast('Minimum amount 1,000đ');
   const r = await fetch('/api/admin/sellers/' + encodeURIComponent(id) + '/topup', {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ amount, description: 'Admin nạp tiền' }),
+    body: JSON.stringify({ amount, description: 'Admin top up' }),
   });
   const d = await r.json();
-  if (d.success) toast('Đã nạp ' + amount.toLocaleString('vi-VN') + 'đ — số dư: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
-  else toast(d.error || 'Lỗi nạp');
+  if (d.success) toast('Topped up ' + amount.toLocaleString('vi-VN') + 'đ — balance: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
+  else toast(d.error || 'Top up failed');
 }
 
 async function editSellerPerms(id, username) {
   const perms = await pickSellerPerms(username || id);
   const d = await jpatch('/api/admin/sellers/' + encodeURIComponent(id) + '/perms', perms);
   if (d.success) {
-    toast('Đã cập nhật quyền seller');
+    toast('Seller permissions updated');
     loadSellers();
-  } else toast(d.error || 'Lỗi cập nhật');
+  } else toast(d.error || 'Update failed');
 }
 
 async function reject(id) {
-  if (!confirm('Từ chối / khoá seller này?')) return;
+  if (!confirm('Reject / lock this seller?')) return;
   const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/reject');
   if (d.success) {
-    toast('Đã cập nhật');
+    toast('Updated');
     loadSellers();
     loadStats();
-  } else toast('Lỗi');
+  } else toast('Error');
 }
 
 async function loadKeys() {
@@ -293,7 +293,7 @@ function renderKeys() {
   $('keyCount').textContent = rows.length;
   const body = $('keysBody');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="5" class="panel-empty">${allKeys.length ? 'Không khớp' : 'Chưa có key'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="panel-empty">${allKeys.length ? 'No matches' : 'No keys yet'}</td></tr>`;
     return;
   }
   body.innerHTML = rows
@@ -304,14 +304,14 @@ function renderKeys() {
           <td>${esc(k.email)}<br>${sellerPermBadges(k)}</td>
           <td>${k.sellerUsername ? esc(k.sellerUsername) : '<span style="color:var(--t3)">—</span>'}</td>
           <td>${k.usedCount}</td>
-          <td><button class="panel-btn panel-btn--sm panel-btn--red" onclick="delKey('${esc(k.key)}')">Xoá</button></td>
+          <td><button class="panel-btn panel-btn--sm panel-btn--red" onclick="delKey('${esc(k.key)}')">Delete</button></td>
         </tr>`
     )
     .join('');
 }
 
 async function delKey(key) {
-  if (!confirm('Xoá key ' + key + '?')) return;
+  if (!confirm('Delete key ' + key + '?')) return;
   await fetch('/api/admin/keys/' + encodeURIComponent(key), { method: 'DELETE', headers: authHeaders() });
   await loadKeys();
   await loadStats();
@@ -347,23 +347,23 @@ function renderProducts() {
   $('productCount').textContent = rows.length;
   const body = $('productsBody');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="5" class="panel-empty">${allProducts.length ? 'Không khớp filter' : 'Chưa có sản phẩm'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="panel-empty">${allProducts.length ? 'No matches for filter' : 'No products yet'}</td></tr>`;
     return;
   }
   body.innerHTML = rows
     .map((p) => {
       const badge = p.active
-        ? '<span class="panel-badge panel-badge--active">Đang bán</span>'
-        : '<span class="panel-badge panel-badge--rejected">Đã ẩn</span>';
-      const dur = p.durationLabel ? esc(p.durationLabel) : `${p.durationDays} ngày`;
+        ? '<span class="panel-badge panel-badge--active">On sale</span>'
+        : '<span class="panel-badge panel-badge--rejected">Hidden</span>';
+      const dur = p.durationLabel ? esc(p.durationLabel) : `${p.durationDays} days`;
       return `<tr>
         <td>${esc(p.name)}${p.warrantyNote ? `<div class="note-sub">${esc(p.warrantyNote)}</div>` : ''}</td>
-        <td>${dur}<div class="note-sub">${p.durationDays} ngày</div></td>
+        <td>${dur}<div class="note-sub">${p.durationDays} days</div></td>
         <td>${fmtVnd(p.price)}</td>
         <td>${badge}</td>
         <td style="white-space:nowrap">
-          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="openProductModal('${esc(p.id)}')">Sửa</button>
-          <button class="panel-btn panel-btn--sm ${p.active ? 'panel-btn--red' : 'panel-btn--green'}" onclick="toggleProduct('${esc(p.id)}')">${p.active ? 'Ẩn' : 'Hiện'}</button>
+          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="openProductModal('${esc(p.id)}')">Edit</button>
+          <button class="panel-btn panel-btn--sm ${p.active ? 'panel-btn--red' : 'panel-btn--green'}" onclick="toggleProduct('${esc(p.id)}')">${p.active ? 'Hide' : 'Show'}</button>
         </td>
       </tr>`;
     })
@@ -373,7 +373,7 @@ function renderProducts() {
 function openProductModal(id) {
   editingProductId = id || null;
   const p = id ? allProducts.find((x) => x.id === id) : null;
-  $('productModalTitle').textContent = p ? 'Sửa sản phẩm' : 'Thêm sản phẩm';
+  $('productModalTitle').textContent = p ? 'Edit product' : 'Add product';
   $('pmName').value = p?.name || '';
   $('pmDurationLabel').value = p?.durationLabel || '';
   $('pmDurationDays').value = p?.durationDays || 30;
@@ -395,8 +395,8 @@ async function saveProduct() {
   const name = $('pmName').value.trim();
   const price = parseInt($('pmPrice').value, 10);
   const durationDays = parseInt($('pmDurationDays').value, 10) || 30;
-  if (!name) { err.textContent = 'Nhập tên sản phẩm.'; err.style.display = 'block'; return; }
-  if (!Number.isFinite(price) || price < 0) { err.textContent = 'Giá không hợp lệ.'; err.style.display = 'block'; return; }
+  if (!name) { err.textContent = 'Enter product name.'; err.style.display = 'block'; return; }
+  if (!Number.isFinite(price) || price < 0) { err.textContent = 'Invalid price.'; err.style.display = 'block'; return; }
 
   const payload = {
     name,
@@ -412,11 +412,11 @@ async function saveProduct() {
   const d = await jpost('/api/admin/products', payload);
   $('pmSaveBtn').disabled = false;
   if (d.success) {
-    toast(editingProductId ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm');
+    toast(editingProductId ? 'Product updated' : 'Product added');
     closeProductModal();
     loadProducts();
   } else {
-    err.textContent = d.error || 'Lỗi lưu sản phẩm';
+    err.textContent = d.error || 'Failed to save product';
     err.style.display = 'block';
   }
 }
@@ -434,22 +434,22 @@ async function toggleProduct(id) {
     warrantyNote: p.warrantyNote,
     active: !p.active,
   });
-  if (d.success) { toast(p.active ? 'Đã ẩn sản phẩm' : 'Đã hiện sản phẩm'); loadProducts(); }
-  else toast(d.error || 'Lỗi');
+  if (d.success) { toast(p.active ? 'Product hidden' : 'Product shown'); loadProducts(); }
+  else toast(d.error || 'Error');
 }
 
 function initFilters() {
   keyChips = PanelFilters.bindChipBar($('keyFilterBar'), [
-    { id: 'all', label: 'Tất cả' },
-    { id: 'unused', label: 'Chưa dùng' },
-    { id: 'used', label: 'Đã dùng' },
+    { id: 'all', label: 'All' },
+    { id: 'unused', label: 'Unused' },
+    { id: 'used', label: 'Used' },
   ], (status) => {
     keyStatusFilter = status;
     renderKeys();
   });
 
   sellerChips = PanelFilters.bindChipBar($('sellerFilterBar'), [
-    { id: 'all', label: 'Tất cả' },
+    { id: 'all', label: 'All' },
     { id: 'active', label: 'Active' },
     { id: 'pending', label: 'Pending' },
     { id: 'rejected', label: 'Rejected' },
@@ -459,9 +459,9 @@ function initFilters() {
   });
 
   productChips = PanelFilters.bindChipBar($('productFilterBar'), [
-    { id: 'all', label: 'Tất cả' },
-    { id: 'active', label: 'Đang bán' },
-    { id: 'inactive', label: 'Đã ẩn' },
+    { id: 'all', label: 'All' },
+    { id: 'active', label: 'On sale' },
+    { id: 'inactive', label: 'Hidden' },
   ], (status) => {
     productStatusFilter = status;
     renderProducts();

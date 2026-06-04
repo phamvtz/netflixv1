@@ -31,13 +31,13 @@
 
   function permBadgesHtml(k) {
     const b = (on, l) => `<span class="perm-badge ${on ? 'perm-badge--on' : 'perm-badge--off'}">${l}</span>`;
-    return `<div class="perm-badges">${b(k.permLogin, 'Mã ĐN')}${b(k.permReset, 'Reset')}${b(k.permFamily, 'HGĐ')}</div>`;
+    return `<div class="perm-badges">${b(k.permLogin, 'Login code')}${b(k.permReset, 'Reset')}${b(k.permFamily, 'Household')}</div>`;
   }
 
   function orderPermHint(orderPerms, sellerPerms) {
     const ok = (v) => (v ? '✔' : '✘');
     const o = orderPerms || sellerPerms;
-    return `Quyền admin cấp cho tài khoản này: ${ok(o?.permLogin)} Mã ĐN · ${ok(o?.permReset)} Reset · ${ok(o?.permFamily)} HGĐ`;
+    return `Permissions the admin granted to this account: ${ok(o?.permLogin)} Login code · ${ok(o?.permReset)} Reset · ${ok(o?.permFamily)} Household`;
   }
 
   function renderPermCheckboxes(containerId, values, orderPerms) {
@@ -46,9 +46,9 @@
     const sp = window.SellerApp?.sellerPerms || { permLogin: true, permReset: false, permFamily: true };
     const max = orderPerms || sp;
     const defs = [
-      { field: 'permLogin', label: 'Mã đăng nhập' },
-      { field: 'permReset', label: 'Link đổi mật khẩu' },
-      { field: 'permFamily', label: 'Mã hộ gia đình' },
+      { field: 'permLogin', label: 'Login code' },
+      { field: 'permReset', label: 'Password reset link' },
+      { field: 'permFamily', label: 'Household code' },
     ];
     el.innerHTML = defs.map((d) => {
       const allowed = !!max[d.field];
@@ -92,24 +92,24 @@
     const body = $('kBody');
     if (!body) return;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="6" class="panel-empty">${(window.SellerApp.allKeys || []).length ? 'Không khớp' : 'Chưa có key — bấm + Tạo Key'}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" class="panel-empty">${(window.SellerApp.allKeys || []).length ? 'No matches' : 'No keys yet — click + Create Key'}</td></tr>`;
       return;
     }
     body.innerHTML = rows.map((k) => {
       const expOrder = k.orderExpiresAt ? fmtTs(k.orderExpiresAt) : null;
-      const accLine = expOrder ? `<div class="acc-sub">Hạn đơn: ${expOrder}</div>` : '';
+      const accLine = expOrder ? `<div class="acc-sub">Order expiry: ${expOrder}</div>` : '';
       return `<tr>
         <td><div>${esc(k.email)}</div>${accLine}</td>
         <td>${esc(k.keyName || '—')}</td>
         <td class="mono" style="font-size:0.78rem">${esc(k.key)}
           <button type="button" class="sw-icon-btn" style="margin-left:4px;vertical-align:middle" data-copy="${esc(k.key)}">⎘</button></td>
-        <td><div>Tạo: <span class="time-sub">${fmtTs(k.createdAt)}</span></div>
-            <div>Hết: <span class="time-sub">${fmtTs(k.expiresAt)}</span></div></td>
+        <td><div>Created: <span class="time-sub">${fmtTs(k.createdAt)}</span></div>
+            <div>Expires: <span class="time-sub">${fmtTs(k.expiresAt)}</span></div></td>
         <td>${permBadgesHtml(k)}</td>
         <td><div class="act-group">
-          <button type="button" class="sw-act-btn" title="Sửa" data-edit="${esc(k.key)}">✎</button>
-          <button type="button" class="sw-act-btn" title="Đồng bộ từ đơn" data-sync="${esc(k.key)}">↻</button>
-          <button type="button" class="sw-act-btn sw-act-btn--danger" title="Xóa" data-del="${esc(k.key)}">🗑</button>
+          <button type="button" class="sw-act-btn" title="Edit" data-edit="${esc(k.key)}">✎</button>
+          <button type="button" class="sw-act-btn" title="Sync from order" data-sync="${esc(k.key)}">↻</button>
+          <button type="button" class="sw-act-btn sw-act-btn--danger" title="Delete" data-del="${esc(k.key)}">🗑</button>
         </div></td>
       </tr>`;
     }).join('');
@@ -131,19 +131,19 @@
   async function syncKey(keyId) {
     const d = await window.SellerApp.api(`/api/seller/keys/${encodeURIComponent(keyId)}/sync`, {}, 'POST');
     if (d.success) {
-      window.SellerApp.toast('Đã đồng bộ quyền & hạn từ đơn');
+      window.SellerApp.toast('Synced permissions & expiry from order');
       loadKeys();
-    } else window.SellerApp.toast(d.error || 'Lỗi đồng bộ');
+    } else window.SellerApp.toast(d.error || 'Sync failed');
   }
 
   async function deleteKey(keyId) {
-    if (!confirm('Xóa key này? Khách sẽ không dùng được nữa.')) return;
+    if (!confirm('Delete this key? The customer will no longer be able to use it.')) return;
     const d = await window.SellerApp.api(`/api/seller/keys/${encodeURIComponent(keyId)}`, null, 'DELETE');
     if (d.success) {
-      window.SellerApp.toast('Đã xóa key');
+      window.SellerApp.toast('Key deleted');
       loadKeys();
       window.SellerApp.loadOrders?.();
-    } else window.SellerApp.toast(d.error || 'Lỗi xóa');
+    } else window.SellerApp.toast(d.error || 'Delete failed');
   }
 
   let editingKeyId = null;
@@ -152,7 +152,7 @@
     const k = (window.SellerApp.allKeys || []).find((x) => x.key === keyId);
     if (!k) return;
     editingKeyId = keyId;
-    $('editTitle').textContent = 'Sửa Key · ' + (k.keyName || k.key.slice(0, 12));
+    $('editTitle').textContent = 'Edit Key · ' + (k.keyName || k.key.slice(0, 12));
     $('edEmail').value = k.email;
     $('edName').value = k.keyName || '';
     $('edExpires').value = toLocalInput(k.expiresAt);
@@ -175,8 +175,8 @@
       ...perms,
     }, 'PATCH');
     $('edSaveBtn').disabled = false;
-    if (!d.success) return window.SellerApp.toast(d.error || 'Lỗi');
-    window.SellerApp.toast('Đã lưu thay đổi');
+    if (!d.success) return window.SellerApp.toast(d.error || 'Error');
+    window.SellerApp.toast('Changes saved');
     closeEditModal();
     loadKeys();
     window.SellerApp.loadOrders?.();
@@ -223,11 +223,11 @@
       const showName = !syncName || idx === 0;
       const showExp = !syncExp || idx === 0;
       return `<div class="sw-key-row-block" data-row="${row.id}">
-        <div class="row-title">Key ${idx + 1}${createRows.length > 1 ? ` <button type="button" class="sw-btn sw-btn--outline" style="padding:2px 8px;font-size:0.72rem;float:right" data-rm="${row.id}">Xóa</button>` : ''}</div>
-        ${showName ? `<label class="panel-label">Tên Key</label><input type="text" class="panel-input cr-name" data-row="${row.id}" placeholder="VD: Key Khách A" style="margin-bottom:8px" />` : ''}
-        ${showExp ? `<label class="panel-label">Thời hạn key</label><input type="datetime-local" class="panel-input cr-exp" data-row="${row.id}" value="${expDefault}" style="margin-bottom:8px" />` : ''}
+        <div class="row-title">Key ${idx + 1}${createRows.length > 1 ? ` <button type="button" class="sw-btn sw-btn--outline" style="padding:2px 8px;font-size:0.72rem;float:right" data-rm="${row.id}">Delete</button>` : ''}</div>
+        ${showName ? `<label class="panel-label">Key name</label><input type="text" class="panel-input cr-name" data-row="${row.id}" placeholder="e.g. Customer A Key" style="margin-bottom:8px" />` : ''}
+        ${showExp ? `<label class="panel-label">Key duration</label><input type="datetime-local" class="panel-input cr-exp" data-row="${row.id}" value="${expDefault}" style="margin-bottom:8px" />` : ''}
         ${idx === 0 && $('crSyncPerms')?.checked !== false ? `
-          <p class="panel-label" style="margin-top:4px">Quyền key</p>
+          <p class="panel-label" style="margin-top:4px">Key permissions</p>
           <div class="sw-perm-checks" id="crPermChecks"></div>
           <p class="sw-perm-note" id="crPermHint"></p>` : ''}
       </div>`;
@@ -251,12 +251,12 @@
       });
     });
 
-    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} key`;
+    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} keys`;
   }
 
   function updateCreateCount() {
     $('crAddRowBtn').disabled = createRows.length >= MAX_KEYS_BATCH;
-    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} key`;
+    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} keys`;
   }
 
   function addCreateKeyRow() {
@@ -290,7 +290,7 @@
 
   function collectCreatePayload() {
     const order = getSelectedOrder();
-    if (!order) return { error: 'Chọn tài khoản (đơn hàng)' };
+    if (!order) return { error: 'Select an account (order)' };
     $('crOrderId').value = order.id;
 
     const syncName = $('crSyncName').checked;
@@ -334,11 +334,11 @@
     const d = await window.SellerApp.api('/api/seller/keys/batch', payload);
     $('crSaveBtn').disabled = false;
     if (!d.success) {
-      $('crErr').textContent = d.error || 'Lỗi tạo key';
+      $('crErr').textContent = d.error || 'Failed to create key';
       $('crErr').style.display = 'block';
       return;
     }
-    window.SellerApp.toast(`Đã tạo ${d.count} key`);
+    window.SellerApp.toast(`Created ${d.count} keys`);
     if (d.keys?.[0]) window.SellerApp.copyText(d.keys[0].key);
     closeCreateKeyModal();
     loadKeys();

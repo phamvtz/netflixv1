@@ -18,6 +18,7 @@
 - Trang **Quản lý Keys** (MMOJobs): bảng 6 cột, modal tạo 1–5 key (đồng bộ tên/hạn/quyền), modal sửa, đồng bộ/xóa key; API `GET/POST batch/PATCH/sync/DELETE /api/seller/keys`.
 
 ### Changed
+- i18n: converted all user-facing UI text (customer, seller, admin pages + API messages) to English; English-only policy set in CLAUDE.md.
 - Seller panel: logic keys tách `seller-keys.js`, nối qua `SellerApp`; tạo key từ đơn mở modal chọn tài khoản.
 - Seller panel: quản lý key + modal sửa quyền; admin duyệt seller kèm chọn quyền.
 - Giao diện seller kiểu MMOJobs (nền sáng, layout workspace).

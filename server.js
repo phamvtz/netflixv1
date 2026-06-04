@@ -246,7 +246,7 @@ function assertCheckRateLimit() {
   }
   checkRateState.count += 1;
   if (checkRateState.count > CHECK_MAX_PER_HOUR) {
-    const err = new Error(`Đã đạt ${CHECK_MAX_PER_HOUR} lượt check/giờ — nghỉ ~${Math.ceil((3600000 - (now - checkRateState.windowStart)) / 60000)} phút để tránh Netflix quét IP`);
+    const err = new Error(`Reached ${CHECK_MAX_PER_HOUR} checks/hour — wait ~${Math.ceil((3600000 - (now - checkRateState.windowStart)) / 60000)} minutes to avoid Netflix IP scanning`);
     err.code = 'RATE_LIMIT';
     throw err;
   }
@@ -891,7 +891,7 @@ function clearSessionCookies(res, sessionId) {
 // API path → 401 JSON; page path → redirect tới trang đăng nhập
 function authFail(req, res) {
   if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
+    return res.status(401).json({ success: false, error: 'Not logged in' });
   }
   return res.redirect('/login');
 }
@@ -911,7 +911,7 @@ function requireAuth(req, res, next) {
 function requireProfile(req, res, next) {
   if (req.cookies.profilesNewSession !== '0') {
     if (req.path.startsWith('/api/')) {
-      return res.status(403).json({ success: false, error: 'Chưa chọn hồ sơ' });
+      return res.status(403).json({ success: false, error: 'No profile selected' });
     }
     return res.redirect('/profiles');
   }
@@ -950,7 +950,7 @@ app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   const user = getUserByEmail(email);
   if (!user || !verifyPassword(user.password, password)) {
-    return res.status(401).json({ success: false, message: 'Email hoặc mật khẩu không đúng.' });
+    return res.status(401).json({ success: false, message: 'Wrong email or password.' });
   }
   const sessionId      = uuidv4();
   const sessionCookies = setSessionCookies(res, user.id, sessionId);
@@ -975,7 +975,7 @@ app.get('/api/profiles', requireAuth, (req, res) => {
 app.post('/api/profiles/select', requireAuth, (req, res) => {
   const { profileId } = req.body;
   const profile = getProfileByIdAndUserId(profileId, req.user.id);
-  if (!profile) return res.status(404).json({ success: false, message: 'Profile không tồn tại.' });
+  if (!profile) return res.status(404).json({ success: false, message: 'Profile not found.' });
 
   // New flow session after profile selection (same real Netflix behavior)
   res.cookie('flwssn', uuidv4(), { httpOnly: false, sameSite: 'lax', path: '/' });
@@ -1100,7 +1100,7 @@ app.post('/api/checker/live-check', async (req, res) => {
   try {
     const { cookie } = req.body;
     if (!cookie || typeof cookie !== 'string') {
-      return res.status(400).json({ error: 'Thiếu cookie' });
+      return res.status(400).json({ error: 'Missing cookie' });
     }
     const result = await fullCheck(cookie, req.body.pace);
     return res.json(result);
@@ -1116,7 +1116,7 @@ app.post('/api/checker/batch', async (req, res) => {
   try {
     const { cookies } = req.body;
     if (!Array.isArray(cookies) || !cookies.length) {
-      return res.status(400).json({ error: 'Thiếu cookies array' });
+      return res.status(400).json({ error: 'Missing cookies array' });
     }
     // CONCURRENCY=1: check tuần tự từ cùng 1 IP → tránh burst song song dễ bị Netflix flag.
     // Mỗi fullCheck đã có randDelay nội bộ; thêm khoảng nghỉ giữa các cookie cho tự nhiên.
@@ -1167,7 +1167,7 @@ app.get('/api/session/info', (req, res) => {
       tmx_guid:            truncate(c.tmx_guid, 60),
       thx_guid:            c.thx_guid || null,
       NetflixId:           c.NetflixId ? truncate(decodeURIComponent(c.NetflixId), 70) : null,
-      SecureNetflixId:     c.SecureNetflixId ? '[HttpOnly – không đọc được bằng JS]' : null,
+      SecureNetflixId:     c.SecureNetflixId ? '[HttpOnly – not readable by JS]' : null,
       flwssn:              c.flwssn || null,
       gsid:                c.gsid || null,
       OTSessionTracking:   c.OTSessionTracking || null,
@@ -1186,7 +1186,7 @@ const TURNSTILE_ENABLED    = process.env.TURNSTILE_DISABLED !== '1';
 
 async function verifyTurnstile(token, remoteip) {
   if (!TURNSTILE_ENABLED) return { success: true, skipped: true };
-  if (!token) return { success: false, error: 'Thiếu captcha' };
+  if (!token) return { success: false, error: 'Missing captcha' };
 
   try {
     const body = new URLSearchParams({
@@ -1270,7 +1270,7 @@ app.get('/api/inbox', async (req, res) => {
   try {
     const email = (req.query.email || '').trim().toLowerCase();
     if (!email || !email.includes('@'))
-      return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+      return res.status(400).json({ success: false, error: 'Invalid email' });
 
     const result = await fetchInboxForEmail(email);
     return res.json(result);
@@ -1286,11 +1286,11 @@ app.post('/api/inbox', async (req, res) => {
     const turnstileToken = req.body.turnstileToken || req.body.token || '';
 
     if (!email || !email.includes('@'))
-      return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+      return res.status(400).json({ success: false, error: 'Invalid email' });
 
     const captcha = await verifyTurnstile(turnstileToken, getClientIp(req));
     if (!captcha.success) {
-      return res.status(403).json({ success: false, error: captcha.error || 'Captcha không hợp lệ' });
+      return res.status(403).json({ success: false, error: captcha.error || 'Invalid captcha' });
     }
 
     let perms = null;
@@ -1298,19 +1298,19 @@ app.post('/api/inbox', async (req, res) => {
 
     if (keyStr) {
       const row = getKey(keyStr);
-      if (!row) return res.status(403).json({ success: false, error: 'Key không hợp lệ' });
-      if (row.email !== email) return res.status(403).json({ success: false, error: 'Key không khớp email' });
+      if (!row) return res.status(403).json({ success: false, error: 'Invalid key' });
+      if (row.email !== email) return res.status(403).json({ success: false, error: 'Key does not match email' });
       if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
-        return res.status(403).json({ success: false, error: 'Key đã hết hạn' });
+        return res.status(403).json({ success: false, error: 'Key expired' });
       }
       perms = { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily };
       incrementKeyUsage(keyStr);
     } else if (orderRow) {
       if (!orderRow.viaEmail) {
-        return res.status(403).json({ success: false, error: 'Đơn này chưa bật lấy mã qua email — dùng key' });
+        return res.status(403).json({ success: false, error: 'This order has not enabled get-code via email — use a key' });
       }
       if (orderRow.status === 'expired') {
-        return res.status(403).json({ success: false, error: 'Đơn đã hết hạn' });
+        return res.status(403).json({ success: false, error: 'Order expired' });
       }
       perms = { permLogin: orderRow.permLogin, permReset: orderRow.permReset, permFamily: orderRow.permFamily };
     }
@@ -1380,8 +1380,8 @@ function getPanelAccount(req) {
 // Bắt buộc seller đã đăng nhập + active
 function requireSeller(req, res, next) {
   const acc = getPanelAccount(req);
-  if (!acc || acc.role !== 'seller') return res.status(401).json({ success: false, error: 'Chưa đăng nhập seller' });
-  if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản chưa được duyệt' });
+  if (!acc || acc.role !== 'seller') return res.status(401).json({ success: false, error: 'Seller not logged in' });
+  if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Account not approved yet' });
   req.account = acc;
   next();
 }
@@ -1390,17 +1390,17 @@ function requireSeller(req, res, next) {
 app.post('/api/panel/login', (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ success: false, error: 'Thiếu tài khoản hoặc mật khẩu' });
+    if (!username || !password) return res.status(400).json({ success: false, error: 'Missing username or password' });
     const acc = getAccountByUsername(String(username).trim());
     if (!acc || !verifyPassword(acc.password, password)) {
-      return res.status(401).json({ success: false, error: 'Sai tài khoản hoặc mật khẩu' });
+      return res.status(401).json({ success: false, error: 'Wrong username or password' });
     }
     if (acc.role === 'seller') {
-      if (!acc.emailVerified) return res.status(403).json({ success: false, error: 'Chưa xác minh email', needVerify: true, accountId: acc.id });
-      if (acc.status === 'pending')  return res.status(403).json({ success: false, error: 'Tài khoản đang chờ admin duyệt' });
-      if (acc.status === 'rejected') return res.status(403).json({ success: false, error: 'Tài khoản đã bị từ chối' });
+      if (!acc.emailVerified) return res.status(403).json({ success: false, error: 'Email not verified', needVerify: true, accountId: acc.id });
+      if (acc.status === 'pending')  return res.status(403).json({ success: false, error: 'Account is pending admin approval' });
+      if (acc.status === 'rejected') return res.status(403).json({ success: false, error: 'Account was rejected' });
     }
-    if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản không hoạt động' });
+    if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Account inactive' });
 
     const sid = uuidv4();
     createPanelSession(sid, acc.id);
@@ -1420,7 +1420,7 @@ app.post('/api/panel/logout', (req, res) => {
 
 app.get('/api/panel/me', (req, res) => {
   const acc = getPanelAccount(req);
-  if (!acc) return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
+  if (!acc) return res.status(401).json({ success: false, error: 'Not logged in' });
   const out = { username: acc.username, email: acc.email, role: acc.role, status: acc.status };
   if (acc.role === 'seller') {
     Object.assign(out, getSellerMaxPerms(acc.id));
@@ -1441,11 +1441,11 @@ app.post('/api/seller/register', async (req, res) => {
     const username = String(req.body.username || '').trim();
     const email    = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
-    if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username tối thiểu 3 ký tự' });
-    if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
-    if (password.length < 6)   return res.status(400).json({ success: false, error: 'Mật khẩu tối thiểu 6 ký tự' });
-    if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username đã tồn tại' });
-    if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email đã được dùng' });
+    if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username must be at least 3 characters' });
+    if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Invalid email' });
+    if (password.length < 6)   return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username already exists' });
+    if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email already used' });
 
     const code    = String(Math.floor(100000 + Math.random() * 900000)); // mã 6 số
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;             // hết hạn 15 phút
@@ -1453,7 +1453,7 @@ app.post('/api/seller/register', async (req, res) => {
     createAccount({ id, username, email, password: hashPassword(password), role: 'seller', verifyCode: code, verifyExpires: expires });
 
     const mail = await sendVerificationEmail(email, code).catch(() => ({ sent: false }));
-    return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Đã tạo tài khoản. Nhập mã xác minh gửi tới email.' });
+    return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Account created. Enter the verification code sent to your email.' });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -1463,16 +1463,16 @@ app.post('/api/seller/register', async (req, res) => {
 app.post('/api/seller/verify-email', (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
-    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
     if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
     if (!acc.verifyCode || acc.verifyCode !== String(req.body.code || '').trim()) {
-      return res.status(400).json({ success: false, error: 'Mã không đúng' });
+      return res.status(400).json({ success: false, error: 'Incorrect code' });
     }
     if (acc.verifyExpires && Math.floor(Date.now() / 1000) > acc.verifyExpires) {
-      return res.status(400).json({ success: false, error: 'Mã đã hết hạn, hãy gửi lại' });
+      return res.status(400).json({ success: false, error: 'Code expired, please resend' });
     }
     markEmailVerified(acc.id);
-    return res.json({ success: true, message: 'Xác minh thành công. Chờ admin duyệt tài khoản.' });
+    return res.json({ success: true, message: 'Verified successfully. Waiting for admin approval.' });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -1482,7 +1482,7 @@ app.post('/api/seller/verify-email', (req, res) => {
 app.post('/api/seller/resend-code', async (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
-    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
     if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
     const code    = String(Math.floor(100000 + Math.random() * 900000));
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;
@@ -1542,7 +1542,7 @@ app.get('/api/seller/orders', requireSeller, (req, res) => {
 
 app.get('/api/seller/orders/:id', requireSeller, (req, res) => {
   const order = getSellerOrderById(req.params.id, req.account.id);
-  if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+  if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
   const keys = getKeysBySeller(req.account.id).filter((k) => k.orderId === order.id);
   return res.json({ success: true, order, keys });
 });
@@ -1553,7 +1553,7 @@ app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
     const order = updateSellerOrder(req.params.id, req.account.id, {
       accountPassword, viaEmail, note, permLogin, permReset, permFamily,
     });
-    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
     return res.json({ success: true, order });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -1562,14 +1562,14 @@ app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
 
 app.post('/api/seller/orders/:id/renew', requireSeller, (req, res) => {
   const order = renewSellerOrder(req.params.id, req.account.id);
-  if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+  if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
   return res.json({ success: true, order });
 });
 
 app.get('/api/seller/orders/:id/history', requireSeller, (req, res) => {
   const events = getOrderHistory(req.params.id, req.account.id);
   if (!events.length && !getSellerOrderById(req.params.id, req.account.id)) {
-    return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    return res.status(404).json({ success: false, error: 'Order not found' });
   }
   return res.json({ success: true, events });
 });
@@ -1577,7 +1577,7 @@ app.get('/api/seller/orders/:id/history', requireSeller, (req, res) => {
 app.post('/api/seller/orders/:id/keys', requireSeller, (req, res) => {
   try {
     const order = getSellerOrderById(req.params.id, req.account.id);
-    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
     const max = getSellerMaxPerms(req.account.id);
     const perms = clampKeyPerms({
       permLogin: req.body.permLogin ?? order.permLogin,
@@ -1669,10 +1669,10 @@ app.post('/api/key/register', requireSeller, (req, res) => {
     let order = null;
     if (orderId) {
       order = getSellerOrderById(orderId, req.account.id);
-      if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+      if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
       emailAddr = order.accountEmail;
     }
-    if (!emailAddr?.includes('@')) return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+    if (!emailAddr?.includes('@')) return res.status(400).json({ success: false, error: 'Invalid email' });
     const { max, orderMax } = keyPermContext(req.account.id, order);
     const perms = clampKeyPermsFull({
       permLogin: permLogin ?? order?.permLogin,
@@ -1702,13 +1702,13 @@ app.post('/api/key/register', requireSeller, (req, res) => {
 app.post('/api/seller/keys/batch', requireSeller, (req, res) => {
   try {
     const { orderId, items, syncName, syncExpires, syncPerms } = req.body;
-    if (!orderId) return res.status(400).json({ success: false, error: 'Chọn tài khoản (đơn hàng)' });
+    if (!orderId) return res.status(400).json({ success: false, error: 'Select an account (order)' });
     const order = getSellerOrderById(orderId, req.account.id);
-    if (!order) return res.status(404).json({ success: false, error: 'Đơn không tồn tại' });
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
 
     const list = Array.isArray(items) ? items : [{ keyName: req.body.keyName }];
     if (!list.length || list.length > 5) {
-      return res.status(400).json({ success: false, error: 'Tạo từ 1 đến 5 key mỗi lần' });
+      return res.status(400).json({ success: false, error: 'Create 1 to 5 keys at a time' });
     }
 
     const { max, orderMax } = keyPermContext(req.account.id, order);
@@ -1762,7 +1762,7 @@ app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
     const { note, keyName, expiresAt, permLogin, permReset, permFamily } = req.body;
     const existing = getKey(keyId);
     if (!existing || existing.sellerId !== req.account.id) {
-      return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+      return res.status(404).json({ success: false, error: 'Key not found' });
     }
     const order = existing.orderId ? getSellerOrderById(existing.orderId, req.account.id) : null;
     const { max, orderMax } = keyPermContext(req.account.id, order);
@@ -1785,7 +1785,7 @@ app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
       Object.assign(updates, merged);
     }
     const row = updateKey(keyId, req.account.id, updates);
-    if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+    if (!row) return res.status(404).json({ success: false, error: 'Key not found' });
     return res.json({ success: true, key: row, orderPerms: order ? {
       permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily,
     } : null });
@@ -1796,21 +1796,21 @@ app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
 
 app.post('/api/seller/keys/:key/sync', requireSeller, (req, res) => {
   const row = syncKeyFromOrder(req.params.key, req.account.id);
-  if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại hoặc chưa gắn đơn' });
+  if (!row) return res.status(404).json({ success: false, error: 'Key not found or not linked to an order' });
   return res.json({ success: true, key: row });
 });
 
 app.delete('/api/seller/keys/:key', requireSeller, (req, res) => {
   const ok = deleteKeyForSeller(req.params.key, req.account.id);
-  if (!ok) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+  if (!ok) return res.status(404).json({ success: false, error: 'Key not found' });
   return res.json({ success: true });
 });
 
 app.get('/api/key/resolve', (req, res) => {
   const row = getKey((req.query.key || '').trim());
-  if (!row) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
+  if (!row) return res.status(404).json({ success: false, error: 'Key not found' });
   if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
-    return res.status(403).json({ success: false, error: 'Key đã hết hạn' });
+    return res.status(403).json({ success: false, error: 'Key expired' });
   }
   return res.json({
     success: true,
@@ -1874,7 +1874,7 @@ app.patch('/api/admin/sellers/:id/perms', requireAdmin, (req, res) => {
     permReset: !!permReset,
     permFamily: permFamily !== false,
   });
-  if (!ok) return res.status(404).json({ success: false, error: 'Seller không tồn tại' });
+  if (!ok) return res.status(404).json({ success: false, error: 'Seller not found' });
   return res.json({ success: true, sellerPerms: getSellerMaxPerms(req.params.id) });
 });
 
@@ -1885,12 +1885,12 @@ app.post('/api/admin/sellers/:id/reject', requireAdmin, (req, res) => {
 app.post('/api/admin/sellers/:id/topup', requireAdmin, (req, res) => {
   try {
     const amount = parseInt(req.body.amount, 10);
-    if (!amount || amount < 1000) return res.status(400).json({ success: false, error: 'Số tiền tối thiểu 1.000đ' });
+    if (!amount || amount < 1000) return res.status(400).json({ success: false, error: 'Minimum amount is 1,000đ' });
     const r = adjustBalance(req.params.id, amount, {
       type: 'topup',
       description: req.body.description || 'Admin nạp tiền',
     });
-    if (!r || r.error) return res.status(400).json({ success: false, error: r?.error || 'Lỗi nạp' });
+    if (!r || r.error) return res.status(400).json({ success: false, error: r?.error || 'Top-up failed' });
     return res.json({ success: true, balance: r.balance });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });

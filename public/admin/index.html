@@ -11,25 +11,25 @@
   <div class="panel-wrap">
     <div class="panel-login panel-card" id="loginCard">
       <nav class="panel-nav" style="margin-bottom:16px">
-        <a href="/">Lấy mã</a>
+        <a href="/">Get code</a>
         <a href="/seller">Seller</a>
         <a href="/admin" class="is-active">Admin</a>
       </nav>
-      <h1>Admin đăng nhập</h1>
-      <p class="sub">Quản lý seller, key và users demo.</p>
+      <h1>Admin log in</h1>
+      <p class="sub">Manage sellers, keys and demo users.</p>
       <div id="acctLogin">
         <label class="panel-label">Username</label>
         <input id="username" type="text" class="panel-input" placeholder="admin" autocomplete="username" />
-        <label class="panel-label">Mật khẩu</label>
+        <label class="panel-label">Password</label>
         <input id="password" type="password" class="panel-input" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
-        <button class="panel-btn panel-btn--primary" onclick="login()">Đăng nhập</button>
-        <p class="panel-alt">hoặc <a onclick="toggleTokenMode(true)">đăng nhập bằng token</a></p>
+        <button class="panel-btn panel-btn--primary" onclick="login()">Log in</button>
+        <p class="panel-alt">or <a onclick="toggleTokenMode(true)">log in with token</a></p>
       </div>
       <div id="tokenLogin" class="hidden">
         <label class="panel-label">Admin token</label>
         <input id="token" type="password" class="panel-input" placeholder="token" onkeydown="if(event.key==='Enter')loginToken()" />
-        <button class="panel-btn panel-btn--primary" onclick="loginToken()">Vào bằng token</button>
-        <p class="panel-alt">hoặc <a onclick="toggleTokenMode(false)">đăng nhập bằng tài khoản</a></p>
+        <button class="panel-btn panel-btn--primary" onclick="loginToken()">Enter with token</button>
+        <p class="panel-alt">or <a onclick="toggleTokenMode(false)">log in with account</a></p>
       </div>
       <p class="panel-msg-err" id="loginErr"></p>
     </div>
@@ -38,23 +38,23 @@
       <header class="panel-topbar">
         <div class="panel-brand"><span class="mark">●</span> Admin Dashboard</div>
         <nav class="panel-nav" id="panelNav">
-          <a href="/">Lấy mã</a>
+          <a href="/">Get code</a>
           <a href="/seller">Seller</a>
           <a href="/admin" class="is-active">Admin</a>
         </nav>
         <div class="panel-actions">
-          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="loadAll()">↻ Tải lại</button>
-          <button class="panel-btn panel-btn--sm" onclick="logout()">Đăng xuất</button>
+          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="loadAll()">↻ Reload</button>
+          <button class="panel-btn panel-btn--sm" onclick="logout()">Log out</button>
         </div>
       </header>
 
       <div class="panel-stats" id="stats"></div>
 
       <section class="panel-card panel-card--warn hidden" id="pendingSec">
-        <h2 class="panel-section-title">Seller chờ duyệt <span class="panel-pill panel-pill--hot" id="pendCount">0</span></h2>
+        <h2 class="panel-section-title">Sellers pending approval <span class="panel-pill panel-pill--hot" id="pendCount">0</span></h2>
         <div class="panel-table-wrap">
           <table class="panel-table">
-            <thead><tr><th>Username</th><th>Email</th><th>Đăng ký</th><th></th></tr></thead>
+            <thead><tr><th>Username</th><th>Email</th><th>Registered</th><th></th></tr></thead>
             <tbody id="pendBody"></tbody>
           </table>
         </div>
@@ -64,11 +64,11 @@
         <h2 class="panel-section-title">Sellers <span class="panel-pill" id="sellerCount">0</span></h2>
         <div class="filter-bar" id="sellerFilterBar"></div>
         <div class="search-row">
-          <input id="sellerSearch" type="search" class="panel-input panel-input--search" placeholder="Tìm username, email..." oninput="renderSellers()" />
+          <input id="sellerSearch" type="search" class="panel-input panel-input--search" placeholder="Search username, email..." oninput="renderSellers()" />
         </div>
         <div class="panel-table-wrap">
           <table class="panel-table">
-            <thead><tr><th>Username</th><th>Email</th><th>Trạng thái</th><th></th></tr></thead>
+            <thead><tr><th>Username</th><th>Email</th><th>Status</th><th></th></tr></thead>
             <tbody id="sellersBody"></tbody>
           </table>
         </div>
@@ -76,19 +76,19 @@
 
       <section class="panel-card">
         <h2 class="panel-section-title">
-          Sản phẩm
+          Products
           <span style="display:flex;align-items:center;gap:10px">
             <span class="panel-pill" id="productCount">0</span>
-            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="openProductModal()">+ Thêm</button>
+            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="openProductModal()">+ Add</button>
           </span>
         </h2>
         <div class="filter-bar" id="productFilterBar"></div>
         <div class="search-row">
-          <input id="productSearch" type="search" class="panel-input panel-input--search" placeholder="Tìm tên, thời hạn, bảo hành..." oninput="renderProducts()" />
+          <input id="productSearch" type="search" class="panel-input panel-input--search" placeholder="Search name, duration, warranty..." oninput="renderProducts()" />
         </div>
         <div class="panel-table-wrap">
           <table class="panel-table">
-            <thead><tr><th>Tên</th><th>Thời hạn</th><th>Giá</th><th>Trạng thái</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Duration</th><th>Price</th><th>Status</th><th></th></tr></thead>
             <tbody id="productsBody"></tbody>
           </table>
         </div>
@@ -98,11 +98,11 @@
         <h2 class="panel-section-title">Keys <span class="panel-pill" id="keyCount">0</span></h2>
         <div class="filter-bar" id="keyFilterBar"></div>
         <div class="search-row">
-          <input id="keySearch" type="search" class="panel-input panel-input--search" placeholder="Tìm key, email, seller, ghi chú..." oninput="renderKeys()" />
+          <input id="keySearch" type="search" class="panel-input panel-input--search" placeholder="Search key, email, seller, note..." oninput="renderKeys()" />
         </div>
         <div class="panel-table-wrap">
           <table class="panel-table">
-            <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Dùng</th><th></th></tr></thead>
+            <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Used</th><th></th></tr></thead>
             <tbody id="keysBody"></tbody>
           </table>
         </div>
@@ -112,7 +112,7 @@
         <h2 class="panel-section-title">Users (Netflix demo)</h2>
         <div class="panel-table-wrap">
           <table class="panel-table">
-            <thead><tr><th>ID</th><th>Email</th><th>Tên</th><th>Plan</th></tr></thead>
+            <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Plan</th></tr></thead>
             <tbody id="usersBody"></tbody>
           </table>
         </div>
@@ -122,38 +122,38 @@
 
   <div class="panel-modal-backdrop" id="productModal">
     <div class="panel-modal">
-      <h3 id="productModalTitle">Thêm sản phẩm</h3>
-      <p class="sub">Gói bán cho seller mua từ cửa hàng. Ẩn = không hiện trong cửa hàng seller.</p>
-      <label class="panel-label">Tên sản phẩm</label>
-      <input id="pmName" type="text" class="panel-input" placeholder="Netflix Premium 1 tháng" />
+      <h3 id="productModalTitle">Add product</h3>
+      <p class="sub">Package for sellers to buy from the store. Hidden = not shown in the seller store.</p>
+      <label class="panel-label">Product name</label>
+      <input id="pmName" type="text" class="panel-input" placeholder="Netflix Premium 1 month" />
       <div class="panel-grid-2">
         <div>
-          <label class="panel-label">Nhãn thời hạn</label>
-          <input id="pmDurationLabel" type="text" class="panel-input" placeholder="1 tháng" />
+          <label class="panel-label">Duration label</label>
+          <input id="pmDurationLabel" type="text" class="panel-input" placeholder="1 month" />
         </div>
         <div>
-          <label class="panel-label">Số ngày</label>
+          <label class="panel-label">Days</label>
           <input id="pmDurationDays" type="number" class="panel-input" placeholder="30" min="1" />
         </div>
       </div>
       <div class="panel-grid-2">
         <div>
-          <label class="panel-label">Giá (VNĐ)</label>
+          <label class="panel-label">Price (VND)</label>
           <input id="pmPrice" type="number" class="panel-input" placeholder="150000" min="0" />
         </div>
         <div>
-          <label class="panel-label">Ghi chú bảo hành</label>
-          <input id="pmWarranty" type="text" class="panel-input" placeholder="Bảo hành full" />
+          <label class="panel-label">Warranty note</label>
+          <input id="pmWarranty" type="text" class="panel-input" placeholder="Full warranty" />
         </div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;margin:2px 0 4px;">
         <input type="checkbox" id="pmActive" checked />
-        <span>Đang bán (hiện trong cửa hàng seller)</span>
+        <span>On sale (visible in seller store)</span>
       </label>
       <p class="panel-msg-err" id="pmErr"></p>
       <div class="panel-modal-actions">
-        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closeProductModal()">Huỷ</button>
-        <button class="panel-btn panel-btn--sm panel-btn--green" id="pmSaveBtn" onclick="saveProduct()">Lưu</button>
+        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closeProductModal()">Cancel</button>
+        <button class="panel-btn panel-btn--sm panel-btn--green" id="pmSaveBtn" onclick="saveProduct()">Save</button>
       </div>
     </div>
   </div>

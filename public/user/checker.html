@@ -31,7 +31,7 @@
       <div class="input-body">
         <span class="input-prompt">$</span>
         <textarea id="cookieInput" class="input-ta"
-          placeholder="Paste cookie string — mỗi dòng 1 bộ (batch)&#10;Hoặc Cookie Editor JSON export"
+          placeholder="Paste cookie string — one set per line (batch)&#10;Or Cookie Editor JSON export"
           rows="3" spellcheck="false"></textarea>
       </div>
       <div class="input-actions">
@@ -71,10 +71,10 @@
           <span class="auto-next" id="autoNext" style="display:none"></span>
         </div>
 
-        <select id="checkPace" class="auto-sel" title="Chậm hơn = ít bị Netflix quét IP">
-          <option value="stealth" selected>🛡 Ẩn — an toàn nhất (mặc định)</option>
-          <option value="slow">Chậm — 1 IP Netflix/cookie</option>
-          <option value="normal">Nhanh — dễ bị quét hơn</option>
+        <select id="checkPace" class="auto-sel" title="Slower = less likely to trigger Netflix IP scanning">
+          <option value="stealth" selected>🛡 Stealth — safest (default)</option>
+          <option value="slow">Slow — 1 Netflix IP/cookie</option>
+          <option value="normal">Fast — higher scan risk</option>
         </select>
         <label class="demo-lbl">
           <input type="checkbox" id="useDemoCheck" /> Demo
@@ -84,7 +84,7 @@
 
     <!-- Stats cards -->
     <div class="stat-cards" id="statCards" style="display:none">
-      <div class="stat-card stat-card-total panel-stat-click" id="sc-total" onclick="setFilter('all')" title="Tất cả">
+      <div class="stat-card stat-card-total panel-stat-click" id="sc-total" onclick="setFilter('all')" title="All">
         <div class="sc-num" id="sc-total-n">0</div>
         <div class="sc-label">Total</div>
       </div>
@@ -98,7 +98,7 @@
       </div>
       <div class="stat-card stat-card-cancel"  id="sc-cancel" onclick="setFilter('cancelled')">
         <div class="sc-num" id="sc-cancel-n">0</div>
-        <div class="sc-label">Huỷ / Mất gói</div>
+        <div class="sc-label">Cancelled / Plan lost</div>
       </div>
       <div class="stat-card stat-card-pending" id="sc-pending" onclick="setFilter('pending')">
         <div class="sc-num" id="sc-pending-n">0</div>
@@ -108,7 +108,7 @@
 
     <!-- Toolbar: search + progress (filter qua stat cards) -->
     <div class="toolbar" id="toolbar" style="display:none">
-      <input type="search" id="resultSearch" class="result-search" placeholder="Lọc email, plan..." oninput="applyFilter()" />
+      <input type="search" id="resultSearch" class="result-search" placeholder="Filter email, plan..." oninput="applyFilter()" />
       <div class="prog-wrap" id="statProgress" style="display:none">
         <span id="progressText"></span>
         <div class="prog-track"><div class="prog-fill" id="progressFill"></div></div>
@@ -133,7 +133,7 @@
         <tbody id="ckBody"></tbody>
       </table>
       <div class="table-empty" id="tableEmpty" style="display:none">
-        Không có kết quả khớp filter này.
+        No results match this filter.
       </div>
     </div>
 

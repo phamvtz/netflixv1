@@ -1,20 +1,20 @@
 'use strict';
 
 const PAGE_META = {
-  stats: { title: 'Thống kê', caption: 'Tổng quan đơn hàng, key và số dư.' },
-  orders: { title: 'Đơn hàng của bạn', caption: 'Quản lý tài khoản đã mua — gia hạn, copy, bật quyền mã cho khách.' },
-  keys: { title: 'Quản lý Keys', caption: 'Tạo key gắn tài khoản đã mua, gán quyền truy cập. Thay thế email khi cần.' },
-  store: { title: 'Cửa hàng', caption: 'Mua tài khoản Netflix — trừ số dư, tạo đơn tự động.' },
-  emails: { title: 'Quản lý email', caption: 'Danh sách email từ đơn đã mua.' },
-  transactions: { title: 'Lịch sử giao dịch', caption: 'Nạp tiền, mua hàng và số dư.' },
-  profile: { title: 'Thông tin tài khoản', caption: 'Liên hệ hỗ trợ khách.' },
-  checker: { title: 'Checker cookie', caption: 'Kiểm tra cookie tài khoản còn LIVE hay không.' },
+  stats: { title: 'Stats', caption: 'Overview of orders, keys and balance.' },
+  orders: { title: 'Your orders', caption: 'Manage purchased accounts — renew, copy, enable code permissions for customers.' },
+  keys: { title: 'Manage Keys', caption: 'Create keys tied to purchased accounts and assign access permissions. Replace email when needed.' },
+  store: { title: 'Store', caption: 'Buy Netflix accounts — deducts balance, creates orders automatically.' },
+  emails: { title: 'Manage email', caption: 'List of emails from purchased orders.' },
+  transactions: { title: 'Transaction history', caption: 'Top ups, purchases and balance.' },
+  profile: { title: 'Profile', caption: 'Customer support contact.' },
+  checker: { title: 'Cookie checker', caption: 'Check whether account cookies are still LIVE.' },
 };
 
 const PERM_DEFS = [
-  { field: 'permLogin', label: 'Mã đăng nhập' },
-  { field: 'permReset', label: 'Đổi mật khẩu' },
-  { field: 'permFamily', label: 'Hộ gia đình' },
+  { field: 'permLogin', label: 'Login code' },
+  { field: 'permReset', label: 'Password reset' },
+  { field: 'permFamily', label: 'Household' },
 ];
 
 let pendingAccountId = null;
@@ -63,8 +63,8 @@ function toast(msg) {
 async function copyText(s) {
   try {
     await navigator.clipboard.writeText(s);
-    toast('Đã sao chép');
-  } catch { toast('Copy thủ công: ' + s); }
+    toast('Copied');
+  } catch { toast('Copy manually: ' + s); }
 }
 
 function customerGetCodeUrl() {
@@ -88,7 +88,7 @@ async function api(url, body, method) {
 
 function adminPermHint() {
   const ok = (v) => (v ? '✔' : '✘');
-  return `Quyền admin: ${ok(sellerPerms.permLogin)} Mã ĐN · ${ok(sellerPerms.permReset)} Reset · ${ok(sellerPerms.permFamily)} Mã GĐ`;
+  return `Admin permissions: ${ok(sellerPerms.permLogin)} Login code · ${ok(sellerPerms.permReset)} Reset · ${ok(sellerPerms.permFamily)} Household code`;
 }
 
 function canPerm(field) {
@@ -160,7 +160,7 @@ async function loadOrders() {
   const q = $('orderSearch')?.value || '';
   const status = $('orderStatusSelect')?.value || 'active';
   const d = await api(`/api/seller/orders?q=${encodeURIComponent(q)}&status=${status}&page=${orderPage}&perPage=20`);
-  if (!d.success) return toast(d.error || 'Lỗi tải đơn');
+  if (!d.success) return toast(d.error || 'Failed to load orders');
   allOrders = d.orders || [];
   sellerPerms = d.sellerPerms || sellerPerms;
   renderOrders(d.pagination);
@@ -173,9 +173,9 @@ function renderOrders(pagination) {
   if (!allOrders.length) {
     box.innerHTML = `
       <div class="sw-empty">
-        <h3>Chưa có đơn hàng</h3>
-        <p>Mua tại Cửa hàng hoặc nhờ admin cấp đơn.</p>
-        <button type="button" class="sw-btn sw-btn--primary" style="margin-top:14px" onclick="switchView('store')">Tới cửa hàng</button>
+        <h3>No orders yet</h3>
+        <p>Buy from the Store or ask the admin to grant an order.</p>
+        <button type="button" class="sw-btn sw-btn--primary" style="margin-top:14px" onclick="switchView('store')">Go to store</button>
       </div>`;
     $('ordersPagination').innerHTML = '';
     return;
@@ -186,10 +186,10 @@ function renderOrders(pagination) {
 
   const p = pagination || { page: 1, pages: 1, total: allOrders.length };
   $('ordersPagination').innerHTML = `
-    <span>Trang ${p.page}/${p.pages} — ${p.total} đơn</span>
+    <span>Page ${p.page}/${p.pages} — ${p.total} orders</span>
     <span>
-      ${p.page > 1 ? `<button type="button" class="sw-btn sw-btn--outline" data-page="${p.page - 1}">← Trước</button> ` : ''}
-      ${p.page < p.pages ? `<button type="button" class="sw-btn sw-btn--outline" data-page="${p.page + 1}">Sau →</button>` : ''}
+      ${p.page > 1 ? `<button type="button" class="sw-btn sw-btn--outline" data-page="${p.page - 1}">← Prev</button> ` : ''}
+      ${p.page < p.pages ? `<button type="button" class="sw-btn sw-btn--outline" data-page="${p.page + 1}">Next →</button>` : ''}
     </span>`;
   $('ordersPagination').querySelectorAll('[data-page]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -202,13 +202,13 @@ function renderOrders(pagination) {
 function orderCardHtml(o) {
   const expired = o.status === 'expired';
   const badge = expired
-    ? '<span class="sw-order-badge sw-order-badge--expired">HẾT HẠN</span>'
-    : '<span class="sw-order-badge">ĐANG CÒN HẠN</span>';
+    ? '<span class="sw-order-badge sw-order-badge--expired">EXPIRED</span>'
+    : '<span class="sw-order-badge">ACTIVE</span>';
   const dur = o.durationLabel ? `<span class="perm-badge perm-badge--on" style="margin-left:6px">${esc(o.durationLabel)}</span>` : '';
   const keys = o.keys || [];
   const keyBtn = keys.length
-    ? `<button type="button" class="sw-btn sw-btn--outline" data-act="keys" data-id="${esc(o.id)}">Quản lý key (${keys.length})</button>`
-    : `<button type="button" class="sw-btn sw-btn--outline" data-act="createkey" data-id="${esc(o.id)}">Tạo key</button>`;
+    ? `<button type="button" class="sw-btn sw-btn--outline" data-act="keys" data-id="${esc(o.id)}">Manage keys (${keys.length})</button>`
+    : `<button type="button" class="sw-btn sw-btn--outline" data-act="createkey" data-id="${esc(o.id)}">Create key</button>`;
 
   const permPills = PERM_DEFS.map((d) => {
     const allowed = canPerm(d.field);
@@ -229,7 +229,7 @@ function orderCardHtml(o) {
       <div class="sw-order-body">
         <div class="sw-field-grid">
           <div class="sw-field">
-            <label>Mã định danh</label>
+            <label>Public code</label>
             <div class="sw-field-val mono">${esc(o.publicCode)} <button type="button" class="sw-icon-btn" data-copy="${esc(o.publicCode)}">⎘</button></div>
           </div>
           <div class="sw-field">
@@ -237,30 +237,30 @@ function orderCardHtml(o) {
             <div class="sw-field-val">${esc(o.accountEmail)} <button type="button" class="sw-icon-btn" data-copy="${esc(o.accountEmail)}">⎘</button></div>
           </div>
           <div class="sw-field">
-            <label>Mật khẩu</label>
+            <label>Password</label>
             <div class="sw-pwd-row">
               <input type="text" class="panel-input" data-pwd="${esc(o.id)}" value="${esc(o.accountPassword || '')}" placeholder="—" style="margin:0" />
-              <button type="button" class="sw-icon-btn" data-act="savepwd" data-id="${esc(o.id)}" title="Lưu">✓</button>
+              <button type="button" class="sw-icon-btn" data-act="savepwd" data-id="${esc(o.id)}" title="Save">✓</button>
             </div>
           </div>
           <div class="sw-field">
-            <label>Hết hạn</label>
-            <div class="sw-field-val">Tới: ${fmtTs(o.expiresAt)}<br><span style="font-size:0.78rem;color:#64748b">Đã gia hạn ${o.renewalCount} lần</span></div>
+            <label>Expiry</label>
+            <div class="sw-field-val">Until: ${fmtTs(o.expiresAt)}<br><span style="font-size:0.78rem;color:#64748b">Renewed ${o.renewalCount} times</span></div>
           </div>
         </div>
         <div class="sw-perm-section">
           <label class="sw-toggle">
             <input type="checkbox" data-act="via" data-id="${esc(o.id)}" ${o.viaEmail ? 'checked' : ''} />
             <span class="sw-toggle-track"></span>
-            <span><strong>Lấy mã qua email</strong></span>
+            <span><strong>Get code via email</strong></span>
           </label>
-          <div class="title" style="margin-top:12px">Loại mã khách được xem</div>
+          <div class="title" style="margin-top:12px">Code types the customer can view</div>
           <div class="sw-perm-pills">${permPills}</div>
-          <p class="sw-perm-note">Khách lấy mã bằng key/email sẽ chỉ nhận các loại mã bạn bật ở trên.</p>
+          <p class="sw-perm-note">Customers getting codes by key/email will only receive the code types you enable above.</p>
         </div>
         <div class="sw-order-foot">
-          <button type="button" class="sw-btn sw-btn--primary" data-act="renew" data-id="${esc(o.id)}">Gia hạn ngay</button>
-          <button type="button" class="sw-btn sw-btn--outline" data-act="history" data-id="${esc(o.id)}">Lịch sử</button>
+          <button type="button" class="sw-btn sw-btn--primary" data-act="renew" data-id="${esc(o.id)}">Renew now</button>
+          <button type="button" class="sw-btn sw-btn--outline" data-act="history" data-id="${esc(o.id)}">History</button>
           ${keyBtn}
         </div>
       </div>
@@ -279,7 +279,7 @@ function bindOrderEvents() {
     inp.addEventListener('change', async () => {
       const id = inp.dataset.id;
       const d = await api(`/api/seller/orders/${encodeURIComponent(id)}`, { viaEmail: inp.checked }, 'PATCH');
-      if (d.success) toast('Đã cập nhật'); else { toast(d.error || 'Lỗi'); inp.checked = !inp.checked; }
+      if (d.success) toast('Updated'); else { toast(d.error || 'Error'); inp.checked = !inp.checked; }
     });
   });
 
@@ -291,8 +291,8 @@ function bindOrderEvents() {
       const field = btn.dataset.field;
       const payload = { [field]: !o[field] };
       const d = await api(`/api/seller/orders/${encodeURIComponent(o.id)}`, payload, 'PATCH');
-      if (d.success) { toast('Đã cập nhật quyền'); loadOrders(); loadKeys(); }
-      else toast(d.error || 'Lỗi');
+      if (d.success) { toast('Permissions updated'); loadOrders(); loadKeys(); }
+      else toast(d.error || 'Error');
     });
   });
 
@@ -301,17 +301,17 @@ function bindOrderEvents() {
       const id = btn.dataset.id;
       const inp = box.querySelector(`[data-pwd="${id}"]`);
       const d = await api(`/api/seller/orders/${encodeURIComponent(id)}`, { accountPassword: inp?.value || '' }, 'PATCH');
-      if (d.success) toast('Đã lưu mật khẩu');
-      else toast(d.error || 'Lỗi');
+      if (d.success) toast('Password saved');
+      else toast(d.error || 'Error');
     });
   });
 
   box.querySelectorAll('[data-act="renew"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Gia hạn đơn này? (cộng thêm thời hạn theo gói)')) return;
+      if (!confirm('Renew this order? (adds duration per the plan)')) return;
       const d = await api(`/api/seller/orders/${encodeURIComponent(btn.dataset.id)}/renew`, {}, 'POST');
-      if (d.success) { toast('Đã gia hạn'); loadOrders(); loadDashboard(); }
-      else toast(d.error || 'Lỗi gia hạn');
+      if (d.success) { toast('Renewed'); loadOrders(); loadDashboard(); }
+      else toast(d.error || 'Renewal failed');
     });
   });
 
@@ -339,18 +339,18 @@ async function createKeyForOrder(orderId) {
 
 async function openHistory(orderId) {
   const d = await api(`/api/seller/orders/${encodeURIComponent(orderId)}/history`);
-  if (!d.success) return toast(d.error || 'Lỗi');
-  $('histTitle').textContent = 'Lịch sử · ' + orderId;
+  if (!d.success) return toast(d.error || 'Error');
+  $('histTitle').textContent = 'History · ' + orderId;
   $('histList').innerHTML = (d.events || []).length
     ? d.events.map((e) => `<div class="sw-history-item"><b>${esc(e.eventType)}</b> · ${fmtTs(e.createdAt)}${e.detail ? '<br>' + esc(e.detail) : ''}</div>`).join('')
-    : '<p class="sub">Chưa có sự kiện.</p>';
+    : '<p class="sub">No events yet.</p>';
   $('historyModal').classList.add('show');
 }
 function closeHistoryModal() { $('historyModal')?.classList.remove('show'); }
 
 function permBadgesHtml(k) {
   const b = (on, l) => `<span class="perm-badge ${on ? 'perm-badge--on' : 'perm-badge--off'}">${l}</span>`;
-  return `<div class="perm-badges">${b(k.permLogin, 'ĐN')}${b(k.permReset, 'Reset')}${b(k.permFamily, 'GĐ')}</div>`;
+  return `<div class="perm-badges">${b(k.permLogin, 'Login')}${b(k.permReset, 'Reset')}${b(k.permFamily, 'Household')}</div>`;
 }
 
 async function loadStore() {
@@ -369,7 +369,7 @@ async function loadStore() {
       <h3>${esc(p.name)}</h3>
       <p class="sub">${esc(p.durationLabel || '')} · ${esc(p.warrantyNote || '')}</p>
       <div class="sw-price">${fmtVnd(p.price)}</div>
-      <button type="button" class="sw-btn sw-btn--primary" style="margin-top:12px;width:100%" data-buy="${esc(p.id)}">Mua ngay</button>
+      <button type="button" class="sw-btn sw-btn--primary" style="margin-top:12px;width:100%" data-buy="${esc(p.id)}">Buy now</button>
     </div>`).join('');
   grid.querySelectorAll('[data-buy]').forEach((btn) => {
     btn.addEventListener('click', () => openBuyModal(btn.dataset.buy));
@@ -380,7 +380,7 @@ function openBuyModal(productId) {
   buyProduct = products.find((p) => p.id === productId);
   if (!buyProduct) return;
   $('buyTitle').textContent = buyProduct.name;
-  $('buyPrice').textContent = 'Giá: ' + fmtVnd(buyProduct.price);
+  $('buyPrice').textContent = 'Price: ' + fmtVnd(buyProduct.price);
   $('buyEmail').value = '';
   $('buyPass').value = '';
   setErr('buyErr');
@@ -392,7 +392,7 @@ async function confirmBuy() {
   if (!buyProduct) return;
   const email = $('buyEmail').value.trim();
   const pass = $('buyPass').value.trim();
-  if (!email.includes('@')) return setErr('buyErr', 'Nhập email hợp lệ');
+  if (!email.includes('@')) return setErr('buyErr', 'Enter a valid email');
   $('buyBtn').disabled = true;
   const d = await api('/api/seller/store/buy', {
     productId: buyProduct.id,
@@ -400,8 +400,8 @@ async function confirmBuy() {
     accountPassword: pass || null,
   });
   $('buyBtn').disabled = false;
-  if (!d.success) return setErr('buyErr', d.error || 'Mua thất bại');
-  toast('Mua thành công · ' + d.order.id);
+  if (!d.success) return setErr('buyErr', d.error || 'Purchase failed');
+  toast('Purchase successful · ' + d.order.id);
   closeBuyModal();
   dashboard.balance = d.balance;
   updateBalanceUI();
@@ -420,7 +420,7 @@ async function loadEmails() {
         <td>${fmtTs(e.latestExpires)}</td>
         <td><button type="button" class="sw-btn sw-btn--outline" onclick="copyText('${esc(e.email)}')">Copy</button></td>
       </tr>`).join('')
-    : '<tr><td colspan="4" class="panel-empty">Chưa có email</td></tr>';
+    : '<tr><td colspan="4" class="panel-empty">No emails yet</td></tr>';
 }
 
 async function loadTransactions() {
@@ -428,13 +428,13 @@ async function loadTransactions() {
   if (!d.success) return;
   const s = d.summary || {};
   $('txnSummary').innerHTML = `
-    <div class="sw-stat"><div class="n">${fmtVnd(s.totalTopup)}</div><div class="l">Tổng nạp</div></div>
-    <div class="sw-stat"><div class="n accent">${fmtVnd(s.balance)}</div><div class="l">Số dư hiện tại</div></div>
-    <div class="sw-stat"><div class="n">${fmtVnd(s.totalMinus)}</div><div class="l">Tổng trừ</div></div>
-    <div class="sw-stat"><div class="n">${(d.transactions || []).length}</div><div class="l">Giao dịch</div></div>`;
+    <div class="sw-stat"><div class="n">${fmtVnd(s.totalTopup)}</div><div class="l">Total top up</div></div>
+    <div class="sw-stat"><div class="n accent">${fmtVnd(s.balance)}</div><div class="l">Current balance</div></div>
+    <div class="sw-stat"><div class="n">${fmtVnd(s.totalMinus)}</div><div class="l">Total deducted</div></div>
+    <div class="sw-stat"><div class="n">${(d.transactions || []).length}</div><div class="l">Transactions</div></div>`;
   dashboard.balance = s.balance;
   updateBalanceUI();
-  const typeLabel = { topup: 'Nạp tiền', purchase: 'Mua hàng', admin_adjust: 'Điều chỉnh' };
+  const typeLabel = { topup: 'Top up', purchase: 'Purchase', admin_adjust: 'Adjustment' };
   $('txnBody').innerHTML = (d.transactions || []).map((t) => {
     const pos = t.amount >= 0;
     return `<tr>
@@ -444,13 +444,13 @@ async function loadTransactions() {
       <td>${fmtVnd(t.balanceAfter)}</td>
       <td>${esc(t.description || '')}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="panel-empty">Chưa có giao dịch</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="panel-empty">No transactions yet</td></tr>';
 }
 
 // ── Checker cookie ──
 function checkerBadge(r) {
-  if (r.rateLimited) return '<span class="sw-order-badge sw-order-badge--expired">GIỚI HẠN</span>';
-  if (r.planLost || (r.paymentError && r.plan)) return '<span class="sw-order-badge sw-order-badge--expired">MẤT GÓI</span>';
+  if (r.rateLimited) return '<span class="sw-order-badge sw-order-badge--expired">RATE LIMIT</span>';
+  if (r.planLost || (r.paymentError && r.plan)) return '<span class="sw-order-badge sw-order-badge--expired">PLAN LOST</span>';
   if (r.alive && r.cancelled) return '<span class="sw-order-badge sw-order-badge--expired">CANCELLED</span>';
   if (r.alive) return '<span class="sw-order-badge">LIVE</span>';
   return '<span class="sw-order-badge sw-order-badge--expired">DEAD</span>';
@@ -468,12 +468,12 @@ async function runChecker() {
   const lines = ($('chkInput').value || '')
     .split('\n').map((s) => s.trim())
     .filter((s) => s.includes('NetflixId=') || s.length > 30);
-  if (!lines.length) return toast('Dán cookie (có NetflixId=) trước');
+  if (!lines.length) return toast('Paste a cookie (containing NetflixId=) first');
 
   const pace = $('chkPace')?.value || 'stealth';
   const btn = $('chkBtn');
   btn.disabled = true;
-  btn.textContent = 'Đang kiểm tra…';
+  btn.textContent = 'Checking…';
   // Render hàng "đang chờ" trước, rồi check tuần tự cập nhật từng dòng
   $('chkResults').innerHTML = lines
     .map((_, i) => `<tr id="chk-${i}"><td>${i + 1}</td><td><span class="sw-order-badge">…</span></td><td>—</td><td>—</td></tr>`)
@@ -484,11 +484,11 @@ async function runChecker() {
     try { r = await api('/api/checker/live-check', { cookie: lines[i], pace }); }
     catch (e) { r = { alive: false, error: e.message }; }
     updateCheckerRow(i, r);
-    if (r.rateLimited) { toast(r.error || 'Đã đạt giới hạn check/giờ'); break; }
+    if (r.rateLimited) { toast(r.error || 'Hourly check limit reached'); break; }
   }
 
   btn.disabled = false;
-  btn.textContent = 'Kiểm tra';
+  btn.textContent = 'Check';
 }
 
 function renderStats() {
@@ -512,8 +512,8 @@ async function saveProfile() {
     contactType: $('pfType').value,
     contactInfo: $('pfContact').value.trim(),
   }, 'PATCH');
-  if (d.success) { toast('Đã lưu'); dashboard.profile = d.profile; }
-  else toast(d.error || 'Lỗi');
+  if (d.success) { toast('Saved'); dashboard.profile = d.profile; }
+  else toast(d.error || 'Error');
 }
 
 // ── Auth ──
@@ -542,20 +542,20 @@ async function doLogin() {
   setErr('lgErr');
   const username = $('lgUser').value.trim();
   const password = $('lgPass').value;
-  if (!username || !password) return setErr('lgErr', 'Nhập username và mật khẩu.');
+  if (!username || !password) return setErr('lgErr', 'Enter username and password.');
   $('lgBtn').disabled = true;
   const d = await api('/api/panel/login', { username, password });
   $('lgBtn').disabled = false;
   if (d.success) {
-    if (d.account.role !== 'seller') return setErr('lgErr', 'Không phải seller.');
+    if (d.account.role !== 'seller') return setErr('lgErr', 'Not a seller.');
     return enterDash(d.account);
   }
   if (d.needVerify) {
     pendingAccountId = d.accountId;
     openVerify(username);
-    return setErr('lgErr', 'Chưa xác minh email.');
+    return setErr('lgErr', 'Email not verified yet.');
   }
-  setErr('lgErr', d.error || 'Đăng nhập thất bại.');
+  setErr('lgErr', d.error || 'Login failed.');
 }
 
 async function doRegister() {
@@ -565,7 +565,7 @@ async function doRegister() {
     email: $('rgEmail').value.trim(),
     password: $('rgPass').value,
   });
-  if (!d.success) return setErr('rgErr', d.error || 'Lỗi');
+  if (!d.success) return setErr('rgErr', d.error || 'Error');
   pendingAccountId = d.accountId;
   openVerify($('rgEmail').value.trim());
 }
@@ -579,16 +579,16 @@ function openVerify(email) {
 
 async function doVerify() {
   const code = $('vCode').value.trim();
-  if (!/^\d{6}$/.test(code)) return setErr('vErr', 'Mã 6 số');
+  if (!/^\d{6}$/.test(code)) return setErr('vErr', '6-digit code');
   const d = await api('/api/seller/verify-email', { accountId: pendingAccountId, code });
-  if (!d.success) return setErr('vErr', d.error || 'Lỗi');
-  setOk('vOk', 'OK — chờ admin duyệt');
+  if (!d.success) return setErr('vErr', d.error || 'Error');
+  setOk('vOk', 'OK — pending approval');
   setTimeout(() => showTab('login'), 1500);
 }
 
 async function doResend() {
   const d = await api('/api/seller/resend-code', { accountId: pendingAccountId });
-  toast(d.success ? 'Đã gửi lại mã' : (d.error || 'Lỗi'));
+  toast(d.success ? 'Code resent' : (d.error || 'Error'));
 }
 
 async function enterDash(acct) {

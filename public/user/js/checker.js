@@ -28,17 +28,17 @@ function analyzeNfId(raw) {
   try {
     const p = new URLSearchParams(decodeURIComponent(raw));
     const v=p.get('v'), ct=p.get('ct'), pg=p.get('pg'), ch=p.get('ch');
-    if (v!=='3') iss.push(`v=${v} phải là 3`);
-    if (!ct)     iss.push('thiếu ct');
+    if (v!=='3') iss.push(`v=${v} must be 3`);
+    if (!ct)     iss.push('missing ct');
     else {
-      if (!ct.startsWith(NFLX.CT)) iss.push(`ct preamble lạ (chuẩn: ${NFLX.CT}…)`);
-      if (ct.length<120)           iss.push(`ct ngắn: ${ct.length} chars`);
+      if (!ct.startsWith(NFLX.CT)) iss.push(`unexpected ct preamble (expected: ${NFLX.CT}…)`);
+      if (ct.length<120)           iss.push(`ct too short: ${ct.length} chars`);
     }
-    if (!pg)                          iss.push('thiếu pg');
-    else if (!/^[A-Z2-7]{26}$/.test(pg)) iss.push(`pg lỗi: "${pg}"`);
-    if (!ch)                          iss.push('thiếu ch');
-    else if (!ch.endsWith('.'))       iss.push('ch thiếu dấu chấm');
-    else if (!ch.replace(/\.$/,'').startsWith(NFLX.CH)) iss.push('ch preamble lạ');
+    if (!pg)                          iss.push('missing pg');
+    else if (!/^[A-Z2-7]{26}$/.test(pg)) iss.push(`invalid pg: "${pg}"`);
+    if (!ch)                          iss.push('missing ch');
+    else if (!ch.endsWith('.'))       iss.push('ch missing trailing dot');
+    else if (!ch.replace(/\.$/,'').startsWith(NFLX.CH)) iss.push('unexpected ch preamble');
     return { ok: iss.length===0, fmt:'v=3&ct=…&pg=BASE32&ch=…', iss };
   } catch(e) { return { ok:false, fmt:'?', iss:[e.message] }; }
 }
@@ -48,38 +48,38 @@ function analyzeSnfId(raw) {
   try {
     const p = new URLSearchParams(decodeURIComponent(raw));
     const v=p.get('v'), mac=p.get('mac'), dt=p.get('dt');
-    if (v!=='3') iss.push(`v=${v} phải là 3`);
-    if (!mac)    iss.push('thiếu mac');
+    if (v!=='3') iss.push(`v=${v} must be 3`);
+    if (!mac)    iss.push('missing mac');
     else {
-      if (!mac.endsWith('.'))                              iss.push('mac thiếu dấu chấm');
-      if (!mac.replace(/\.$/,'').startsWith(NFLX.MAC))    iss.push('mac preamble lạ');
+      if (!mac.endsWith('.'))                              iss.push('mac missing trailing dot');
+      if (!mac.replace(/\.$/,'').startsWith(NFLX.MAC))    iss.push('unexpected mac preamble');
     }
-    if (!dt) iss.push('thiếu dt');
+    if (!dt) iss.push('missing dt');
     else {
       ageMs = Date.now()-parseInt(dt);
-      if (isNaN(ageMs))             iss.push('dt không phải số');
-      else if (ageMs<0)             iss.push('dt tương lai');
-      else if (ageMs>30*86400000)   iss.push(`Hết hạn: ${fmt_age(ageMs)}`);
+      if (isNaN(ageMs))             iss.push('dt is not a number');
+      else if (ageMs<0)             iss.push('dt is in the future');
+      else if (ageMs>30*86400000)   iss.push(`Expired: ${fmt_age(ageMs)}`);
     }
     return { ok:iss.length===0, fmt:'v=3&mac=AQEAEQABAB….&dt=ts', iss, ageMs };
   } catch(e) { return { ok:false, fmt:'?', iss:[e.message], ageMs:null }; }
 }
 function analyzeUUID(v) {
   const ok=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-  return { ok, fmt:'UUID v4', iss: ok?[]:['Không phải UUID'] };
+  return { ok, fmt:'UUID v4', iss: ok?[]:['Not a UUID'] };
 }
-function analyzePNS(v)    { return { ok:v==='0', fmt:'"0"=profile đã chọn', iss:v!=='0'?[`"${v}"≠"0"`]:[] }; }
-function analyzeNfvdid(v) { return { ok:isB64u(v)&&v.length>60, fmt:'base64url ~72 bytes', iss:!isB64u(v)?['Không phải base64url']:v.length<60?['Quá ngắn']:[] }; }
-function analyzeTmx(v)    { return { ok:isB64u(v)&&v.length>50, fmt:'base64url ~64 bytes', iss:!isB64u(v)?['Không phải base64url']:v.length<50?['Quá ngắn']:[] }; }
-function analyzeThx(v)    { const ok=/^[0-9a-f]{32}$/i.test(v); return { ok, fmt:'32 hex chars', iss:ok?[]:['Không phải 32-hex'] }; }
+function analyzePNS(v)    { return { ok:v==='0', fmt:'"0"=profile selected', iss:v!=='0'?[`"${v}"≠"0"`]:[] }; }
+function analyzeNfvdid(v) { return { ok:isB64u(v)&&v.length>60, fmt:'base64url ~72 bytes', iss:!isB64u(v)?['Not base64url']:v.length<60?['Too short']:[] }; }
+function analyzeTmx(v)    { return { ok:isB64u(v)&&v.length>50, fmt:'base64url ~64 bytes', iss:!isB64u(v)?['Not base64url']:v.length<50?['Too short']:[] }; }
+function analyzeThx(v)    { const ok=/^[0-9a-f]{32}$/i.test(v); return { ok, fmt:'32 hex chars', iss:ok?[]:['Not 32-hex'] }; }
 function analyzeOpt(v) {
   const iss=[];
   try {
     const p=new URLSearchParams(decodeURIComponent(v));
     const id=p.get('consentId'), cr=parseInt(p.get('crTime'));
-    if (!id) iss.push('thiếu consentId');
-    else if (!/^[0-9a-f-]{36}$/i.test(id)) iss.push('consentId không phải UUID');
-    if (!isNaN(cr) && Date.now()-cr > 365*86400000) iss.push('crTime > 1 năm');
+    if (!id) iss.push('missing consentId');
+    else if (!/^[0-9a-f-]{36}$/i.test(id)) iss.push('consentId is not a UUID');
+    if (!isNaN(cr) && Date.now()-cr > 365*86400000) iss.push('crTime > 1 year');
   } catch { iss.push('parse error'); }
   return { ok:iss.length===0, fmt:'query-string (OneTrust)', iss };
 }
@@ -159,7 +159,7 @@ function process_set(raw) {
   const ck = parse_ck(raw);
   const known = new Set(DEFS.map(d=>d.name));
   const rows = DEFS.map(d => {
-    const val=ck[d.name], a=(val && AZ[d.name]) ? AZ[d.name](val) : { ok:false, fmt:'—', iss:d.req?['Bắt buộc, thiếu!']:[] };
+    const val=ck[d.name], a=(val && AZ[d.name]) ? AZ[d.name](val) : { ok:false, fmt:'—', iss:d.req?['Required, missing!']:[] };
     return {...d, present:!!val, val:val||null, a};
   });
   Object.keys(ck).filter(k=>!known.has(k)).forEach(name=>rows.push({name,req:false,grp:'unknown',lbl:'Unknown',present:true,val:ck[name],a:{ok:null,fmt:'?',iss:[]}}));
@@ -211,7 +211,7 @@ async function safePost(url, body) {
   }
   // Server returned HTML (crash / 500) — parse status and return error object
   const text = await r.text().catch(() => '');
-  return { alive: false, error: `HTTP ${r.status} – server error (xem console server)`, profiles: [], _raw: text.substring(0, 80) };
+  return { alive: false, error: `HTTP ${r.status} – server error (see server console)`, profiles: [], _raw: text.substring(0, 80) };
 }
 
 // ── Ping server API on load ───────────────────────────────────────────────────
@@ -222,7 +222,7 @@ async function safePost(url, body) {
   } catch {
     const banner = document.createElement('div');
     banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#8b0000;color:#fff;padding:10px 20px;border-radius:6px;font-size:.82rem;z-index:999;font-family:monospace';
-    banner.textContent = '⚠ Server API không phản hồi – restart: node server.js';
+    banner.textContent = '⚠ Server API not responding – restart: node server.js';
     document.body.appendChild(banner);
     setTimeout(() => banner.remove(), 8000);
   }
@@ -331,7 +331,7 @@ function exportData(filter, format) {
   });
   const rowsOut = filtered;
 
-  if (!rowsOut.length) { alert('Không có dữ liệu để export.'); return; }
+  if (!rowsOut.length) { alert('No data to export.'); return; }
 
   let content = '', ext = format, mime = 'text/plain';
 
@@ -364,7 +364,7 @@ async function copyRowCookie(idx, btn) {
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
   } catch {
-    alert('Không copy được. Thử thủ công.');
+    alert('Could not copy. Try manually.');
   }
 }
 
@@ -375,7 +375,7 @@ function toggleAutoCheck() {
   if (on && isSafePace()) {
     const mins = parseInt(document.getElementById('autoInterval').value) || 30;
     if (mins < 30) {
-      alert('Chế độ Ẩn/Chậm: Auto tối thiểu 30 phút để tránh quét IP.');
+      alert('Stealth/Slow mode: Auto interval must be at least 30 minutes to avoid IP scanning.');
       document.getElementById('autoCheck').checked = false;
       return;
     }
@@ -417,7 +417,7 @@ function runCheck() {
   const input = document.getElementById('cookieInput').value.trim();
   const demo  = document.getElementById('useDemoCheck').checked;
   if (demo) { fetchDemo(); return; }
-  if (!input) { alert('Paste cookie string trước!'); return; }
+  if (!input) { alert('Paste a cookie string first!'); return; }
   rawSets = detect_sets(input);
   sets    = rawSets.map(process_set);
   liveResults = new Array(sets.length).fill(null);
@@ -428,17 +428,17 @@ function runCheck() {
 async function fetchDemo() {
   try {
     const d = await fetch('/api/session/info').then(r=>r.json());
-    if (!d.authenticated) { alert('Chưa đăng nhập!'); return; }
+    if (!d.authenticated) { alert('Not logged in!'); return; }
     const str = Object.entries(d.cookies).filter(([,v])=>v).map(([k,v])=>`${k}=${v}`).join('; ');
     document.getElementById('cookieInput').value = str;
     rawSets=[str]; sets=[process_set(str)]; liveResults=[null]; doneChecks=0;
     render();
-  } catch { alert('Lỗi demo server.'); }
+  } catch { alert('Demo server error.'); }
 }
 
 async function pasteClip() {
   try { document.getElementById('cookieInput').value = await navigator.clipboard.readText(); }
-  catch { alert('Dùng Ctrl+V.'); }
+  catch { alert('Use Ctrl+V.'); }
 }
 
 function clearAll() {
@@ -506,8 +506,8 @@ function buildRow(s, i, live) {
   if (live?.plan) {
     const bill = live.billingText ? `<div class="td-billing">${esc(live.billingText)}</div>` : '';
     const pay  = live.planLost
-      ? `<div class="td-payerr">⚠ Có tên gói nhưng không xem được (lỗi TT / hết quyền)</div>`
-      : live.paymentError ? `<div class="td-payerr">⚠ Lỗi thanh toán</div>` : '';
+      ? `<div class="td-payerr">⚠ Plan name present but inaccessible (payment error / access lost)</div>`
+      : live.paymentError ? `<div class="td-payerr">⚠ Payment error</div>` : '';
     planCell = `<div class="td-plan">${esc(live.plan)}</div>${bill}${pay}`;
   }
 
@@ -519,7 +519,7 @@ function buildRow(s, i, live) {
     profs = `<div class="profiles-wrap">${live.profiles.map(p=>`<span class="pchip">${esc(p)}</span>`).join('')}</div>`;
   }
 
-  const age1 = ageMs!=null ? `<div>${fmt_age(ageMs)} trước</div>` : '<div style="color:var(--t3)">—</div>';
+  const age1 = ageMs!=null ? `<div>${fmt_age(ageMs)} ago</div>` : '<div style="color:var(--t3)">—</div>';
   const age2 = ageMs!=null ? `<div class="td-age-sub">${fmt_ts(Date.now()-ageMs)}</div>` : '';
 
   let ctOk=false;
@@ -546,10 +546,10 @@ function buildRow(s, i, live) {
 function buildStatusBadge(live) {
   if (!live) return `<span class="badge badge-pending">—</span>`;
   const src = live.source ? `<span class="badge-src">${live.source}</span>` : '';
-  if (live.planLost)                   return `<span class="badge badge-cancelled">⚠ MẤT GÓI</span><div class="badge-err">Có plan · không xem</div>${src}`;
+  if (live.planLost)                   return `<span class="badge badge-cancelled">⚠ PLAN LOST</span><div class="badge-err">Has plan · no access</div>${src}`;
   if (live.error && !live.alive)       return `<span class="badge badge-dead">✗ DEAD</span><div class="badge-err">${esc(live.error.substring(0,40))}</div>`;
-  if (live.paymentError && live.plan)  return `<span class="badge badge-cancelled">⚠ MẤT GÓI</span>${src}`;
-  if (live.alive && live.paymentError) return `<span class="badge badge-cancelled">⚠ PAY ERR</span>${src}`;
+  if (live.paymentError && live.plan)  return `<span class="badge badge-cancelled">⚠ PLAN LOST</span>${src}`;
+  if (live.alive && live.paymentError) return `<span class="badge badge-cancelled">⚠ PAYMENT ERROR</span>${src}`;
   if (live.alive && live.cancelled)    return `<span class="badge badge-cancelled">🔚 CANCELLED</span>${src}`;
   if (live.alive)                      return `<span class="badge badge-live">✓ LIVE</span>${src}`;
   return `<span class="badge badge-dead">✗ DEAD</span>${src}`;
@@ -563,7 +563,7 @@ async function liveCheckOne(idx) {
   try {
     const d = await safePost(`${API_BASE}/api/checker/live-check`, liveCheckBody(rawSets[idx]));
     if (d.rateLimited) {
-      alert(d.error || 'Đã đạt giới hạn check/giờ — nghỉ rồi thử lại');
+      alert(d.error || 'Hourly check limit reached — wait and try again');
       if (btn) { btn.disabled = false; btn.textContent = 'Check'; }
       return;
     }
@@ -584,11 +584,11 @@ async function checkAllLive() {
   const todo = rawSets.map((_,i)=>i).filter(i=>liveResults[i]===null);
   if (!todo.length) return;
   if (isSafePace() && todo.length > 15) {
-    const label = pace === 'stealth' ? 'Ẩn' : 'Chậm';
-    if (!confirm(`${label}: ~${estimateCheckEta(todo.length, pace)} phút · ${todo.length} cookie · 1 IP Netflix/cookie.\nTiếp tục?`)) return;
+    const label = pace === 'stealth' ? 'Stealth' : 'Slow';
+    if (!confirm(`${label}: ~${estimateCheckEta(todo.length, pace)} min · ${todo.length} cookie(s) · 1 Netflix IP/cookie.\nContinue?`)) return;
   }
   if (pace === 'normal' && todo.length > 20) {
-    if (!confirm('Chế độ Nhanh dễ bị Netflix quét hơn. Nên chọn Ẩn/Chậm. Vẫn tiếp tục?')) return;
+    if (!confirm('Fast mode has a higher Netflix scan risk. Stealth/Slow is recommended. Continue anyway?')) return;
   }
   allBtn.disabled=true;
   doneChecks=0;
@@ -607,7 +607,7 @@ async function checkAllLive() {
       try {
         const d = await safePost(`${API_BASE}/api/checker/live-check`, liveCheckBody(rawSets[idx]));
         if (d.rateLimited) {
-          alert(d.error || 'Đã đạt giới hạn check/giờ');
+          alert(d.error || 'Hourly check limit reached');
           showProgress(false);
           allBtn.disabled = false;
           return;
@@ -643,8 +643,8 @@ function updateRow(idx, live) {
   if (live.plan) {
     const bill = live.billingText ? `<div class="td-billing">${esc(live.billingText)}</div>` : '';
     const pay  = live.planLost
-      ? `<div class="td-payerr">⚠ Có tên gói nhưng không xem được (lỗi TT / hết quyền)</div>`
-      : live.paymentError ? `<div class="td-payerr">⚠ Lỗi thanh toán</div>` : '';
+      ? `<div class="td-payerr">⚠ Plan name present but inaccessible (payment error / access lost)</div>`
+      : live.paymentError ? `<div class="td-payerr">⚠ Payment error</div>` : '';
     const scr  = live.screens ? ` <span style="font-size:.65rem;color:var(--t3)"> ·${live.screens}🖥</span>` : '';
     tds[2].innerHTML = `<div class="td-plan">${esc(live.plan)}</div>${bill}${pay}${scr}`;
   } else {
@@ -722,8 +722,8 @@ function renderDetail(idx) {
     const p=new URLSearchParams(decodeURIComponent(s.ck['SecureNetflixId']||''));
     const dt=parseInt(p.get('dt')), mac=p.get('mac')||'';
     if (!isNaN(dt)) {
-      items.push({ok:true, k:'Set lúc (dt)', v:`${fmt_ts(dt)} — ${fmt_age(Date.now()-dt)} trước`});
-      items.push({ok:Date.now()<dt+30*86400000, k:'Hết hạn', v:fmt_ts(dt+30*86400000)});
+      items.push({ok:true, k:'Set at (dt)', v:`${fmt_ts(dt)} — ${fmt_age(Date.now()-dt)} ago`});
+      items.push({ok:Date.now()<dt+30*86400000, k:'Expires', v:fmt_ts(dt+30*86400000)});
     }
     items.push({ok:mac.replace(/\.$/,'').startsWith(NFLX.MAC), k:'mac preamble', v:mac.substring(0,10)+'…'});
   } catch {}
@@ -744,7 +744,7 @@ function renderDetail(idx) {
     const id=p.get('consentId'), ver=p.get('version'), cr=parseInt(p.get('crTime'));
     if(id)  items.push({ok:true, k:'consentId',   v:id});
     if(ver) items.push({ok:true, k:'version',      v:ver});
-    if(!isNaN(cr)) items.push({ok:true, k:'crTime', v:`${fmt_ts(cr)} (${fmt_age(Date.now()-cr)} trước)`});
+    if(!isNaN(cr)) items.push({ok:true, k:'crTime', v:`${fmt_ts(cr)} (${fmt_age(Date.now()-cr)} ago)`});
   } catch {}
 
   ['flwssn','gsid','OTSessionTracking','thx_guid','nfvdid'].forEach(n=>{
@@ -758,9 +758,9 @@ function renderDetail(idx) {
     if (live.screens)     items.push({ok:true, k:'Screens (live)', v:String(live.screens)});
     if (live.billingText) items.push({ok:true, k:'Billing (live)', v:live.billingText});
     if (live.profiles?.length) items.push({ok:true, k:'Profiles (live)', v:live.profiles.join(', ')});
-    if (live.planLost)     items.push({ok:false, k:'Mất gói',       v:'Còn tên gói trên web nhưng không xem được — thường do lỗi thanh toán'});
-    if (live.paymentError) items.push({ok:false, k:'Lỗi thanh toán', v:'Cần cập nhật phương thức thanh toán'});
-    if (live.cancelled)    items.push({ok:false, k:'Đã huỷ',        v:'Membership đã kết thúc'});
+    if (live.planLost)     items.push({ok:false, k:'Plan lost',     v:'Plan name still shown on the site but inaccessible — usually due to a payment error'});
+    if (live.paymentError) items.push({ok:false, k:'Payment error', v:'Payment method needs updating'});
+    if (live.cancelled)    items.push({ok:false, k:'Cancelled',     v:'Membership has ended'});
   }
 
   items.forEach(({ok,k,v}) => {
@@ -802,7 +802,7 @@ function renderDetail(idx) {
 // ── Debug: raw test ───────────────────────────────────────────────────────────
 async function runDebug() {
   const input = document.getElementById('cookieInput').value.trim();
-  if (!input) { alert('Paste cookie trước!'); return; }
+  if (!input) { alert('Paste a cookie first!'); return; }
   const sets = detect_sets(input);
   const btn  = document.getElementById('debugBtn');
   btn.disabled = true; btn.textContent = '⏳ Testing…';
