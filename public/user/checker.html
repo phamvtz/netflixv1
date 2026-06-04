@@ -71,6 +71,11 @@
           <span class="auto-next" id="autoNext" style="display:none"></span>
         </div>
 
+        <select id="checkPace" class="auto-sel" title="Chậm hơn = ít bị Netflix quét IP">
+          <option value="stealth" selected>🛡 Ẩn — an toàn nhất (mặc định)</option>
+          <option value="slow">Chậm — 1 IP Netflix/cookie</option>
+          <option value="normal">Nhanh — dễ bị quét hơn</option>
+        </select>
         <label class="demo-lbl">
           <input type="checkbox" id="useDemoCheck" /> Demo
         </label>
@@ -93,7 +98,7 @@
       </div>
       <div class="stat-card stat-card-cancel"  id="sc-cancel" onclick="setFilter('cancelled')">
         <div class="sc-num" id="sc-cancel-n">0</div>
-        <div class="sc-label">Cancelled</div>
+        <div class="sc-label">Huỷ / Mất gói</div>
       </div>
       <div class="stat-card stat-card-pending" id="sc-pending" onclick="setFilter('pending')">
         <div class="sc-num" id="sc-pending-n">0</div>

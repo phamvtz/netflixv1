@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- Checker: phát hiện **MẤT GÓI** — còn tên plan (Standard…) nhưng lỗi thanh toán / popup browse, không tính LIVE.
+- Checker: trích email từ HTML Netflix mạnh hơn; mặc định `NFTOKEN_MODE=fallback` khi thiếu email (kể cả đã có plan).
+- Checker: mặc định `stealth` — warmup browse→account, 1 UA/cookie, không nftoken, delay 20–45s, giới hạn 50 check/giờ.
+
 ### Added
 - Panel UI dùng chung (`public/panel/`), filter chips admin/seller, refactor checker (search + stat cards).
 - Cấu trúc `public/`: `admin/`, `seller/`, `me/`, `user/`, tài liệu trong `CLAUDE.md` §9.

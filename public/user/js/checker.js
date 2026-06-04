@@ -174,6 +174,30 @@ function process_set(raw) {
 // ── State ────────────────────────────────────────────────────────────────────
 let sets=[], rawSets=[], liveResults=[], activeDetail=-1, doneChecks=0;
 
+function getCheckPace() {
+  return document.getElementById('checkPace')?.value || localStorage.getItem('checkerPace') || 'stealth';
+}
+
+function liveCheckBody(cookie) {
+  return { cookie, pace: getCheckPace() };
+}
+
+function persistCheckPace() {
+  const v = getCheckPace();
+  try { localStorage.setItem('checkerPace', v); } catch {}
+  return v;
+}
+
+function estimateCheckEta(count, pace) {
+  const sec = { normal: 5, slow: 35, stealth: 55 }[pace] || 55;
+  return Math.ceil((count * sec) / 60);
+}
+
+function isSafePace() {
+  const p = getCheckPace();
+  return p === 'stealth' || p === 'slow';
+}
+
 // ── Safe JSON fetch (never throws on non-JSON responses) ─────────────────────
 async function safePost(url, body) {
   const r = await fetch(url, {
@@ -218,9 +242,9 @@ function setFilter(f) {
 
 function rowMatchesStatus(live, filter) {
   if (filter === 'all') return true;
-  if (filter === 'live') return live?.alive === true && !live?.cancelled;
-  if (filter === 'dead') return live != null && live.alive === false;
-  if (filter === 'cancelled') return live?.alive === true && !!live?.cancelled;
+  if (filter === 'live') return live?.alive === true && !live?.cancelled && !live?.planLost;
+  if (filter === 'dead') return live != null && live.alive === false && !live?.planLost;
+  if (filter === 'cancelled') return !!live?.planLost || !!live?.cancelled || (!!live?.paymentError && !!live?.plan);
   if (filter === 'pending') return live === null || live === undefined;
   return true;
 }
@@ -249,9 +273,9 @@ function applyFilter() {
 // ── Stats cards update ─────────────────────────────────────────────────────────
 function updateStatCards() {
   const total    = sets.length;
-  const live     = liveResults.filter(r => r?.alive === true && !r?.cancelled).length;
-  const dead     = liveResults.filter(r => r?.alive === false).length;
-  const cancelled= liveResults.filter(r => r?.alive === true && r?.cancelled).length;
+  const live     = liveResults.filter(r => r?.alive === true && !r?.cancelled && !r?.planLost).length;
+  const dead     = liveResults.filter(r => r != null && r.alive === false && !r?.planLost).length;
+  const cancelled= liveResults.filter(r => r?.planLost || r?.cancelled || (r?.paymentError && r?.plan)).length;
   const pending  = liveResults.filter(r => r === null).length;
 
   document.getElementById('sc-total-n').textContent  = total;
@@ -278,8 +302,10 @@ function exportData(filter, format) {
   const rows = sets.map((s, i) => {
     const live = liveResults[i];
     const status = !live ? 'PENDING'
+      : live.planLost ? 'PLAN_LOST'
       : live.alive && !live.cancelled ? 'LIVE'
       : live.alive && live.cancelled  ? 'CANCELLED'
+      : live.paymentError && live.plan ? 'PLAN_LOST'
       : 'DEAD';
     return {
       idx: i + 1, status,
@@ -346,6 +372,14 @@ async function copyRowCookie(idx, btn) {
 function toggleAutoCheck() {
   const on = document.getElementById('autoCheck').checked;
   const nextEl = document.getElementById('autoNext');
+  if (on && isSafePace()) {
+    const mins = parseInt(document.getElementById('autoInterval').value) || 30;
+    if (mins < 30) {
+      alert('Chế độ Ẩn/Chậm: Auto tối thiểu 30 phút để tránh quét IP.');
+      document.getElementById('autoCheck').checked = false;
+      return;
+    }
+  }
   if (on) {
     scheduleAutoCheck();
   } else {
@@ -471,7 +505,9 @@ function buildRow(s, i, live) {
   let planCell = `<span class="td-plan empty">—</span>`;
   if (live?.plan) {
     const bill = live.billingText ? `<div class="td-billing">${esc(live.billingText)}</div>` : '';
-    const pay  = live.paymentError ? `<div class="td-payerr">⚠ payment error</div>` : '';
+    const pay  = live.planLost
+      ? `<div class="td-payerr">⚠ Có tên gói nhưng không xem được (lỗi TT / hết quyền)</div>`
+      : live.paymentError ? `<div class="td-payerr">⚠ Lỗi thanh toán</div>` : '';
     planCell = `<div class="td-plan">${esc(live.plan)}</div>${bill}${pay}`;
   }
 
@@ -510,7 +546,9 @@ function buildRow(s, i, live) {
 function buildStatusBadge(live) {
   if (!live) return `<span class="badge badge-pending">—</span>`;
   const src = live.source ? `<span class="badge-src">${live.source}</span>` : '';
+  if (live.planLost)                   return `<span class="badge badge-cancelled">⚠ MẤT GÓI</span><div class="badge-err">Có plan · không xem</div>${src}`;
   if (live.error && !live.alive)       return `<span class="badge badge-dead">✗ DEAD</span><div class="badge-err">${esc(live.error.substring(0,40))}</div>`;
+  if (live.paymentError && live.plan)  return `<span class="badge badge-cancelled">⚠ MẤT GÓI</span>${src}`;
   if (live.alive && live.paymentError) return `<span class="badge badge-cancelled">⚠ PAY ERR</span>${src}`;
   if (live.alive && live.cancelled)    return `<span class="badge badge-cancelled">🔚 CANCELLED</span>${src}`;
   if (live.alive)                      return `<span class="badge badge-live">✓ LIVE</span>${src}`;
@@ -523,7 +561,12 @@ async function liveCheckOne(idx) {
   if (btn) { btn.disabled=true; btn.innerHTML='<div class="spin" style="display:inline-block"></div>'; }
   setStatusCell(idx, null); // spinner
   try {
-    const d = await safePost(`${API_BASE}/api/checker/live-check`, { cookie: rawSets[idx] });
+    const d = await safePost(`${API_BASE}/api/checker/live-check`, liveCheckBody(rawSets[idx]));
+    if (d.rateLimited) {
+      alert(d.error || 'Đã đạt giới hạn check/giờ — nghỉ rồi thử lại');
+      if (btn) { btn.disabled = false; btn.textContent = 'Check'; }
+      return;
+    }
     liveResults[idx] = d;
     updateRow(idx, d);
     if (btn) btn.remove();
@@ -537,22 +580,38 @@ async function liveCheckOne(idx) {
 
 async function checkAllLive() {
   const allBtn = document.getElementById('checkAllBtn');
+  const pace = persistCheckPace();
   const todo = rawSets.map((_,i)=>i).filter(i=>liveResults[i]===null);
   if (!todo.length) return;
+  if (isSafePace() && todo.length > 15) {
+    const label = pace === 'stealth' ? 'Ẩn' : 'Chậm';
+    if (!confirm(`${label}: ~${estimateCheckEta(todo.length, pace)} phút · ${todo.length} cookie · 1 IP Netflix/cookie.\nTiếp tục?`)) return;
+  }
+  if (pace === 'normal' && todo.length > 20) {
+    if (!confirm('Chế độ Nhanh dễ bị Netflix quét hơn. Nên chọn Ẩn/Chậm. Vẫn tiếp tục?')) return;
+  }
   allBtn.disabled=true;
   doneChecks=0;
   showProgress(true, 0, todo.length);
   // Set all to checking state
   todo.forEach(i => { liveResults[i]=null; setStatusCell(i, null); const b=document.querySelector(`#row-${i} .row-check-btn`); if(b){b.disabled=true;} });
 
-  // CONC=1: check tuần tự + nghỉ ngẫu nhiên giữa các cookie → giảm bị Netflix quét/flag.
+  // CONC=1 — server cũng nghỉ theo pace; client chỉ hiển thị progress.
   const CONC=1;
+  // Server đã nghỉ dài — client chỉ thêm chút jitter (tránh double-wait quá lâu ở stealth)
+  const gapMs = { normal: 1500, slow: 500, stealth: 0 }[pace] ?? 0;
   const wait = ms => new Promise(r=>setTimeout(r, ms));
   for (let i=0;i<todo.length;i+=CONC) {
     const batch=todo.slice(i,i+CONC);
     await Promise.all(batch.map(async idx => {
       try {
-        const d = await safePost(`${API_BASE}/api/checker/live-check`, { cookie: rawSets[idx] });
+        const d = await safePost(`${API_BASE}/api/checker/live-check`, liveCheckBody(rawSets[idx]));
+        if (d.rateLimited) {
+          alert(d.error || 'Đã đạt giới hạn check/giờ');
+          showProgress(false);
+          allBtn.disabled = false;
+          return;
+        }
         liveResults[idx] = d; updateRow(idx, d);
       } catch (e) {
         liveResults[idx] = { alive: false, error: e.message }; updateRow(idx, liveResults[idx]);
@@ -560,7 +619,7 @@ async function checkAllLive() {
       doneChecks++;
       showProgress(true, doneChecks, todo.length);
     }));
-    if (i + CONC < todo.length) await wait(1500 + Math.random()*3000);
+    if (gapMs > 0 && i + CONC < todo.length) await wait(gapMs * (0.85 + Math.random() * 0.35));
   }
   showProgress(false);
   allBtn.disabled=false;
@@ -583,7 +642,9 @@ function updateRow(idx, live) {
   // Plan + billing
   if (live.plan) {
     const bill = live.billingText ? `<div class="td-billing">${esc(live.billingText)}</div>` : '';
-    const pay  = live.paymentError ? `<div class="td-payerr">⚠ payment error</div>` : '';
+    const pay  = live.planLost
+      ? `<div class="td-payerr">⚠ Có tên gói nhưng không xem được (lỗi TT / hết quyền)</div>`
+      : live.paymentError ? `<div class="td-payerr">⚠ Lỗi thanh toán</div>` : '';
     const scr  = live.screens ? ` <span style="font-size:.65rem;color:var(--t3)"> ·${live.screens}🖥</span>` : '';
     tds[2].innerHTML = `<div class="td-plan">${esc(live.plan)}</div>${bill}${pay}${scr}`;
   } else {
@@ -598,7 +659,8 @@ function updateRow(idx, live) {
       : `<span class="profiles-empty">—</span>`;
   }
   tr.classList.remove('row-live','row-dead','row-cancel');
-  if (live.alive && !live.cancelled)   tr.classList.add('row-live');
+  if (live.planLost)                   tr.classList.add('row-cancel');
+  else if (live.alive && !live.cancelled) tr.classList.add('row-live');
   else if (!live.alive)                tr.classList.add('row-dead');
   else if (live.alive && live.cancelled) tr.classList.add('row-cancel');
   // Remove check btn
@@ -696,8 +758,9 @@ function renderDetail(idx) {
     if (live.screens)     items.push({ok:true, k:'Screens (live)', v:String(live.screens)});
     if (live.billingText) items.push({ok:true, k:'Billing (live)', v:live.billingText});
     if (live.profiles?.length) items.push({ok:true, k:'Profiles (live)', v:live.profiles.join(', ')});
-    if (live.paymentError) items.push({ok:false, k:'Payment error', v:'Phát hiện lỗi thanh toán'});
-    if (live.cancelled)    items.push({ok:false, k:'Cancelled',     v:'Tài khoản đã huỷ'});
+    if (live.planLost)     items.push({ok:false, k:'Mất gói',       v:'Còn tên gói trên web nhưng không xem được — thường do lỗi thanh toán'});
+    if (live.paymentError) items.push({ok:false, k:'Lỗi thanh toán', v:'Cần cập nhật phương thức thanh toán'});
+    if (live.cancelled)    items.push({ok:false, k:'Đã huỷ',        v:'Membership đã kết thúc'});
   }
 
   items.forEach(({ok,k,v}) => {
@@ -785,3 +848,11 @@ ${esc(JSON.stringify(d.nftoken_site, null, 2))}
 document.getElementById('cookieInput').addEventListener('keydown', e => {
   if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) runCheck();
 });
+
+(function initPaceSelect() {
+  const paceSel = document.getElementById('checkPace');
+  if (!paceSel) return;
+  const saved = localStorage.getItem('checkerPace');
+  if (saved && [...paceSel.options].some(o => o.value === saved)) paceSel.value = saved;
+  paceSel.addEventListener('change', persistCheckPace);
+})();
