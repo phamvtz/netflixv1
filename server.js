@@ -13,15 +13,7 @@ require('./db/database');
 const { runMigrations } = require('./db/migrate');
 const { runSeed } = require('./db/seed');
 const {
-  getUserByEmail,
-  getUserById,
-  getProfilesByUserId,
-  getProfileByIdAndUserId,
-  createSession,
-  getSession,
-  deleteSession,
   deleteExpiredSessions,
-  getAllContent,
   createKey,
   getKey,
   resolveKeyEmail,
@@ -663,261 +655,6 @@ app.use('/panel', express.static(path.join(__dirname, 'public', 'panel')));
 app.use('/admin/js', express.static(path.join(__dirname, 'public', 'admin', 'js')));
 app.use('/seller/js', express.static(path.join(__dirname, 'public', 'seller', 'js')));
 
-// ─── Cookie Generation – matching real Netflix formats ─────────────────────────
-
-// nfvdid: base64url-encoded 72 random bytes
-// Real example: BQFmAAEBEOwULkv5c1bP...TbRy311Jd
-function generateNfvdid() {
-  return crypto.randomBytes(72).toString('base64url');
-}
-
-// tmx_guid: base64url-encoded 64 random bytes (ThreatMetrix device fingerprint)
-// Real example: AAwtTZZR2H2Pk8D-dPXx...7g7Q
-function generateTmxGuid() {
-  return crypto.randomBytes(64).toString('base64url');
-}
-
-// thx_guid: 32 hex chars without dashes (UUID without dashes)
-// Real example: 9b166c806f66e0e1d2a76cb7a6f0ed47
-function generateThxGuid() {
-  return crypto.randomBytes(16).toString('hex');
-}
-
-// Base32 (uppercase A-Z2-7) for the `pg` field in NetflixId
-function toBase32(buf) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = 0, val = 0, out = '';
-  for (const byte of buf) {
-    val = (val << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      out += alphabet[(val >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) out += alphabet[(val << (5 - bits)) & 31];
-  return out;
-}
-
-// NetflixId: v=3&ct=<long-base64url>&pg=<BASE32-26chars>&ch=<base64url>.
-// ct embeds sessionId bytes in a protobuf-like binary frame + random padding
-// Real example ct is ~200 base64url chars; pg is 26-char uppercase base32
-function generateNetflixId(sessionId) {
-  const sidHex = sessionId.replace(/-/g, '');
-  const sidBuf = Buffer.from(sidHex, 'hex'); // 16 bytes
-
-  // Protobuf-like framing: field 1 varint=1, field 2 len-delim=16 bytes, random tail
-  const preamble = Buffer.from([0x08, 0x01, 0x12, 0x10]);
-  const tail     = crypto.randomBytes(128);
-  const ct = Buffer.concat([preamble, sidBuf, tail]).toString('base64url');
-
-  const pg = toBase32(crypto.randomBytes(16)).substring(0, 26);
-
-  // ch: HMAC-SHA256 of sessionId, base64url-encoded, trailing dot (real Netflix style)
-  const hmac = crypto.createHmac('sha256', 'nflx_ch_key_v3');
-  hmac.update(sessionId);
-  const ch = hmac.digest().toString('base64url') + '.';
-
-  return `v=3&ct=${ct}&pg=${pg}&ch=${ch}`;
-}
-
-// SecureNetflixId: v=3&mac=<base64url-hmac>.&dt=<timestamp>
-// Real example: v%3D3%26mac%3DAQEAEQABABT_IgWs...%26dt%3D1780112376148
-function generateSecureNetflixId(userId, sessionId) {
-  const hmac = crypto.createHmac('sha256', 'nflx_mac_secret_v3');
-  hmac.update(`${userId}:${sessionId}`);
-  // Real Netflix mac has extra preamble bytes (AQEAEQABABT...) – we prepend similar bytes
-  const preamble = Buffer.from([0x01, 0x01, 0x11, 0x01, 0x01, 0x04]);
-  const mac = Buffer.concat([preamble, hmac.digest()]).toString('base64url') + '.';
-  return `v=3&mac=${mac}&dt=${Date.now()}`;
-}
-
-// Extract sessionId from NetflixId ct field, then look up userId in sessions map
-function decodeNetflixId(netflixId) {
-  try {
-    const decoded = decodeURIComponent(netflixId);
-    const params  = new URLSearchParams(decoded);
-    const ct      = params.get('ct');
-    if (!ct) return null;
-    const raw = Buffer.from(ct, 'base64url');
-    // Skip 4-byte preamble, read 16-byte session ID
-    if (raw.length < 20) return null;
-    const sidBytes = raw.slice(4, 20);
-    const sessionId = [
-      sidBytes.slice(0,4).toString('hex'),
-      sidBytes.slice(4,6).toString('hex'),
-      sidBytes.slice(6,8).toString('hex'),
-      sidBytes.slice(8,10).toString('hex'),
-      sidBytes.slice(10,16).toString('hex'),
-    ].join('-');
-    const row = getSession(sessionId);
-    return row ? { userId: row.user_id, sessionId } : null;
-  } catch {
-    return null;
-  }
-}
-
-// OptanonConsent – matches real Netflix format (OneTrust v202604)
-function generateOptanonConsent() {
-  const consentId = uuidv4();
-  const ts        = Date.now();
-  const datestamp = encodeURIComponent(new Date().toUTCString());
-  return (
-    `isGpcEnabled=0` +
-    `&datestamp=${datestamp}` +
-    `&version=202604.2.0` +
-    `&browserGpcFlag=0` +
-    `&isDntEnabled=0` +
-    `&isIABGlobal=false` +
-    `&hosts=` +
-    `&consentId=${consentId}` +
-    `&interactionCount=1` +
-    `&isAnonUser=1` +
-    `&prevHadToken=0` +
-    `&landingPath=NotLandingPage` +
-    `&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1%2CC0004%3A1` +
-    `&crTime=${ts}` +
-    `&AwaitingReconsent=false`
-  );
-}
-
-// ─── Cookie Setters ────────────────────────────────────────────────────────────
-
-function setAnonymousCookies(req, res) {
-  // nfvdid – virtual device ID (1 year, survives logout)
-  if (!req.cookies.nfvdid) {
-    res.cookie('nfvdid', generateNfvdid(), {
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // OptanonConsent – GDPR/CCPA (1 year)
-  if (!req.cookies.OptanonConsent) {
-    res.cookie('OptanonConsent', generateOptanonConsent(), {
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // tmx_guid – ThreatMetrix device fingerprint (30 days)
-  if (!req.cookies.tmx_guid) {
-    res.cookie('tmx_guid', generateTmxGuid(), {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // thx_guid – analytics GUID, 32 hex chars (30 days)
-  if (!req.cookies.thx_guid) {
-    res.cookie('thx_guid', generateThxGuid(), {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-}
-
-function setSessionCookies(res, userId, sessionId) {
-  createSession(sessionId, userId);
-
-  const netflixId       = generateNetflixId(sessionId);
-  const secureNetflixId = generateSecureNetflixId(userId, sessionId);
-  const flwssn          = uuidv4();          // UUID (same as real Netflix)
-  const gsid            = uuidv4();          // UUID (real Netflix uses plain UUID, not gs_ prefix)
-  const otSession       = uuidv4();          // UUID (real Netflix uses plain UUID)
-
-  // NetflixId – user identity token (30 days)
-  res.cookie('NetflixId', netflixId, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // SecureNetflixId – HMAC-signed with mac+dt format, HttpOnly (30 days)
-  res.cookie('SecureNetflixId', secureNetflixId, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    sameSite: 'strict',
-    path: '/',
-  });
-
-  // flwssn – Flow session UUID (session-scoped, no maxAge)
-  res.cookie('flwssn', flwssn, {
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // gsid – Global session UUID (30 days)
-  res.cookie('gsid', gsid, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // OTSessionTracking – OneTrust session UUID (session-scoped)
-  res.cookie('OTSessionTracking', otSession, {
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  return { netflixId, secureNetflixId, flwssn, gsid, otSession };
-}
-
-function clearSessionCookies(res, sessionId) {
-  if (sessionId) deleteSession(sessionId);
-  const opts = { expires: new Date(0), path: '/' };
-  res.clearCookie('NetflixId',          opts);
-  res.clearCookie('SecureNetflixId',    opts);
-  res.clearCookie('flwssn',             opts);
-  res.clearCookie('gsid',               opts);
-  res.clearCookie('OTSessionTracking',  opts);
-  res.clearCookie('profilesNewSession', opts);
-}
-
-// ─── Middleware ────────────────────────────────────────────────────────────────
-
-// API path → 401 JSON; page path → redirect tới trang đăng nhập
-function authFail(req, res) {
-  if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ success: false, error: 'Not logged in' });
-  }
-  return res.redirect('/login');
-}
-
-function requireAuth(req, res, next) {
-  const nfid = req.cookies.NetflixId;
-  if (!nfid) return authFail(req, res);
-  const decoded = decodeNetflixId(nfid);
-  if (!decoded) { clearSessionCookies(res, null); return authFail(req, res); }
-  const user = getUserById(decoded.userId);
-  if (!user) { clearSessionCookies(res, decoded.sessionId); return authFail(req, res); }
-  req.user      = user;
-  req.sessionId = decoded.sessionId;
-  next();
-}
-
-function requireProfile(req, res, next) {
-  if (req.cookies.profilesNewSession !== '0') {
-    if (req.path.startsWith('/api/')) {
-      return res.status(403).json({ success: false, error: 'No profile selected' });
-    }
-    return res.redirect('/profiles');
-  }
-  next();
-}
-
 // ─── Page Routes ───────────────────────────────────────────────────────────────
 
 // Trang chủ user: chỉ lấy mã (email hoặc key) — không còn landing Netflix demo
@@ -930,7 +667,6 @@ app.get('/profiles', (req, res) => res.redirect('/'));
 app.get('/browse', (req, res) => res.redirect('/'));
 
 app.get('/checker', (req, res) => {
-  setAnonymousCookies(req, res);
   res.sendFile(PAGE.user('checker.html'));
 });
 
@@ -945,50 +681,7 @@ app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 
-app.post('/api/auth/login', (req, res) => {
-  setAnonymousCookies(req, res);
-  const { email, password } = req.body;
-  const user = getUserByEmail(email);
-  if (!user || !verifyPassword(user.password, password)) {
-    return res.status(401).json({ success: false, message: 'Wrong email or password.' });
-  }
-  const sessionId      = uuidv4();
-  const sessionCookies = setSessionCookies(res, user.id, sessionId);
-  return res.json({
-    success: true,
-    user: { id: user.id, name: user.name, plan: user.plan },
-    sessionCookies,
-    redirect: '/profiles',
-  });
-});
-
-app.post('/api/auth/logout', requireAuth, (req, res) => {
-  clearSessionCookies(res, req.sessionId);
-  return res.json({ success: true, redirect: '/' });
-});
-
-app.get('/api/profiles', requireAuth, (req, res) => {
-  const profiles = getProfilesByUserId(req.user.id);
-  return res.json({ success: true, profiles, user: { name: req.user.name, plan: req.user.plan } });
-});
-
-app.post('/api/profiles/select', requireAuth, (req, res) => {
-  const { profileId } = req.body;
-  const profile = getProfileByIdAndUserId(profileId, req.user.id);
-  if (!profile) return res.status(404).json({ success: false, message: 'Profile not found.' });
-
-  // New flow session after profile selection (same real Netflix behavior)
-  res.cookie('flwssn', uuidv4(), { httpOnly: false, sameSite: 'lax', path: '/' });
-  res.cookie('profilesNewSession', '0', { httpOnly: false, sameSite: 'lax', path: '/' });
-
-  return res.json({ success: true, profile, redirect: '/browse' });
-});
-
-app.get('/api/content', requireAuth, requireProfile, (req, res) => {
-  return res.json({ success: true, content: getAllContent() });
-});
-
-// ─── nftoken.site — tùy chọn, mặc định TẮT (chỉ check trực tiếp netflix.com) ───
+// ─── nftoken.site — optional; default direct netflix.com only ───
 // NFTOKEN_MODE=off       → chỉ direct (mặc định)
 // NFTOKEN_MODE=parallel  → song song nftoken + direct (hành vi cũ)
 // NFTOKEN_MODE=fallback  → direct trước, gọi nftoken nếu unreachable hoặc thiếu plan/email
@@ -1134,47 +827,6 @@ app.post('/api/checker/batch', async (req, res) => {
     console.error('[batch] ERROR:', e.message);
     return res.status(500).json({ error: e.message });
   }
-});
-
-// Cookie inspector endpoint
-app.get('/api/session/info', (req, res) => {
-  const c = req.cookies;
-  let user = null, sessionId = null;
-  if (c.NetflixId) {
-    const d = decodeNetflixId(c.NetflixId);
-    if (d) {
-      user      = getUserById(d.userId) || null;
-      sessionId = d.sessionId;
-    }
-  }
-
-  const phase = !c.NetflixId
-    ? 'anonymous'
-    : c.profilesNewSession === '0'
-      ? 'profile_selected'
-      : 'authenticated';
-
-  // Show realistic truncated values just like the real browser would see
-  const truncate = (val, n = 55) => val ? (val.length > n ? val.substring(0, n) + '…' : val) : null;
-
-  return res.json({
-    phase,
-    authenticated: !!user,
-    user: user ? { id: user.id, name: user.name, plan: user.plan } : null,
-    cookies: {
-      nfvdid:              truncate(c.nfvdid, 60),
-      OptanonConsent:      c.OptanonConsent ? '[set – ' + c.OptanonConsent.length + ' chars]' : null,
-      tmx_guid:            truncate(c.tmx_guid, 60),
-      thx_guid:            c.thx_guid || null,
-      NetflixId:           c.NetflixId ? truncate(decodeURIComponent(c.NetflixId), 70) : null,
-      SecureNetflixId:     c.SecureNetflixId ? '[HttpOnly – not readable by JS]' : null,
-      flwssn:              c.flwssn || null,
-      gsid:                c.gsid || null,
-      OTSessionTracking:   c.OTSessionTracking || null,
-      profilesNewSession:  c.profilesNewSession || null,
-      'netflix-sans-normal-3-loaded': c['netflix-sans-normal-3-loaded'] || null,
-    },
-  });
 });
 
 // ─── Cloudflare Turnstile ─────────────────────────────────────────────────────
@@ -2071,12 +1723,10 @@ app.listen(PORT, () => {
   console.log('\x1b[31m██║╚██╗██║██╔══╝     ██║   ██╔══╝  ██║     ██║ ██╔██╗ \x1b[0m');
   console.log('\x1b[31m██║ ╚████║███████╗   ██║   ██║     ███████╗██║██╔╝ ██╗\x1b[0m');
   console.log('\x1b[31m╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝     ╚══════╝╚═╝╚═╝  ╚═╝\x1b[0m');
-  console.log(`\n  Đang chạy tại: \x1b[36mhttp://localhost:${PORT}\x1b[0m\n`);
-  console.log('  Tài khoản demo:');
-  console.log('  \x1b[33m●\x1b[0m demo@netflix.com  /  demo123');
-  console.log('  \x1b[33m●\x1b[0m user@netflix.com  /  user123\n');
+  console.log(`\n  Listening: \x1b[36mhttp://localhost:${PORT}\x1b[0m`);
+  console.log('  \x1b[33m/\x1b[0m Get Code   \x1b[33m/checker\x1b[0m   \x1b[33m/seller\x1b[0m   \x1b[33m/admin\x1b[0m\n');
   if (ADMIN_TOKEN_GENERATED) {
     console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
-    console.log('    (set env ADMIN_TOKEN để cố định)\n');
+    console.log('    (set env ADMIN_TOKEN to pin)\n');
   }
 });

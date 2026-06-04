@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- UI depth (T1): `panel/css/depth.css` — cinematic scene for me/admin/checker, cyber glass for seller stats/cards.
+- Get Code page: `me/me.css` red-black cinematic theme (replaces light inline styles).
+
+### Removed
+- Netflix clone demo UI (`login`, `browse`, `profiles`, landing) and APIs (`/api/auth/*`, `/api/profiles*`, `/api/content`, `/api/session/info`). Checker + panel only.
+
 ### Fixed
 - Checker: phát hiện **MẤT GÓI** — còn tên plan (Standard…) nhưng lỗi thanh toán / popup browse, không tính LIVE.
 - Checker: trích email từ HTML Netflix mạnh hơn; mặc định `NFTOKEN_MODE=fallback` khi thiếu email (kể cả đã có plan).

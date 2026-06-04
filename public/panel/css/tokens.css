@@ -21,6 +21,15 @@
   --btn-text-on-accent: #fff;
 }
 
+[data-theme="admin"] {
+  --bg: #0b0b10;
+  --card: #15151d;
+  --bd: #262633;
+  --accent: #e50914;
+  --accent-hover: #ff1a25;
+  --accent-soft: rgba(229, 9, 20, 0.16);
+}
+
 [data-theme="seller"] {
   --bg: #0f1623;
   --card: rgba(255, 255, 255, 0.05);

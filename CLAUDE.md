@@ -104,7 +104,7 @@ public/
 ├── me/             # subdomain me.* — Get Code (khách lấy mã)
 │   └── index.html
 ├── user/           # domain chính — checker (tùy chọn); trang chủ = me/
-│   ├── checker.html (+ login/browse cũ redirect về /)
+│   ├── checker.html only (no Netflix clone demo)
 │   ├── css/        # serve qua URL /css/*
 │   └── js/         # serve qua URL /js/*
 └── panel/          # CSS/JS dùng chung admin + seller → /panel/*
@@ -120,3 +120,12 @@ public/
 **Filter UI:** chip status + search (`panel/js/filters.js`). Checker: stat cards (không tab trùng) + `#resultSearch`.
 
 **Sau feat/fix:** thêm dòng vào `CHANGELOG.md`, `node --check`, `npm test`.
+
+## 10. UI 3D themes (locked)
+
+| Surface | Style |
+|---------|--------|
+| `me/`, `admin/`, checker | Cinematic red-black (`--accent: #e50914`) |
+| `seller/` | Cyber glass green (`[data-theme="seller"]`) |
+
+Details: `docs/UI-3D.md`. Netflix clone demo (login/browse/profiles) is **removed** — not in scope.

@@ -415,25 +415,12 @@ function scheduleAutoCheck() {
 // ── Main ─────────────────────────────────────────────────────────────────────
 function runCheck() {
   const input = document.getElementById('cookieInput').value.trim();
-  const demo  = document.getElementById('useDemoCheck').checked;
-  if (demo) { fetchDemo(); return; }
   if (!input) { alert('Paste a cookie string first!'); return; }
   rawSets = detect_sets(input);
   sets    = rawSets.map(process_set);
   liveResults = new Array(sets.length).fill(null);
   doneChecks  = 0;
   render();
-}
-
-async function fetchDemo() {
-  try {
-    const d = await fetch('/api/session/info').then(r=>r.json());
-    if (!d.authenticated) { alert('Not logged in!'); return; }
-    const str = Object.entries(d.cookies).filter(([,v])=>v).map(([k,v])=>`${k}=${v}`).join('; ');
-    document.getElementById('cookieInput').value = str;
-    rawSets=[str]; sets=[process_set(str)]; liveResults=[null]; doneChecks=0;
-    render();
-  } catch { alert('Demo server error.'); }
 }
 
 async function pasteClip() {

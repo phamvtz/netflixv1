@@ -5,7 +5,7 @@
 | `admin/` | Panel admin | `admin.*` |
 | `seller/` | Panel seller | `seller.*` |
 | `me/` | Get Code (temp mail) | `me.*` |
-| `user/` | Checker (tuỳ chọn) | `/checker` |
+| `user/` | Cookie checker only | `/checker` |
 | `/` (file `me/`) | Lấy mã email/key | domain chính + `me.*` |
 | `panel/` | CSS/JS shared cho admin & seller | `/panel/*` |
 
