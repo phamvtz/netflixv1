@@ -1,22 +1,24 @@
-# UI 3D — Style & scope
+# UI — Monochrome primary
 
-## Theme map (locked)
+## Palette
 
-| Surface | Style | Tokens |
-|---------|--------|--------|
-| **Get Code** (`public/me/`) | Cinematic red-black | `--accent: #e50914`, deep `#0b0b10` bg, soft red glow, film-grain optional |
-| **Admin** (`public/admin/`) | Cinematic red-black | Same as me; shared `public/panel/css/tokens.css` base |
-| **Seller** (`public/seller/`) | Cyber glass green | `[data-theme="seller"]` — glass cards, `#46d369` accent, cool `#0f1623` bg |
-| **Checker** (`public/user/checker`) | Cinematic red-black | Matches product brand; stat cards get T1 depth only |
+| Token | Value |
+|-------|--------|
+| Background | `#0a0a0a` |
+| Card | `#141414` |
+| Border | `#2a2a2a` |
+| Text | `#f5f5f5` / `#a3a3a3` / `#6b6b6b` |
+| Accent (CTA) | `#ffffff` on dark (button text `#0a0a0a`) |
 
-**Not 3D:** data tables (keys, orders, products), forms, modals — stay flat 2D.
+No red/green brand colors. Status uses brightness: **live** = white, **dead** = dim gray, **pending** = mid gray.
 
-## Tiers
+## Files
 
-1. **T1** — CSS perspective / glass / elevation (`panel/css/depth.css`) — **done**
-2. **T2** — Motion on stat chips (checker, seller dashboard)
-3. **T3** — WebGL hero (me landing + checker header only), lazy-loaded
+- `public/panel/css/tokens.css` — source of truth
+- `public/panel/css/brand.css` — fonts, mesh, shells
+- `public/panel/css/depth.css` — elevation
+- `public/panel/css/seller-cyber.css` — seller dark overrides
 
-## Removed
+## Depth (T1)
 
-Netflix clone demo (login / browse / profiles) is **out of scope** — no `apps/demo/`.
+CSS perspective on cards/stats; optional grain via `depth.css`.

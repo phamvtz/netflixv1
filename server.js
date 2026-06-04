@@ -2,11 +2,36 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
+
+(function loadEnvFile() {
+  const envPath = path.join(__dirname, '.env');
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] == null || process.env[key] === '') process.env[key] = val;
+  }
+})();
 const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
-const { nfExtractEmailFromHtml, nfDetectPaymentHold } = require('./lib/nf-email-parse');
+const { nfExtractEmailFromHtml, nfDetectPaymentHold, nfAccountPagePaymentHold } = require('./lib/nf-email-parse');
+const {
+  nfHasPaymentElement,
+  nfHasActiveMembershipSignals,
+  nfHasActiveFutureBilling,
+  nfBillingIsFuture,
+  nfResolveSubscriptionStatus,
+} = require('./lib/nf-account-live');
 
 // SQLite — initialize singleton before routes use the query layer
 require('./db/database');
@@ -35,6 +60,7 @@ const {
   getAccountByUsername,
   getAccountByEmail,
   getAccountById,
+  setAccountPassword,
   setVerifyCode,
   markEmailVerified,
   setAccountStatus,
@@ -371,14 +397,15 @@ function nfExtractPlan(html) {
   }
   // Visible text fallback — works for English AND Thai UI
   const PLAN_RE = /\b(?:Ultra|Premium|Standard|Basic|Mobile)(?:\+|\s+(?:with\s+Ads|Ads))?\b/i;
+  const VI_PLAN_RE = /Gói\s+(?:Cao cấp|Tiêu chuẩn|Cơ bản|Di động)/i;
   const THAI_RE = /(?:Netflix\s+)?(?:พรีเมียม|มาตรฐาน|พื้นฐาน|มือถือ|เบสิก|สแตนดาร์ด)/;
   const lines = nfVisibleLines(html);
   for (const line of lines) {
-    const m = line.match(PLAN_RE) || line.match(THAI_RE);
+    const m = line.match(PLAN_RE) || line.match(VI_PLAN_RE) || line.match(THAI_RE);
     if (m && line.length < 100) return nfClean(m[0]);
   }
   // Last resort: raw regex on full HTML
-  const raw = html.match(PLAN_RE) || html.match(THAI_RE);
+  const raw = html.match(PLAN_RE) || html.match(VI_PLAN_RE) || html.match(THAI_RE);
   if (raw) return nfClean(raw[0]);
   return null;
 }
@@ -389,19 +416,30 @@ function nfPushProfile(profiles, rawName) {
   profiles.push(name);
 }
 
+function nfBillingLooksLikeMemberSince(text) {
+  return /thành viên từ|member since/i.test(String(text || ''));
+}
+
 const NF_CANCEL_KW = [
   'ends on','end on','membership ends','will end','membership will end',
   'cancellation','cancelled','canceled','your membership ends','has been cancelled','has been canceled',
   'reactivate membership','restart membership',
   'kết thúc','hết hạn vào','đã hủy','sẽ kết thúc','đã bị hủy','chấm dứt','kích hoạt lại',
 ];
-const NF_PAYERR_KW = [
-  'payment failed','payment unsuccessful','unable to process your payment',
-  "couldn't process your payment",'problem with your payment','payment method was declined',
-  'account is on hold','your account is on hold','on hold. retry','retry your payment',
-  'update payment','fix payment','payment issue','billing issue',
-  'thanh toán không thành công','không thể xử lý khoản thanh toán','kiểm tra số dư',
+/** Visible payment-failure copy only — avoid matching JSON keys or "update payment method". */
+const NF_PAYERR_PHRASES = [
+  'payment failed', 'payment unsuccessful', 'unable to process your payment',
+  "couldn't process your payment", 'problem with your payment', 'payment method was declined',
+  'account is on hold', 'your account is on hold', 'on hold. retry', 'retry your payment',
+  'thanh toán không thành công', 'không thể xử lý khoản thanh toán',
+  'cập nhật thông tin thanh toán để tiếp tục',
 ];
+
+function nfAccountPaymentError(html) {
+  const low = String(html || '').toLowerCase();
+  if (NF_PAYERR_PHRASES.some((p) => low.includes(p))) return true;
+  return /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html || '');
+}
 
 // ─── Netflix account check — simple & accurate ────────────────────────────────
 // Logic: GET /account với cookie → check element data-uia cụ thể
@@ -436,30 +474,29 @@ async function fetchNetflixAccountInfo(cookieStr, pace) {
     if (res.status === 301 || res.status === 302) return { reachable: false, reason: 'redirect→login' };
     if (res.status !== 200) return { reachable: false, reason: `HTTP ${res.status}` };
 
-    const html = res.text();
+    let html = res.text();
     if (!html || html.length < 3000) return { reachable: false, reason: 'empty' };
+
+    let membershipHtml = '';
+    try {
+      await randDelay(350, 900);
+      const memRes = await nodeRequest('https://www.netflix.com/account/membership', {
+        method: 'GET', headers: session.account, timeout: 15000,
+      });
+      if (memRes.status === 200) {
+        membershipHtml = memRes.text() || '';
+        if (membershipHtml.length > 2000) html += `\n<!-- membership -->\n${membershipHtml}`;
+      }
+    } catch { /* optional — /account alone is enough when it fails */ }
 
     // ── PRIMARY LIVE SIGNAL ────────────────────────────────────────────────────
     // Signal 1: payment details element (CC, PayPal, carrier, gift card)
-    const LIVE_SELECTORS = [
-      'account-overview-page+membership-card+payment+details+CC',
-      'account-overview-page+membership-card+payment+details+PAYPAL',
-      'account-overview-page+membership-card+payment+details+CARRIER',
-      'account-overview-page+membership-card+payment+details+GIFT',
-      'account-overview-page+membership-card+payment+details+MOBILE',
-      'account-overview-page+membership-card+payment+details',   // catch-all
-    ];
-    const hasPaymentEl = LIVE_SELECTORS.some(sel => html.includes(`data-uia="${sel}`));
-
-    // Signal 2: Cancel membership button = account is active (can cancel it)
-    const hasCancelBtn = html.toLowerCase().includes('cancel membership') ||
-                         html.toLowerCase().includes('cancel your membership') ||
-                         html.toLowerCase().includes('ยกเลิกสมาชิก');
+    const hasPaymentEl = nfHasPaymentElement(html);
 
     // Log all membership-related data-uia attributes found
     const uiaAll = [...html.matchAll(/data-uia="([^"]+)"/g)].map(m => m[1]);
     const uiaMembership = uiaAll.filter(a => a.includes('membership') || a.includes('plan') || a.includes('payment'));
-    nfLog(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl} cancelBtn=${hasCancelBtn}`);
+    nfLog(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl}`);
     if (uiaMembership.length) nfLog(`[NF-UIA]`, uiaMembership.join(', '));
     const emailDbg = nfExtractEmailFromHtml(html);
     nfLog(`[NF-EMAIL]`, emailDbg || '(not found)');
@@ -472,17 +509,39 @@ async function fetchNetflixAccountInfo(cookieStr, pace) {
     if (planUia) plan = nfClean(planUia[1]);
     if (!plan) plan = nfExtractPlan(html);
 
-    // Lỗi thanh toán / on hold → không coi là LIVE dù vẫn thấy tên gói trên /account
-    let accountPaymentHold = nfDetectPaymentHold(html);
+    // Hold on /account: strict phrases only (browse uses full nfDetectPaymentHold)
+    let accountPaymentHold = nfAccountPagePaymentHold(html);
     let paymentHold = browsePaymentHold || accountPaymentHold;
     const htmlLow = html.toLowerCase();
-    let paymentError = paymentHold
-      || NF_PAYERR_KW.some(kw => htmlLow.includes(kw.toLowerCase()))
-      || /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html);
+    let paymentError = paymentHold || nfAccountPaymentError(html);
 
-    // Vẫn thấy plan + payment UI nhưng browse chặn popup → xác minh thêm /browse
+    // ── BILLING DATE — data-uia attribute ──────────────────────────────────────
+    let billingText = null;
+    const billUia = html.match(/data-uia="account-overview-page\+membership-card\+description"[^>]*>\s*([^<]{4,120})/);
+    if (billUia) billingText = nfClean(billUia[1]);
+    if (!billingText) billingText = nfExtractBilling(html);
+    if (membershipHtml && (!billingText || nfBillingLooksLikeMemberSince(billingText))) {
+      const memBilling = nfExtractBilling(membershipHtml);
+      if (memBilling) billingText = memBilling;
+    }
+    if (!billingText || nfBillingLooksLikeMemberSince(billingText)) {
+      const scraped = nfExtractBilling(html);
+      if (scraped && !nfBillingLooksLikeMemberSince(scraped)) billingText = scraped;
+    }
+
+    const membershipActiveUi = nfHasActiveMembershipSignals(html, billingText);
+    // Browse-only hold banner often false-positives; trust /account when membership UI is clearly active
+    if (browsePaymentHold && !accountPaymentHold && membershipActiveUi) {
+      browsePaymentHold = false;
+      paymentHold = false;
+      paymentError = nfAccountPaymentError(html);
+    }
+
+    const futureBillingOnAccount = !!(plan && billingText && nfHasActiveFutureBilling(html, billingText));
+
+    // Browse popup hold — skip when /account already shows a future next payment date
     let browseVerifyHold = false;
-    if (plan && !paymentHold) {
+    if (plan && !paymentHold && !futureBillingOnAccount) {
       try {
         await randDelay(400, 1200);
         const br = await nodeRequest('https://www.netflix.com/browse', {
@@ -490,19 +549,10 @@ async function fetchNetflixAccountInfo(cookieStr, pace) {
         });
         if (br.status === 200) {
           browseVerifyHold = nfDetectPaymentHold(br.text());
-          if (browseVerifyHold) paymentHold = true;
+          if (browseVerifyHold && (!membershipActiveUi || accountPaymentHold)) paymentHold = true;
         }
       } catch { /* bỏ qua */ }
     }
-
-    let subscriptionActive = !paymentHold && (hasPaymentEl || hasCancelBtn);
-    let isLive = subscriptionActive;
-
-    // ── BILLING DATE — data-uia attribute ──────────────────────────────────────
-    let billingText = null;
-    const billUia = html.match(/data-uia="account-overview-page\+membership-card\+description"[^>]*>\s*([^<]{4,120})/);
-    if (billUia) billingText = nfClean(billUia[1]);
-    if (!billingText) billingText = nfExtractBilling(html);
 
     // ── EMAIL ──────────────────────────────────────────────────────────────────
     const emailFromHtml = nfExtractEmailFromHtml(html);
@@ -537,23 +587,36 @@ async function fetchNetflixAccountInfo(cookieStr, pace) {
       }
     }
 
-    // Có tên gói nhưng không còn quyền xem (TT lỗi hoặc hết membership thật)
-    const planLost = !!plan && (paymentHold || paymentError || !subscriptionActive);
-    if (planLost) {
-      isLive = false;
-      subscriptionActive = false;
-    }
+    const resolved = nfResolveSubscriptionStatus({
+      html,
+      plan,
+      billingText,
+      profiles,
+      accountPaymentHold,
+      paymentHold,
+      paymentError,
+      membershipActiveUi,
+    });
+    paymentHold = resolved.paymentHold;
+    paymentError = resolved.paymentError;
+    billingText = resolved.billingText || billingText;
+    const subscriptionActive = resolved.subscriptionActive;
+    const isLive = resolved.isLive;
+    const planLost = resolved.planLost;
+    const membershipEnded = !!resolved.cancelled;
+    nfLog(`[NF] plan=${plan || '-'} billing=${billingText || '-'} profiles=${profiles.length} activeUi=${resolved.membershipActiveUi} futureBill=${resolved.futureBilling} profLive=${resolved.planProfiles} hold=${paymentHold} live=${isLive} planLost=${planLost} ended=${membershipEnded}`);
 
     return {
       reachable:    true,
       alive:        isLive,
-      cancelled:    !subscriptionActive && !paymentHold,
+      cancelled:    membershipEnded || (!subscriptionActive && !paymentHold && !planLost),
       planLost,
       plan,
       billingText,
       profiles,
       paymentError,
       paymentHold,
+      futureBilling: resolved.futureBilling,
       browsePaymentHold: browsePaymentHold || browseVerifyHold,
       emailFromHtml,
     };
@@ -630,18 +693,32 @@ const PAGE = {
 };
 
 // ─── Subdomain root routing ────────────────────────────────────────────────────
-// me.domain/      → me/index.html (Get Code)
-// seller.domain/  → seller/index.html
-// admin.domain/   → admin/index.html
-// (domain trần)/  → landing (xử lý ở route '/' bên dưới)
+// me.domain/me      → me/index.html (Get Code)
+// seller.domain/seller  → seller/index.html
+// admin.domain/admin   → admin/index.html
+// me.domain/        → redirect to /me
+// seller.domain/    → redirect to /seller
+// admin.domain/     → redirect to /admin
+// (domain trần)/    → redirect to /me
 function serveSubdomainRoot(req, res, next) {
-  if (req.path !== '/') return next();
-  switch (req.subdomain) {
-    case 'me':     return res.sendFile(PAGE.me);
-    case 'seller': return res.sendFile(PAGE.seller);
-    case 'admin':  return res.sendFile(PAGE.admin);
-    default:       return next();
+  if (req.path === '/') {
+    if (req.subdomain === 'me') return res.redirect('/me');
+    if (req.subdomain === 'seller') return res.redirect('/seller');
+    if (req.subdomain === 'admin') return res.redirect('/admin');
+    return res.redirect('/me');
   }
+
+  if (req.subdomain === 'me' && req.path === '/me') {
+    return res.sendFile(PAGE.me);
+  }
+  if (req.subdomain === 'seller' && req.path === '/seller') {
+    return res.sendFile(PAGE.seller);
+  }
+  if (req.subdomain === 'admin' && req.path === '/admin') {
+    return res.sendFile(PAGE.admin);
+  }
+
+  return next();
 }
 app.use(serveSubdomainRoot);
 
@@ -657,8 +734,7 @@ app.use('/seller/js', express.static(path.join(__dirname, 'public', 'seller', 'j
 
 // ─── Page Routes ───────────────────────────────────────────────────────────────
 
-// Trang chủ user: chỉ lấy mã (email hoặc key) — không còn landing Netflix demo
-app.get('/', (req, res) => {
+app.get('/me', (req, res) => {
   res.sendFile(PAGE.me);
 });
 
@@ -672,12 +748,16 @@ app.get('/checker', (req, res) => {
 
 // Alias cũ → cùng trang lấy mã
 app.get('/getcode.html', (req, res) => {
-  res.sendFile(PAGE.me);
+  res.redirect('/me');
 });
 
 // Panel trên domain chính (redirect API login)
 app.get('/admin', (req, res) => res.sendFile(PAGE.admin));
 app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
+
+app.get('/', (req, res) => {
+  res.redirect('/me');
+});
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 
@@ -697,14 +777,28 @@ const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, 
 
 function mergeCheckResults(nf, nft) {
   const plan = nf.plan || nft.plan || null;
-  const paymentHold = !!(nf.paymentHold || nf.paymentError);
-  const paymentError = paymentHold || !!(nft.paymentError && !nf.reachable);
-  const planLost = !!(nf.planLost || (nf.reachable && plan && (!nf.alive || paymentHold || paymentError)));
-
-  // LIVE = còn xem được — chỉ tin kết quả direct /account (+ browse), KHÔNG tin nftoken SUCCESS
+  let paymentHold = !!nf.paymentHold;
+  let paymentError = !!nf.paymentError || !!(nft.paymentError && !nf.reachable);
+  let planLost = !!nf.planLost;
   let alive = false;
+
   if (nf.reachable) {
-    alive = !!nf.alive && !planLost;
+    alive = !!nf.alive;
+    if (nf.cancelled) {
+      alive = false;
+      planLost = false;
+      paymentError = false;
+      paymentHold = false;
+    } else {
+      const hasProfiles = Array.isArray(nf.profiles) && nf.profiles.length > 0;
+      const futureBill = !!(nf.futureBilling || (nf.billingText && nfBillingIsFuture(nf.billingText)));
+      if (plan && (futureBill || hasProfiles || nf.alive)) {
+        alive = true;
+        planLost = false;
+        paymentError = false;
+        paymentHold = false;
+      }
+    }
   } else if (!nft.skipped && nft.alive) {
     alive = !!nft.alive && !paymentError;
   }
@@ -830,11 +924,38 @@ app.post('/api/checker/batch', async (req, res) => {
 });
 
 // ─── Cloudflare Turnstile ─────────────────────────────────────────────────────
-// Test keys (luôn pass): site=1x00000000000000000000AA secret=1x0000000000000000000000000000000AA
-// Production: set TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY trong env
-const TURNSTILE_SITE_KEY   = process.env.TURNSTILE_SITE_KEY   || '1x00000000000000000000AA';
-const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
-const TURNSTILE_ENABLED    = process.env.TURNSTILE_DISABLED !== '1';
+// Production: https://dash.cloudflare.com → Turnstile → site key + secret in .env
+// Dev-only test widget: TURNSTILE_USE_TEST=1 (shows "For testing only" banner)
+const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
+const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+
+function resolveTurnstileConfig() {
+  if (process.env.TURNSTILE_DISABLED === '1') {
+    return { enabled: false, siteKey: '', secretKey: '', testMode: false, reason: 'disabled' };
+  }
+  const siteKey = String(process.env.TURNSTILE_SITE_KEY || '').trim();
+  const secretKey = String(process.env.TURNSTILE_SECRET_KEY || '').trim();
+  const isTestKey = (k) => !k || k === TURNSTILE_TEST_SITE_KEY || k.startsWith('1x00000000000000000000');
+  if (siteKey && secretKey && !isTestKey(siteKey)) {
+    return { enabled: true, siteKey, secretKey, testMode: false, reason: 'production' };
+  }
+  if (process.env.TURNSTILE_USE_TEST === '1') {
+    return {
+      enabled: true,
+      siteKey: TURNSTILE_TEST_SITE_KEY,
+      secretKey: TURNSTILE_TEST_SECRET_KEY,
+      testMode: true,
+      reason: 'test',
+    };
+  }
+  return { enabled: false, siteKey: '', secretKey: '', testMode: false, reason: 'missing_keys' };
+}
+
+const TURNSTILE_CFG = resolveTurnstileConfig();
+const TURNSTILE_SITE_KEY = TURNSTILE_CFG.siteKey;
+const TURNSTILE_SECRET_KEY = TURNSTILE_CFG.secretKey;
+const TURNSTILE_ENABLED = TURNSTILE_CFG.enabled;
+const TURNSTILE_TEST_MODE = TURNSTILE_CFG.testMode;
 
 async function verifyTurnstile(token, remoteip) {
   if (!TURNSTILE_ENABLED) return { success: true, skipped: true };
@@ -913,7 +1034,9 @@ app.get('/api/turnstile/config', (req, res) => {
   return res.json({
     success: true,
     enabled: TURNSTILE_ENABLED,
-    siteKey: TURNSTILE_SITE_KEY,
+    siteKey: TURNSTILE_ENABLED ? TURNSTILE_SITE_KEY : null,
+    testMode: TURNSTILE_TEST_MODE,
+    reason: TURNSTILE_CFG.reason,
   });
 });
 
@@ -1090,19 +1213,37 @@ app.get('/api/panel/me', (req, res) => {
 // Seller tự đăng ký → tạo account pending + gửi mã xác minh email
 app.post('/api/seller/register', async (req, res) => {
   try {
-    const username = String(req.body.username || '').trim();
-    const email    = String(req.body.email || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
+    const captcha = await verifyTurnstile(req.body.turnstileToken || req.body.token || '', getClientIp(req));
+    if (!captcha.success) {
+      return res.status(403).json({ success: false, error: captcha.error || 'Invalid captcha' });
+    }
+
+    const username    = String(req.body.username || '').trim();
+    const email       = String(req.body.email || '').trim().toLowerCase();
+    const password    = String(req.body.password || '');
+    const contactName = String(req.body.contactName || '').trim();
+    const contactType = String(req.body.contactType || '').trim().toLowerCase();
+    const contactInfo = String(req.body.contactInfo || '').trim();
+    const allowedTypes = new Set(['telegram', 'zalo', 'facebook', '']);
     if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username must be at least 3 characters' });
     if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Invalid email' });
     if (password.length < 6)   return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    if (!contactName)          return res.status(400).json({ success: false, error: 'Full name is required' });
+    if (!contactType || !allowedTypes.has(contactType)) {
+      return res.status(400).json({ success: false, error: 'Select a contact type' });
+    }
+    if (!contactInfo)          return res.status(400).json({ success: false, error: 'Contact info is required' });
     if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username already exists' });
     if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email already used' });
 
     const code    = String(Math.floor(100000 + Math.random() * 900000)); // mã 6 số
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;             // hết hạn 15 phút
     const id      = 'sel_' + crypto.randomBytes(6).toString('hex');
-    createAccount({ id, username, email, password: hashPassword(password), role: 'seller', verifyCode: code, verifyExpires: expires });
+    createAccount({
+      id, username, email, password: hashPassword(password), role: 'seller',
+      verifyCode: code, verifyExpires: expires,
+      contactName, contactType, contactInfo,
+    });
 
     const mail = await sendVerificationEmail(email, code).catch(() => ({ sent: false }));
     return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Account created. Enter the verification code sent to your email.' });
@@ -1290,6 +1431,41 @@ app.patch('/api/seller/profile', requireSeller, (req, res) => {
 app.get('/api/seller/profile', requireSeller, (req, res) => {
   const profile = getSellerProfile(req.account.id);
   return res.json({ success: true, profile });
+});
+
+// Seller đổi mật khẩu (đăng nhập bằng session, không cần captcha)
+app.post('/api/seller/change-password', requireSeller, (req, res) => {
+  try {
+    const oldPassword = String(req.body.oldPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+    const acc = getAccountById(req.account.id);
+    if (!acc || !verifyPassword(acc.password, oldPassword)) {
+      return res.status(403).json({ success: false, error: 'Current password is incorrect' });
+    }
+    setAccountPassword(req.account.id, hashPassword(newPassword));
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Seller lấy mail của tài khoản đã mua (session auth, dùng quyền của đơn — không cần captcha)
+app.post('/api/seller/mail', requireSeller, async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email.includes('@')) return res.status(400).json({ success: false, error: 'Invalid email' });
+    const order = getSellerOrders(req.account.id).find((o) => (o.accountEmail || '').toLowerCase() === email);
+    if (!order) return res.status(404).json({ success: false, error: 'Account not found in your orders' });
+    const perms = { permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily };
+    const result = await fetchInboxForEmail(email, perms);
+    result.permissions = perms;
+    return res.json(result);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // Danh sách key của seller + tổng quan
@@ -1728,5 +1904,14 @@ app.listen(PORT, () => {
   if (ADMIN_TOKEN_GENERATED) {
     console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
     console.log('    (set env ADMIN_TOKEN to pin)\n');
+  }
+  if (TURNSTILE_CFG.reason === 'production') {
+    console.log('  \x1b[32m●\x1b[0m Turnstile: production site key active');
+  } else if (TURNSTILE_CFG.reason === 'test') {
+    console.log('  \x1b[33m●\x1b[0m Turnstile: TEST keys (set TURNSTILE_SITE_KEY in .env for real widget)');
+  } else if (TURNSTILE_CFG.reason === 'missing_keys') {
+    console.log('  \x1b[33m●\x1b[0m Turnstile: off — add TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY to .env');
+  } else {
+    console.log('  \x1b[33m●\x1b[0m Turnstile: disabled (TURNSTILE_DISABLED=1)');
   }
 });

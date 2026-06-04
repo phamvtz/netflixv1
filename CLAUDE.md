@@ -112,20 +112,17 @@ public/
 
 | Subdomain | Thư mục | Route chính |
 |-----------|---------|-------------|
-| `main` | `me/` (/) | `/` lấy mã; `/admin`, `/seller`; `/checker` |
-| `me` | `me/` | `/` (Get Code) |
-| `seller` | `seller/` | `/` |
-| `admin` | `admin/` | `/` |
+| `main`    | `me/`   | `/me` (lấy mã); `/admin`, `/seller`; `/checker` (đầu vào `/` redirect sang `/me`) |
+| `me`      | `me/`   | `/me` (lấy mã; đầu vào `/` redirect sang `/me`) |
+| `seller`  | `seller/` | `/seller` (đầu vào `/` redirect sang `/seller`) |
+| `admin`   | `admin/` | `/admin` (đầu vào `/` redirect sang `/admin`) |
 
 **Filter UI:** chip status + search (`panel/js/filters.js`). Checker: stat cards (không tab trùng) + `#resultSearch`.
 
 **Sau feat/fix:** thêm dòng vào `CHANGELOG.md`, `node --check`, `npm test`.
 
-## 10. UI 3D themes (locked)
+## 10. UI theme (locked)
 
-| Surface | Style |
-|---------|--------|
-| `me/`, `admin/`, checker | Cinematic red-black (`--accent: #e50914`) |
-| `seller/` | Cyber glass green (`[data-theme="seller"]`) |
+**Monochrome black & white** — accent `#ffffff` on `#0a0a0a` bg; all surfaces (me, admin, seller, checker) share `tokens.css`.
 
-Details: `docs/UI-3D.md`. Netflix clone demo (login/browse/profiles) is **removed** — not in scope.
+Details: `docs/UI-3D.md`. Netflix clone demo is **removed**.

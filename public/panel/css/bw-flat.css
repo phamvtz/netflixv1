@@ -1,0 +1,156 @@
+/* Final flat light B&W — load last */
+
+[data-theme="seller"] .sw-app,
+[data-theme="seller"] .sw-sidebar,
+[data-theme="seller"] .sw-main,
+[data-theme="seller"] .sw-content {
+  background: #fff !important;
+  color: #000 !important;
+}
+
+[data-theme="seller"] .sw-sidebar {
+  border-right: 1px solid #d4d4d4 !important;
+}
+
+[data-theme="seller"] .sw-brand-icon {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+[data-theme="seller"] .sw-nav a.is-active {
+  box-shadow: inset 3px 0 0 #000 !important;
+  background: #eee !important;
+  color: #000 !important;
+}
+
+[data-theme="seller"] .sw-topbar {
+  background: #fff !important;
+  border-bottom: 1px solid #d4d4d4 !important;
+}
+
+[data-theme="seller"] .sw-topbar h1,
+[data-theme="seller"] .sw-brand-text,
+[data-theme="seller"] .sw-order-title {
+  color: #000 !important;
+}
+
+[data-theme="seller"] .sw-stat,
+[data-theme="seller"] .sw-card,
+[data-theme="seller"] .sw-order {
+  background: #f5f5f5 !important;
+  border: 1px solid #d4d4d4 !important;
+  box-shadow: none !important;
+}
+
+[data-theme="seller"] .sw-order-head {
+  background: #eee !important;
+}
+
+[data-theme="seller"] .sw-btn--primary,
+[data-theme="seller"] .panel-btn--primary {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+[data-theme="seller"] .sw-btn--outline,
+[data-theme="seller"] .panel-btn--ghost {
+  background: #fff !important;
+  color: #000 !important;
+  border: 1px solid #d4d4d4 !important;
+}
+
+.panel-input {
+  background: #fff;
+  color: #000;
+  border-color: var(--bd, #d4d4d4);
+}
+
+.panel-input:focus {
+  border-color: #000;
+}
+
+[data-theme="seller"] #authView .panel-input,
+[data-theme="seller"] #authView .panel-card input {
+  background: #fff !important;
+  color: #000 !important;
+  border-color: #d4d4d4 !important;
+}
+
+[data-theme="seller"] #authView .panel-label {
+  color: #333 !important;
+}
+
+[data-theme="seller"] #authView .panel-tab {
+  background: transparent !important;
+  color: #666 !important;
+}
+
+[data-theme="seller"] #authView .panel-tab.active {
+  background: transparent !important;
+  color: #000 !important;
+  border-bottom: 2px solid #000 !important;
+}
+
+[data-theme="seller"] #authView .panel-btn--primary {
+  background: #000 !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+}
+
+.filter-bar .chip.active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+.chk-page .wrap,
+.chk-page .editor-wrap,
+.chk-page .results-wrap,
+.chk-page body {
+  background: #fff;
+}
+
+.badge-live {
+  background: #000 !important;
+  color: #fff !important;
+  border: 1px solid #000 !important;
+}
+
+.badge-dead {
+  background: #eee !important;
+  color: #525252 !important;
+  border: 1px solid #d4d4d4 !important;
+}
+
+.badge-cancelled {
+  background: #fff !important;
+  color: #000 !important;
+  border: 1px solid #000 !important;
+}
+
+.row-live td { background: rgba(0, 0, 0, 0.03) !important; }
+.row-cancel td { background: rgba(0, 0, 0, 0.02) !important; }
+
+.me-hero,
+.me-panel,
+.me-card {
+  background: #fff;
+  border-color: #d4d4d4;
+}
+
+.me-submit,
+.me-nav a.is-active {
+  background: #000 !important;
+  color: #fff !important;
+  border-color: #000 !important;
+}
+
+.lang-switch {
+  background: #f5f5f5;
+  border-color: #d4d4d4;
+}
+
+.lang-switch button.is-active {
+  background: #000;
+  color: #fff;
+}

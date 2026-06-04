@@ -1,5 +1,7 @@
 'use strict';
 
+const tt = (k, v) => (typeof I18n !== 'undefined' ? I18n.t(k, v) : k);
+
 let TOKEN = sessionStorage.getItem('adminToken') || '';
 let allKeys = [];
 let allSellers = [];
@@ -74,13 +76,16 @@ async function jpatch(url, body) {
 
 function sellerPermBadges(s) {
   const b = (on, l) => `<span class="perm-badge ${on ? 'perm-badge--on' : 'perm-badge--off'}">${l}</span>`;
-  return `<div class="perm-badges">${b(s.permLogin, 'Login')}${b(s.permReset, 'Reset')}${b(s.permFamily, 'Household')}</div>`;
+  return `<div class="perm-badges">${b(s.permLogin, tt('perm.login'))}${b(s.permReset, tt('perm.reset'))}${b(s.permFamily, tt('perm.family'))}</div>`;
 }
 
 function toggleTokenMode(on) {
   show('acctLogin', !on);
   show('tokenLogin', on);
-  $('loginErr').style.display = 'none';
+  const errEl = $('loginErr');
+  if (errEl) errEl.style.display = 'none';
+  $('tabAcct')?.classList.toggle('active', !on);
+  $('tabTok')?.classList.toggle('active', !!on);
 }
 
 async function login() {
@@ -150,16 +155,9 @@ async function loadAll() {
 async function loadStats() {
   const d = await jget('/api/admin/stats');
   const s = d.stats || {};
-  const items = [
-    ['Users', s.users, false],
-    ['Profiles', s.profiles, false],
-    ['Sessions', s.sessions, false],
-    ['Content', s.content, false],
-    ['Keys', s.keys, false],
-    ['Keys used', s.keysUsed, false],
-    ['Sellers', s.sellers, false],
-    ['Pending approval', s.pendingSellers, s.pendingSellers > 0],
-  ];
+  const labels = typeof I18n !== 'undefined' ? I18n.adminStatLabels() : [];
+  const vals = [s.users, s.profiles, s.sessions, s.content, s.keys, s.keysUsed, s.sellers, s.pendingSellers];
+  const items = labels.map((l, i) => [l, vals[i], i === 7 && s.pendingSellers > 0]);
   $('stats').innerHTML = items
     .map(
       ([l, n, hot]) =>
@@ -439,29 +437,31 @@ async function toggleProduct(id) {
 }
 
 function initFilters() {
+  const C = (id, key) => (typeof I18n !== 'undefined' ? I18n.chip(id, key) : { id, label: tt(key) });
+
   keyChips = PanelFilters.bindChipBar($('keyFilterBar'), [
-    { id: 'all', label: 'All' },
-    { id: 'unused', label: 'Unused' },
-    { id: 'used', label: 'Used' },
+    C('all', 'chip.all'),
+    C('unused', 'chip.unused'),
+    C('used', 'chip.used'),
   ], (status) => {
     keyStatusFilter = status;
     renderKeys();
   });
 
   sellerChips = PanelFilters.bindChipBar($('sellerFilterBar'), [
-    { id: 'all', label: 'All' },
-    { id: 'active', label: 'Active' },
-    { id: 'pending', label: 'Pending' },
-    { id: 'rejected', label: 'Rejected' },
+    C('all', 'chip.all'),
+    C('active', 'chip.active'),
+    C('pending', 'chip.pending'),
+    C('rejected', 'chip.rejected'),
   ], (status) => {
     sellerStatusFilter = status;
     renderSellers();
   });
 
   productChips = PanelFilters.bindChipBar($('productFilterBar'), [
-    { id: 'all', label: 'All' },
-    { id: 'active', label: 'On sale' },
-    { id: 'inactive', label: 'Hidden' },
+    C('all', 'chip.all'),
+    C('active', 'chip.onSale'),
+    C('inactive', 'chip.hidden'),
   ], (status) => {
     productStatusFilter = status;
     renderProducts();
@@ -486,7 +486,39 @@ window.closeProductModal = closeProductModal;
 window.saveProduct = saveProduct;
 window.toggleProduct = toggleProduct;
 
+function syncLangSelect() {
+  const sel = $('langSelect');
+  if (!sel) return;
+  const saved = localStorage.getItem('ui_lang');
+  sel.value = saved === 'en' || saved === 'vi' ? saved : 'auto';
+}
+
+function onLangSelect(value) {
+  if (typeof I18n === 'undefined') return;
+  if (value === 'auto') {
+    localStorage.removeItem('ui_lang');
+    const nav = (navigator.language || '').toLowerCase();
+    I18n.setLang(nav.startsWith('vi') ? 'vi' : 'en');
+  } else {
+    I18n.setLang(value);
+  }
+  syncLangSelect();
+}
+
+function mountAdminLangSwitchers() {
+  if (typeof I18n === 'undefined') return;
+  const dash = $('langSwitchDash');
+  if (dash && !dash.dataset.mounted) {
+    I18n.mountSwitcher(dash);
+    dash.dataset.mounted = '1';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  mountAdminLangSwitchers();
+  syncLangSelect();
+  $('langSelect')?.addEventListener('change', (e) => onLangSelect(e.target.value));
+  document.addEventListener('langchange', syncLangSelect);
   initFilters();
   $('productModal')?.addEventListener('click', (e) => {
     if (e.target === $('productModal')) closeProductModal();
@@ -502,4 +534,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (d.success && d.account.role === 'admin') showDash();
     }
   })();
+});
+
+document.addEventListener('langchange', () => {
+  initFilters();
+  if (TOKEN) loadStats();
+  I18n.apply();
 });

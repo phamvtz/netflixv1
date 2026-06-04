@@ -7,6 +7,7 @@ const {
   nfIsValidEmail,
   nfExtractEmailFromHtml,
   nfDetectPaymentHold,
+  nfAccountPagePaymentHold,
 } = require('../lib/nf-email-parse');
 
 describe('Netflix email parse', () => {
@@ -39,5 +40,32 @@ describe('Netflix email parse', () => {
   it('nfDetectPaymentHold bắt text rải trong HTML (fuzzy)', () => {
     const html = '<script>{"msg":"Update your payment information to continue enjoying Netflix"}</script>';
     assert.equal(nfDetectPaymentHold(html), true);
+  });
+
+  it('nfDetectPaymentHold không nhầm hasPaymentIssue:false trong JSON', () => {
+    const html = '<script>{"hasPaymentIssue":false,"paymentIssue":false,"planName":"Premium"}</script>';
+    assert.equal(nfDetectPaymentHold(html), false);
+  });
+
+  it('nfDetectPaymentHold không nhầm link quản lý phương thức thanh toán (VI)', () => {
+    const html = `
+      <div>Gói Cao cấp</div>
+      <div>Ngày thanh toán tiếp theo: 30 tháng 6, 2026</div>
+      <a>Quản lý phương thức thanh toán</a>
+      <a>Cập nhật phương thức thanh toán</a>
+    `;
+    assert.equal(nfDetectPaymentHold(html), false);
+    assert.equal(nfAccountPagePaymentHold(html), false);
+  });
+
+  it('nfAccountPagePaymentHold ignores browse notification heuristics', () => {
+    const html = `
+      <div data-uia="account-overview-page+notification+banner">Reminder</div>
+      <div>Gói Cao cấp</div>
+      <div>Ngày thanh toán tiếp theo: 30 tháng 6, 2026</div>
+      <a>Quản lý phương thức thanh toán</a>
+    `;
+    assert.equal(nfAccountPagePaymentHold(html), false);
+    assert.equal(nfDetectPaymentHold(html), false);
   });
 });

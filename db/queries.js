@@ -357,12 +357,22 @@ function setSellerPerms(sellerId, { permLogin, permReset, permFamily }, db) {
   return info.changes > 0;
 }
 
-function createAccount({ id, username, email, password, role, verifyCode, verifyExpires }, db) {
+function createAccount({
+  id, username, email, password, role, verifyCode, verifyExpires,
+  contactName, contactType, contactInfo,
+}, db) {
   const conn = db || defaultDb();
   conn.prepare(`
-    INSERT INTO accounts (id, username, email, password, role, status, email_verified, verify_code, verify_expires)
-    VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)
-  `).run(id, username, email, password, role, verifyCode ?? null, verifyExpires ?? null);
+    INSERT INTO accounts (
+      id, username, email, password, role, status, email_verified,
+      verify_code, verify_expires, contact_name, contact_type, contact_info
+    )
+    VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?, ?)
+  `).run(
+    id, username, email, password, role,
+    verifyCode ?? null, verifyExpires ?? null,
+    contactName ?? null, contactType ?? null, contactInfo ?? null,
+  );
   return mapAccount(conn.prepare('SELECT * FROM accounts WHERE id = ?').get(id));
 }
 
@@ -394,6 +404,12 @@ function markEmailVerified(id, db) {
 function setAccountStatus(id, status, db) {
   const conn = db || defaultDb();
   const info = conn.prepare('UPDATE accounts SET status = ? WHERE id = ?').run(status, id);
+  return info.changes > 0;
+}
+
+function setAccountPassword(id, passwordHash, db) {
+  const conn = db || defaultDb();
+  const info = conn.prepare('UPDATE accounts SET password = ? WHERE id = ?').run(passwordHash, id);
   return info.changes > 0;
 }
 
@@ -462,6 +478,7 @@ module.exports = {
   getAccountByUsername,
   getAccountByEmail,
   getAccountById,
+  setAccountPassword,
   setVerifyCode,
   markEmailVerified,
   setAccountStatus,

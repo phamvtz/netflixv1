@@ -1,0 +1,51 @@
+/* Admin — auth page on shared form-card style */
+
+body.admin-page {
+  background: var(--fc-bg) !important;
+}
+
+body.admin-page.ui-scene--cinematic {
+  background: var(--fc-bg) !important;
+}
+
+.admin-auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px 48px;
+  background: var(--fc-bg);
+}
+
+.admin-auth-shell {
+  width: 100%;
+  max-width: 440px;
+}
+
+.form-card-kicker {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fc-blue);
+  margin: 0 0 6px;
+}
+
+.form-card-footer {
+  text-align: center;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+  color: var(--fc-muted);
+}
+
+.form-card-footer a {
+  color: var(--fc-muted);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.form-card-footer a:hover {
+  color: var(--fc-blue);
+}

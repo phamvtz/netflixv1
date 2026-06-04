@@ -1,46 +1,29 @@
-/* Design tokens — panel admin / seller */
+/* Design tokens — light B&W (black text on white) */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --bg: #0b0b10;
-  --card: #15151d;
-  --bd: #262633;
-  --t1: #e9eaf0;
-  --t2: #8a93a6;
-  --t3: #5b6273;
-  --green: #46d369;
-  --amber: #f5a623;
-  --red-ui: #ff8a8a;
-  --mono: #7ecff5;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --accent: #e50914;
-  --accent-hover: #ff1a25;
-  --accent-soft: rgba(229, 9, 20, 0.16);
-  --focus: var(--accent);
-  --btn-text-on-accent: #fff;
-}
-
-[data-theme="admin"] {
-  --bg: #0b0b10;
-  --card: #15151d;
-  --bd: #262633;
-  --accent: #e50914;
-  --accent-hover: #ff1a25;
-  --accent-soft: rgba(229, 9, 20, 0.16);
-}
-
+:root,
+[data-theme="admin"],
 [data-theme="seller"] {
-  --bg: #0f1623;
-  --card: rgba(255, 255, 255, 0.05);
-  --bd: rgba(255, 255, 255, 0.1);
-  --t1: #e9eef5;
-  --t2: #9fb0c3;
-  --t3: #687585;
-  --accent: #46d369;
-  --accent-hover: #5ae07f;
-  --accent-soft: rgba(70, 211, 105, 0.14);
-  --focus: var(--accent);
-  --btn-text-on-accent: #06240f;
-  --mono: #7ef5a0;
+  --bg: #ffffff;
+  --card: #f5f5f5;
+  --bd: #d4d4d4;
+  --t1: #000000;
+  --t2: #525252;
+  --t3: #737373;
+  --accent: #000000;
+  --accent-hover: #333333;
+  --accent-soft: #eeeeee;
+  --focus: #000000;
+  --btn-text-on-accent: #ffffff;
+  --mono: #333333;
+  --green: #000000;
+  --amber: #666666;
+  --red-ui: #888888;
+  --status-ok: #000000;
+  --status-warn: #666666;
+  --status-bad: #999999;
+  --radius: 8px;
+  --radius-sm: 4px;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --row-hover: rgba(0, 0, 0, 0.03);
 }

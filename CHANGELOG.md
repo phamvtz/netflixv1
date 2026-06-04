@@ -2,9 +2,22 @@
 
 ## [Unreleased]
 
+### Changed
+- Subdomain Routing: Split pages into specific paths per subdomain: `me.domain/me` (Get Code), `admin.domain/admin` (Admin Panel), and `seller.domain/seller` (Seller Workspace) with root `/` redirecting to their respective paths.
+- Get Code (`me/`): inbox form layout like reference — centered card, blue tabs/button, Turnstile, separate result card with green badge + blue spaced code; shared `form-card.css`; lang **Auto (by IP)** / EN / VI.
+- Seller auth: same lang dropdown + `form-card.css` tokens.
+- UI: **light B&W** — white background, black text; primary buttons black-on-white; `bw-flat.css` on all panel pages.
+
+### Fixed
+- Checker: tài khoản **LIVE** UI tiếng Việt (Gói Cao cấp + ngày thanh toán tương lai) không còn báo nhầm **PLAN LOST** khi thiếu nút Cancel tiếng Anh / `data-uia` payment.
+- Checker: **ngày thanh toán tương lai** → luôn **LIVE**; bỏ false positive `cập nhật phương thức thanh toán`; `mergeCheckResults` không gán lại PLAN LOST sau khi server đã resolve.
+- Checker: sửa false positive `"hasPaymentIssue":false` và từ khóa `payment issue` trong HTML → không còn MẤT GÓI khi có ngày TT tương lai (vd. `6 tháng 6, 2026`).
+
 ### Added
 - UI depth (T1): `panel/css/depth.css` — cinematic scene for me/admin/checker, cyber glass for seller stats/cards.
 - Get Code page: `me/me.css` red-black cinematic theme (replaces light inline styles).
+- Brand layer: `brand.css`, `seller-cyber.css` — Outfit/JetBrains fonts, mesh grids, split Get Code hero, dark seller workspace, checker ops chrome.
+- UI theme switched to **monochrome B&W** (white accent on `#0a0a0a`) across me, admin, seller, checker.
 
 ### Removed
 - Netflix clone demo UI (`login`, `browse`, `profiles`, landing) and APIs (`/api/auth/*`, `/api/profiles*`, `/api/content`, `/api/session/info`). Checker + panel only.

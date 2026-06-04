@@ -1,15 +1,10 @@
 'use strict';
 
-const PAGE_META = {
-  stats: { title: 'Stats', caption: 'Overview of orders, keys and balance.' },
-  orders: { title: 'Your orders', caption: 'Manage purchased accounts — renew, copy, enable code permissions for customers.' },
-  keys: { title: 'Manage Keys', caption: 'Create keys tied to purchased accounts and assign access permissions. Replace email when needed.' },
-  store: { title: 'Store', caption: 'Buy Netflix accounts — deducts balance, creates orders automatically.' },
-  emails: { title: 'Manage email', caption: 'List of emails from purchased orders.' },
-  transactions: { title: 'Transaction history', caption: 'Top ups, purchases and balance.' },
-  profile: { title: 'Profile', caption: 'Customer support contact.' },
-  checker: { title: 'Cookie checker', caption: 'Check whether account cookies are still LIVE.' },
-};
+const tt = (k, v) => (typeof I18n !== 'undefined' ? I18n.t(k, v) : k);
+
+function pageMeta(view) {
+  return typeof I18n !== 'undefined' ? I18n.sellerMeta(view) : { title: view, caption: '' };
+}
 
 const PERM_DEFS = [
   { field: 'permLogin', label: 'Login code' },
@@ -63,7 +58,7 @@ function toast(msg) {
 async function copyText(s) {
   try {
     await navigator.clipboard.writeText(s);
-    toast('Copied');
+    toast(tt('common.copied'));
   } catch { toast('Copy manually: ' + s); }
 }
 
@@ -104,7 +99,7 @@ function closeSidebar() {
   $('swOverlay')?.classList.remove('show');
 }
 
-const VIEWS = ['stats', 'orders', 'keys', 'store', 'emails', 'transactions', 'profile', 'checker'];
+const VIEWS = ['stats', 'orders', 'keys', 'store', 'emails', 'deposit', 'transactions', 'profile'];
 
 function switchView(v) {
   closeSidebar();
@@ -112,14 +107,14 @@ function switchView(v) {
     a.classList.toggle('is-active', a.dataset.view === v);
   });
   VIEWS.forEach((id) => show('view' + id.charAt(0).toUpperCase() + id.slice(1), id === v));
-  const meta = PAGE_META[v] || PAGE_META.orders;
-  $('pageTitle').textContent = meta.title;
-  $('pageCaption').textContent = meta.caption;
+  const meta = pageMeta(v);
+  if ($('pageTitle')) $('pageTitle').textContent = meta.title;
   if (v === 'orders') loadOrders();
   if (v === 'keys') window.SellerKeys?.loadKeys();
   if (v === 'store') loadStore();
-  if (v === 'emails') loadEmails();
+  if (v === 'emails') loadEmailAccounts();
   if (v === 'transactions') loadTransactions();
+  if (v === 'deposit') loadDeposit();
   if (v === 'stats') renderStats();
   if (v === 'profile') fillProfile();
 }
@@ -143,12 +138,65 @@ async function loadDashboard() {
   dashboard = d;
   sellerPerms = d.sellerPerms || sellerPerms;
   updateBalanceUI();
-  const s = d.stats || {};
-  if ($('stTotal')) $('stTotal').textContent = s.ordersTotal ?? 0;
-  if ($('stUsed')) $('stUsed').textContent = s.keysUsed ?? 0;
-  if ($('stUnused')) $('stUnused').textContent = s.keysUnused ?? 0;
-  if ($('stFamily')) $('stFamily').textContent = s.withFamily ?? 0;
-  if ($('statsPermHint')) $('statsPermHint').textContent = adminPermHint();
+  renderStats();
+}
+
+function renderStats() {
+  const s = dashboard?.stats || {};
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('stBalance', fmtVnd(dashboard?.balance ?? 0));
+  set('stTotal', s.ordersTotal ?? 0);
+  set('stKeysSold', s.keysUsed ?? s.keysTotal ?? 0);
+  set('stEmailsSold', s.ordersTotal ?? 0);
+  renderDashRecent();
+}
+
+function startOfMonthSec() {
+  const d = new Date();
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+}
+function startOfDaySec() {
+  const d = new Date();
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 1000);
+}
+
+async function renderDashRecent() {
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  const d = await api('/api/seller/transactions');
+  const txns = d?.transactions || [];
+
+  const monthStart = startOfMonthSec();
+  const dayStart = startOfDaySec();
+  const spentMonth = txns.filter((t) => t.type === 'purchase' && t.createdAt >= monthStart)
+    .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+  const spentToday = txns.filter((t) => t.type === 'purchase' && t.createdAt >= dayStart)
+    .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+  set('stSpentMonth', fmtVnd(spentMonth));
+  set('stSpentToday', fmtVnd(spentToday));
+
+  const txBody = $('dashTxBody');
+  if (txBody) {
+    const rows = txns.slice(0, 5);
+    txBody.innerHTML = rows.length ? rows.map((t) => {
+      const pos = t.amount >= 0;
+      const typeTxt = t.type === 'topup' ? tt('seller.tx.typeTopup') : t.type === 'purchase' ? tt('seller.tx.typePurchase') : tt('seller.tx.typeAdjust');
+      return `<tr>
+        <td>${fmtTs(t.createdAt)}</td>
+        <td><span class="perm-badge ${pos ? 'perm-badge--on' : 'perm-badge--off'}">${typeTxt}</span></td>
+        <td style="color:${pos ? '#16A34A' : '#DC2626'};font-weight:600">${pos ? '+' : ''}${fmtVnd(t.amount)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="3" class="panel-empty">${tt('seller.tx.empty')}</td></tr>`;
+  }
+  const odBody = $('dashOrdersBody');
+  if (odBody) {
+    const rows = (allOrders || []).slice(0, 5);
+    odBody.innerHTML = rows.length ? rows.map((o) => `
+      <tr>
+        <td>${esc(o.accountEmail || '—')}</td>
+        <td>${esc(o.productName || '')}</td>
+        <td><span class="sw-order-badge ${o.status === 'expired' ? 'sw-order-badge--expired' : ''}">${o.status === 'expired' ? tt('seller.orders.expired') : tt('chip.active')}</span></td>
+      </tr>`).join('') : `<tr><td colspan="3" class="panel-empty">${tt('seller.orders.empty')}</td></tr>`;
+  }
 }
 
 function debounceLoadOrders() {
@@ -362,18 +410,62 @@ async function loadStore() {
     dashboard.balance = d.balance;
     updateBalanceUI();
   }
+  renderStoreGrid();
+}
+
+function renderStoreGrid() {
   const grid = $('storeGrid');
   if (!grid) return;
-  grid.innerHTML = products.map((p) => `
+  const q = ($('storeSearch')?.value || '').toLowerCase();
+  const sort = $('storeSort')?.value || 'featured';
+  let list = products.filter((p) => !q || (p.name || '').toLowerCase().includes(q));
+  if (sort === 'priceAsc') list = [...list].sort((a, b) => a.price - b.price);
+  if (sort === 'priceDesc') list = [...list].sort((a, b) => b.price - a.price);
+
+  const tags = ['HOT', 'NEW', 'NEW'];
+  grid.innerHTML = list.map((p, i) => {
+    const tagCls = i % 3 === 0 ? '' : 'prod-tag--new';
+    const tag = tags[i % 3];
+    return `
     <div class="sw-product-card">
-      <h3>${esc(p.name)}</h3>
-      <p class="sub">${esc(p.durationLabel || '')} · ${esc(p.warrantyNote || '')}</p>
-      <div class="sw-price">${fmtVnd(p.price)}</div>
-      <button type="button" class="sw-btn sw-btn--primary" style="margin-top:12px;width:100%" data-buy="${esc(p.id)}">Buy now</button>
-    </div>`).join('');
+      <div class="prod-banner">
+        <div class="nf-mark">NETFLIX</div>
+        <span class="prod-tag ${tagCls}">${tag}</span>
+        <span class="prod-dur">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          ${esc(p.durationLabel || '')}
+        </span>
+      </div>
+      <div class="prod-body">
+        <div class="prod-name">${esc(p.name)}</div>
+        <div class="prod-desc">${esc(p.warrantyNote || tt('seller.store.fullWarranty'))}</div>
+        <div class="prod-price">${fmtVnd(p.price)}</div>
+        <div class="prod-actions">
+          <button type="button" class="sw-btn sw-btn--outline" data-view-prod="${esc(p.id)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            ${tt('seller.store.view')}
+          </button>
+          <button type="button" class="sw-btn sw-btn--primary" data-buy="${esc(p.id)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            ${tt('seller.store.buy')}
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
   grid.querySelectorAll('[data-buy]').forEach((btn) => {
     btn.addEventListener('click', () => openBuyModal(btn.dataset.buy));
   });
+  grid.querySelectorAll('[data-view-prod]').forEach((btn) => {
+    btn.addEventListener('click', () => openBuyModal(btn.dataset.viewProd));
+  });
+}
+
+function clearCart() {
+  $('storeCart')?.classList.remove('is-open');
+}
+function checkoutCart() {
+  toast(tt('seller.store.pickProduct'));
 }
 
 function openBuyModal(productId) {
@@ -408,92 +500,256 @@ async function confirmBuy() {
   switchView('orders');
 }
 
-async function loadEmails() {
+// ── Email view ──
+let emailAccounts = [];
+let pickedEmailAccount = null;
+
+async function loadEmailAccounts() {
   const d = await api('/api/seller/emails');
-  const body = $('emailsBody');
-  if (!d.success || !body) return;
-  const rows = d.emails || [];
-  body.innerHTML = rows.length
-    ? rows.map((e) => `<tr>
-        <td>${esc(e.email)}</td>
-        <td>${e.orderCount}</td>
-        <td>${fmtTs(e.latestExpires)}</td>
-        <td><button type="button" class="sw-btn sw-btn--outline" onclick="copyText('${esc(e.email)}')">Copy</button></td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="panel-empty">No emails yet</td></tr>';
+  if (!d.success) return;
+  emailAccounts = (d.emails || []).map((e) => ({ email: e.email, latestExpires: e.latestExpires, orderCount: e.orderCount }));
+  $('emailBanner')?.classList.add('hidden');
+  $('mailList').innerHTML = '';
+  $('emailPicker').value = '';
+  pickedEmailAccount = null;
+  renderEmailDropdown('');
 }
+
+function renderEmailDropdown(q) {
+  const dd = $('emailPickerDropdown');
+  if (!dd) return;
+  const ql = q.toLowerCase();
+  const list = emailAccounts.filter((e) => !ql || e.email.toLowerCase().includes(ql)).slice(0, 50);
+  if (!list.length) {
+    dd.innerHTML = '<div class="email-opt" style="cursor:default;color:#94a3b8">' + tt('seller.emails.noAcc') + '</div>';
+  } else {
+    dd.innerHTML = list.map((e) => `
+      <div class="email-opt" data-email="${esc(e.email)}">
+        <span>${esc(e.email)}</span>
+        <span class="meta">HSD: ${fmtTs(e.latestExpires)}</span>
+      </div>`).join('');
+  }
+  dd.classList.add('is-open');
+  dd.querySelectorAll('[data-email]').forEach((opt) => {
+    opt.addEventListener('click', () => {
+      const em = opt.dataset.email;
+      pickedEmailAccount = em;
+      $('emailPicker').value = em;
+      dd.classList.remove('is-open');
+    });
+  });
+}
+
+async function fetchSellerMail() {
+  const email = ($('emailPicker').value || '').trim();
+  if (!email) return toast(tt('seller.emails.pickFirst'));
+  const btn = $('fetchMailBtn');
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = `<span class="form-spinner"></span><span>${tt('common.searching')}</span>`;
+  try {
+    const d = await api('/api/seller/mail', { email });
+    if (!d.success) throw new Error(d.error || 'error');
+    renderMailList(d.emails || [], email);
+  } catch (e) {
+    toast(tt('common.error') + ': ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+function renderMailList(emails, accountEmail) {
+  const banner = $('emailBanner');
+  const banText = $('emailBannerText');
+  if (banner) {
+    if (emails.length) {
+      banner.classList.remove('hidden');
+      banText.textContent = tt('seller.emails.found').replace('{n}', emails.length);
+    } else {
+      banner.classList.remove('hidden');
+      banText.textContent = tt('seller.emails.none');
+    }
+  }
+  const list = $('mailList');
+  if (!emails.length) {
+    list.innerHTML = `<div class="sw-empty"><h3>${tt('me.noCode')}</h3><p>${tt('me.tryAgain')}</p></div>`;
+    return;
+  }
+  list.innerHTML = emails.map((m, i) => mailCardHtml(m, i, emails.length, accountEmail)).join('');
+  list.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy)));
+}
+
+function mailCardHtml(m, i, total, accountEmail) {
+  const code = m.extracted_code || '';
+  const fam = m.family_code || '';
+  const reset = m.reset_link || '';
+  const time = m.time ? new Date(m.time).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const tag = i === 0 ? tt('seller.emails.latest') : `#${i + 1}`;
+
+  let body = '';
+  let label = '';
+  let value = '';
+  if (code) { label = tt('me.loginCode'); value = code; }
+  else if (fam) { label = tt('me.household'); value = fam; }
+  else if (reset) { label = tt('me.resetLink'); value = reset.length > 40 ? reset.slice(0, 40) + '…' : reset; }
+  else { value = esc(m.subject || ''); }
+
+  if (value) {
+    const spaced = code ? value.split('').join(' ') : value;
+    body = `
+      <div class="mc-body">
+        <div>
+          <div class="mc-label">${label}</div>
+          <div class="mc-code">${esc(spaced)}</div>
+        </div>
+        <button type="button" class="mc-copy" data-copy="${esc(value)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          ${tt('common.copy')}
+        </button>
+      </div>`;
+  }
+
+  return `
+    <div class="sw-mail-card">
+      <div class="mc-head">
+        <span class="mc-tag">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+          ${tag} / ${total}
+        </span>
+        <span class="mc-time">${esc(time)}</span>
+      </div>
+      <div class="mc-meta">Email: ${esc(accountEmail)} · ${esc(m.subject || 'Netflix')}</div>
+      ${body}
+    </div>`;
+}
+
+let allTransactions = [];
+let txPage = 1;
+const TX_PER_PAGE = 12;
 
 async function loadTransactions() {
   const d = await api('/api/seller/transactions');
   if (!d.success) return;
   const s = d.summary || {};
   $('txnSummary').innerHTML = `
-    <div class="sw-stat"><div class="n">${fmtVnd(s.totalTopup)}</div><div class="l">Total top up</div></div>
-    <div class="sw-stat"><div class="n accent">${fmtVnd(s.balance)}</div><div class="l">Current balance</div></div>
-    <div class="sw-stat"><div class="n">${fmtVnd(s.totalMinus)}</div><div class="l">Total deducted</div></div>
-    <div class="sw-stat"><div class="n">${(d.transactions || []).length}</div><div class="l">Transactions</div></div>`;
-  dashboard.balance = s.balance;
-  updateBalanceUI();
-  const typeLabel = { topup: 'Top up', purchase: 'Purchase', admin_adjust: 'Adjustment' };
-  $('txnBody').innerHTML = (d.transactions || []).map((t) => {
+    <div class="sw-stat" data-accent="orange">
+      <div class="l">${tt('seller.tx.totalTopup')}</div>
+      <div class="n">${fmtVnd(s.totalTopup)}</div>
+    </div>
+    <div class="sw-stat" data-accent="amber">
+      <div class="l">${tt('seller.tx.totalPlus')}</div>
+      <div class="n">${fmtVnd(s.totalPlus ?? s.totalTopup)}</div>
+    </div>
+    <div class="sw-stat" data-accent="red">
+      <div class="l">${tt('seller.tx.totalMinus')}</div>
+      <div class="n">${fmtVnd(s.totalMinus)}</div>
+    </div>
+    <div class="sw-stat" data-accent="blue">
+      <div class="l">${tt('seller.tx.balance')}</div>
+      <div class="n accent">${fmtVnd(s.balance)}</div>
+    </div>`;
+  if (dashboard) { dashboard.balance = s.balance; updateBalanceUI(); }
+  allTransactions = d.transactions || [];
+  txPage = 1;
+  renderTransactions();
+}
+
+function renderTransactions() {
+  if (!$('txnBody')) return;
+  const typeF = $('txTypeFilter')?.value || 'all';
+  const q = ($('txSearch')?.value || '').toLowerCase();
+  const from = $('txDateFrom')?.value ? Date.parse($('txDateFrom').value) / 1000 : null;
+  const to = $('txDateTo')?.value ? Date.parse($('txDateTo').value) / 1000 + 86400 : null;
+  let rows = allTransactions.filter((t) => {
+    if (typeF !== 'all' && t.type !== typeF) return false;
+    if (q && !((t.id || '') + (t.description || '')).toLowerCase().includes(q)) return false;
+    if (from && t.createdAt < from) return false;
+    if (to && t.createdAt > to) return false;
+    return true;
+  });
+  const pages = Math.max(1, Math.ceil(rows.length / TX_PER_PAGE));
+  if (txPage > pages) txPage = pages;
+  const pageRows = rows.slice((txPage - 1) * TX_PER_PAGE, txPage * TX_PER_PAGE);
+  const typeLabel = {
+    topup: { txt: tt('seller.tx.typeTopup'), cls: 'perm-badge--on' },
+    purchase: { txt: tt('seller.tx.typePurchase'), cls: 'perm-badge--off' },
+    admin_adjust: { txt: tt('seller.tx.typeAdjust'), cls: 'perm-badge--off' },
+  };
+  $('txnBody').innerHTML = pageRows.length ? pageRows.map((t) => {
     const pos = t.amount >= 0;
+    const tl = typeLabel[t.type] || { txt: t.type, cls: 'perm-badge--off' };
     return `<tr>
       <td>${fmtTs(t.createdAt)}</td>
-      <td>${typeLabel[t.type] || t.type}</td>
-      <td style="color:${pos ? '#15803d' : '#b91c1c'}">${pos ? '+' : ''}${fmtVnd(t.amount)}</td>
+      <td><span class="perm-badge ${tl.cls}">${tl.txt}</span></td>
+      <td style="color:${pos ? '#15803d' : '#b91c1c'};font-weight:700">${pos ? '+' : ''}${fmtVnd(t.amount)}</td>
       <td>${fmtVnd(t.balanceAfter)}</td>
+      <td style="font-family:var(--sw-mono);font-size:0.78rem;color:#dc2626">${esc(t.id || '—')}</td>
       <td>${esc(t.description || '')}</td>
+      <td><span class="perm-badge perm-badge--on">${tt('seller.tx.statusDone')}</span></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="panel-empty">No transactions yet</td></tr>';
-}
-
-// ── Checker cookie ──
-function checkerBadge(r) {
-  if (r.rateLimited) return '<span class="sw-order-badge sw-order-badge--expired">RATE LIMIT</span>';
-  if (r.planLost || (r.paymentError && r.plan)) return '<span class="sw-order-badge sw-order-badge--expired">PLAN LOST</span>';
-  if (r.alive && r.cancelled) return '<span class="sw-order-badge sw-order-badge--expired">CANCELLED</span>';
-  if (r.alive) return '<span class="sw-order-badge">LIVE</span>';
-  return '<span class="sw-order-badge sw-order-badge--expired">DEAD</span>';
-}
-
-function updateCheckerRow(i, r) {
-  const tr = $('chk-' + i);
-  if (!tr) return;
-  tr.children[1].innerHTML = checkerBadge(r) + (r.error ? `<div class="note-sub">${esc(r.error)}</div>` : '');
-  tr.children[2].textContent = r.plan || '—';
-  tr.children[3].textContent = r.email || '—';
-}
-
-async function runChecker() {
-  const lines = ($('chkInput').value || '')
-    .split('\n').map((s) => s.trim())
-    .filter((s) => s.includes('NetflixId=') || s.length > 30);
-  if (!lines.length) return toast('Paste a cookie (containing NetflixId=) first');
-
-  const pace = $('chkPace')?.value || 'stealth';
-  const btn = $('chkBtn');
-  btn.disabled = true;
-  btn.textContent = 'Checking…';
-  // Render hàng "đang chờ" trước, rồi check tuần tự cập nhật từng dòng
-  $('chkResults').innerHTML = lines
-    .map((_, i) => `<tr id="chk-${i}"><td>${i + 1}</td><td><span class="sw-order-badge">…</span></td><td>—</td><td>—</td></tr>`)
-    .join('');
-
-  for (let i = 0; i < lines.length; i++) {
-    let r;
-    try { r = await api('/api/checker/live-check', { cookie: lines[i], pace }); }
-    catch (e) { r = { alive: false, error: e.message }; }
-    updateCheckerRow(i, r);
-    if (r.rateLimited) { toast(r.error || 'Hourly check limit reached'); break; }
+  }).join('') : `<tr><td colspan="7" class="panel-empty">${tt('seller.tx.empty')}</td></tr>`;
+  const pag = $('txnPagination');
+  if (pag) {
+    pag.innerHTML = `<span>${tt('seller.tx.pageLabel').replace('{p}', txPage).replace('{t}', pages).replace('{n}', rows.length)}</span>
+      <span>
+        ${txPage > 1 ? `<button type="button" class="sw-btn sw-btn--outline sw-btn--sm" id="txPrev">← ${tt('seller.tx.prev')}</button>` : ''}
+        ${txPage < pages ? `<button type="button" class="sw-btn sw-btn--outline sw-btn--sm" id="txNext">${tt('seller.tx.next')} →</button>` : ''}
+      </span>`;
+    $('txPrev')?.addEventListener('click', () => { txPage--; renderTransactions(); });
+    $('txNext')?.addEventListener('click', () => { txPage++; renderTransactions(); });
   }
-
-  btn.disabled = false;
-  btn.textContent = 'Check';
 }
 
-function renderStats() {
-  if ($('statsPermBadges')) $('statsPermBadges').innerHTML = permBadgesHtml(sellerPerms);
-  if ($('statsPermHint')) $('statsPermHint').textContent = adminPermHint();
+async function loadDeposit() {
+  const balance = dashboard?.balance ?? 0;
+  if ($('depBalance')) $('depBalance').textContent = fmtVnd(balance);
+  const username = ($('topUserName')?.textContent || 'seller').trim();
+  if ($('depMemo')) $('depMemo').textContent = 'chuyen tien ' + username.toUpperCase();
+  const qr = $('depositQr');
+  if (qr) {
+    const acct = $('depAcct')?.textContent.trim() || '';
+    const holder = $('depHolder')?.textContent.trim() || '';
+    qr.src = `https://img.vietqr.io/image/VCB-${acct}-compact.png?addInfo=${encodeURIComponent('chuyen tien ' + username.toUpperCase())}&accountName=${encodeURIComponent(holder)}`;
+  }
+  document.querySelectorAll('[data-copy-from]').forEach((b) => {
+    if (b._bound) return;
+    b._bound = true;
+    b.addEventListener('click', () => {
+      const tgt = $(b.getAttribute('data-copy-from'));
+      if (tgt) copyText(tgt.textContent.trim());
+    });
+  });
+  const d = await api('/api/seller/transactions');
+  const rows = (d?.transactions || []).slice(0, 10);
+  const body = $('depRecentBody');
+  if (body) {
+    body.innerHTML = rows.length ? rows.map((t) => {
+      const pos = t.amount >= 0;
+      const typeTxt = t.type === 'topup' ? tt('seller.tx.typeTopup') : t.type === 'purchase' ? tt('seller.tx.typePurchase') : tt('seller.tx.typeAdjust');
+      return `<tr>
+        <td>${fmtTs(t.createdAt)}</td>
+        <td><span class="perm-badge ${pos ? 'perm-badge--on' : 'perm-badge--off'}">${typeTxt}</span></td>
+        <td style="color:${pos ? '#15803d' : '#b91c1c'};font-weight:700">${pos ? '+' : ''}${fmtVnd(t.amount)}</td>
+        <td>${fmtVnd(t.balanceAfter)}</td>
+        <td style="font-family:var(--sw-mono);font-size:0.78rem;color:#dc2626">${esc(t.id || '—')}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="5" class="panel-empty">${tt('seller.tx.empty')}</td></tr>`;
+  }
+}
+
+async function changePassword() {
+  const oldP = $('pfPwOld').value;
+  const newP = $('pfPwNew').value;
+  const newP2 = $('pfPwNew2').value;
+  setErr('pfPwErr');
+  setOk('pfPwOk');
+  if (newP.length < 6) return setErr('pfPwErr', tt('seller.errPassword'));
+  if (newP !== newP2) return setErr('pfPwErr', tt('seller.errPassMismatch'));
+  const d = await api('/api/seller/change-password', { oldPassword: oldP, newPassword: newP }, 'POST');
+  if (!d.success) return setErr('pfPwErr', d.error || tt('common.error'));
+  setOk('pfPwOk', tt('seller.profile.pwOk'));
+  $('pfPwOld').value = $('pfPwNew').value = $('pfPwNew2').value = '';
 }
 
 function fillProfile() {
@@ -517,6 +773,33 @@ async function saveProfile() {
 }
 
 // ── Auth ──
+let sellerTurnstileToken = null;
+let sellerTurnstileWidgetId = null;
+let sellerTurnstileEnabled = true;
+let sellerTurnstileInited = false;
+
+function authT(key, fallback, vars) {
+  if (typeof I18n === 'undefined') return fallback;
+  const s = I18n.t(key, vars);
+  return s === key ? fallback : s;
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.defer = true;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
 function setErr(id, msg) {
   const e = $(id);
   if (!e) return;
@@ -530,12 +813,78 @@ function setOk(id, msg) {
   e.style.display = msg ? 'block' : 'none';
 }
 
+function togglePw(inputId, btn) {
+  const el = $(inputId);
+  if (!el || !btn) return;
+  const revealing = el.type === 'password';
+  el.type = revealing ? 'text' : 'password';
+  btn.textContent = revealing ? authT('seller.hidePw', 'Hide') : authT('seller.showPw', 'Show');
+  btn.setAttribute('aria-label', revealing ? authT('seller.hidePw', 'Hide password') : authT('seller.showPw', 'Show password'));
+}
+
+function updateRegSubmitState() {
+  const btn = $('rgBtn');
+  if (!btn) return;
+  const termsOk = !!$('rgTerms')?.checked;
+  const captchaOk = !sellerTurnstileEnabled || !!sellerTurnstileToken;
+  btn.disabled = !(termsOk && captchaOk);
+}
+
+function resetSellerTurnstile() {
+  sellerTurnstileToken = null;
+  if (sellerTurnstileWidgetId != null && window.turnstile) {
+    try { turnstile.reset(sellerTurnstileWidgetId); } catch { /* ignore */ }
+  }
+  updateRegSubmitState();
+}
+
+async function initSellerTurnstile() {
+  if (sellerTurnstileInited) return;
+  sellerTurnstileInited = true;
+  const wrap = $('sellerTurnstileWrap');
+  if (!wrap) return;
+  try {
+    const cfg = await fetch('/api/turnstile/config').then((r) => r.json());
+    sellerTurnstileEnabled = !!cfg.enabled;
+    if (!sellerTurnstileEnabled) {
+      wrap.style.display = 'none';
+      sellerTurnstileToken = 'disabled';
+      updateRegSubmitState();
+      return;
+    }
+    await loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit');
+    if (cfg.testMode) wrap.classList.add('form-turnstile--test');
+    sellerTurnstileWidgetId = turnstile.render('#sellerTurnstileWrap', {
+      sitekey: cfg.siteKey,
+      theme: 'light',
+      size: 'normal',
+      callback(token) {
+        sellerTurnstileToken = token;
+        updateRegSubmitState();
+      },
+      'expired-callback': resetSellerTurnstile,
+      'error-callback': resetSellerTurnstile,
+    });
+  } catch (e) {
+    setErr('rgErr', authT('me.errTurnstileLoad', `Could not load Turnstile: ${e.message}`, { msg: e.message }));
+  }
+}
+
 function showTab(t) {
-  $('tabLogin')?.classList.toggle('active', t === 'login');
-  $('tabReg')?.classList.toggle('active', t === 'reg');
-  show('paneLogin', t === 'login');
-  show('paneReg', t === 'reg');
+  const isLogin = t === 'login';
+  const isReg = t === 'reg';
+  show('authHeadLogin', isLogin);
+  show('authHeadReg', isReg);
+  show('authFootLogin', isLogin);
+  show('authFootReg', isReg);
+  show('paneLogin', isLogin);
+  show('paneReg', isReg);
   show('paneVerify', false);
+  setErr('lgErr');
+  setErr('rgErr');
+  setErr('vErr');
+  if (isReg) initSellerTurnstile();
+  if (typeof I18n !== 'undefined') I18n.apply();
 }
 
 async function doLogin() {
@@ -560,17 +909,51 @@ async function doLogin() {
 
 async function doRegister() {
   setErr('rgErr');
+  const contactName = $('rgName').value.trim();
+  const contactType = $('rgContactType').value;
+  const contactInfo = $('rgContact').value.trim();
+  const username = $('rgUser').value.trim();
+  const email = $('rgEmail').value.trim();
+  const password = $('rgPass').value;
+  const pass2 = $('rgPass2').value;
+
+  if (!contactName) return setErr('rgErr', authT('seller.errFullName', 'Enter your full name.'));
+  if (!contactType) return setErr('rgErr', authT('seller.errContactType', 'Select a contact type.'));
+  if (!contactInfo) return setErr('rgErr', authT('seller.errContactInfo', 'Enter contact info.'));
+  if (username.length < 3) return setErr('rgErr', authT('seller.errUsername', 'Username must be at least 3 characters.'));
+  if (!email.includes('@')) return setErr('rgErr', authT('seller.errEmail', 'Enter a valid email.'));
+  if (password.length < 6) return setErr('rgErr', authT('seller.errPassword', 'Password must be at least 6 characters.'));
+  if (password !== pass2) return setErr('rgErr', authT('seller.errPassMismatch', 'Passwords do not match.'));
+  if (!$('rgTerms')?.checked) return setErr('rgErr', authT('seller.errTerms', 'Accept the terms of service.'));
+  if (sellerTurnstileEnabled && !sellerTurnstileToken) {
+    return setErr('rgErr', authT('me.errTurnstile', 'Complete the Cloudflare verification.'));
+  }
+
+  $('rgBtn').disabled = true;
   const d = await api('/api/seller/register', {
-    username: $('rgUser').value.trim(),
-    email: $('rgEmail').value.trim(),
-    password: $('rgPass').value,
+    username,
+    email,
+    password,
+    contactName,
+    contactType,
+    contactInfo,
+    turnstileToken: sellerTurnstileToken,
   });
-  if (!d.success) return setErr('rgErr', d.error || 'Error');
+  $('rgBtn').disabled = false;
+  updateRegSubmitState();
+  if (!d.success) {
+    resetSellerTurnstile();
+    return setErr('rgErr', d.error || authT('common.error', 'Error'));
+  }
   pendingAccountId = d.accountId;
-  openVerify($('rgEmail').value.trim());
+  openVerify(email);
 }
 
 function openVerify(email) {
+  show('authHeadLogin', false);
+  show('authHeadReg', false);
+  show('authFootLogin', false);
+  show('authFootReg', false);
   show('paneLogin', false);
   show('paneReg', false);
   show('paneVerify', true);
@@ -591,14 +974,44 @@ async function doResend() {
   toast(d.success ? 'Code resent' : (d.error || 'Error'));
 }
 
+function syncLangSelect() {
+  const sel = $('langSelect');
+  if (!sel) return;
+  const saved = localStorage.getItem('ui_lang');
+  sel.value = saved === 'en' || saved === 'vi' ? saved : 'auto';
+}
+
+function onLangSelect(value) {
+  if (typeof I18n === 'undefined') return;
+  if (value === 'auto') {
+    localStorage.removeItem('ui_lang');
+    const nav = (navigator.language || '').toLowerCase();
+    I18n.setLang(nav.startsWith('vi') ? 'vi' : 'en');
+  } else {
+    I18n.setLang(value);
+  }
+  syncLangSelect();
+}
+
+function mountSellerLangSwitchers() {
+  if (typeof I18n === 'undefined') return;
+  const dash = $('langSwitchDash');
+  if (dash && !dash.querySelector('.lang-switch')) {
+    I18n.mountSwitcher(dash);
+    dash.dataset.mounted = '1';
+  }
+}
+
 async function enterDash(acct) {
   show('authView', false);
   show('dashView', true);
+  mountSellerLangSwitchers();
   $('userAvatar').textContent = (acct.username || 'S')[0].toUpperCase();
   $('topUserName').textContent = acct.username || '';
   await loadDashboard();
+  await loadOrders();
   await window.SellerKeys?.loadKeys();
-  switchView('orders');
+  switchView('stats');
 }
 
 async function logout() {
@@ -610,6 +1023,8 @@ function initFilters() {}
 
 // exports
 window.showTab = showTab;
+window.togglePw = togglePw;
+window.updateRegSubmitState = updateRegSubmitState;
 window.switchView = switchView;
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
@@ -627,9 +1042,14 @@ window.addCreateKeyRow = () => window.SellerKeys?.addCreateKeyRow();
 window.logout = logout;
 window.copyText = copyText;
 window.saveProfile = saveProfile;
+window.changePassword = changePassword;
 window.closeBuyModal = closeBuyModal;
 window.confirmBuy = confirmBuy;
-window.runChecker = runChecker;
+window.fetchSellerMail = fetchSellerMail;
+window.loadTransactions = loadTransactions;
+window.renderTransactions = renderTransactions;
+window.clearCart = clearCart;
+window.checkoutCart = checkoutCart;
 window.closeHistoryModal = closeHistoryModal;
 window.loadOrders = loadOrders;
 window.loadKeys = loadKeys;
@@ -638,6 +1058,18 @@ window.debounceRenderKeys = debounceRenderKeys;
 
 document.addEventListener('DOMContentLoaded', () => {
   initFilters();
+  $('langSelect')?.addEventListener('change', (e) => onLangSelect(e.target.value));
+  syncLangSelect();
+  $('rgTerms')?.addEventListener('change', updateRegSubmitState);
+  $('emailPicker')?.addEventListener('focus', (e) => renderEmailDropdown(e.target.value));
+  $('emailPicker')?.addEventListener('input', (e) => renderEmailDropdown(e.target.value));
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.sw-email-picker')) $('emailPickerDropdown')?.classList.remove('is-open');
+  });
+  $('storeSearch')?.addEventListener('input', () => renderStoreGrid());
+  $('storeSort')?.addEventListener('change', () => renderStoreGrid());
+  if (location.search.includes('reg=1') || location.hash === '#reg') showTab('reg');
+  else showTab('login');
   window.SellerApp = {
     api, toast, copyText, esc, fmtTs,
     get sellerPerms() { return sellerPerms; },
@@ -646,6 +1078,14 @@ document.addEventListener('DOMContentLoaded', () => {
     set allKeys(v) { allKeys = v; },
     loadOrders, loadDashboard,
   };
+
+  mountSellerLangSwitchers();
+  document.addEventListener('langchange', () => {
+    const active = document.querySelector('.sw-nav a.is-active')?.dataset.view || 'orders';
+    switchView(active);
+    syncLangSelect();
+    if (typeof I18n !== 'undefined') I18n.apply();
+  });
 
   ['editModal', 'createKeyModal', 'buyModal', 'historyModal'].forEach((id) => {
     $(id)?.addEventListener('click', (e) => {

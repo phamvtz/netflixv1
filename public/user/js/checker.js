@@ -1,5 +1,7 @@
 'use strict';
 
+const tt = (k, v) => (typeof I18n !== 'undefined' ? I18n.t(k, v) : k);
+
 // Auto-detect which port has the live API
 // If on port 3000 (old static server), API calls go to port 3002 (new server)
 const API_PORT = 3002;
@@ -221,7 +223,7 @@ async function safePost(url, body) {
     if (!p.ok) throw new Error('ping failed');
   } catch {
     const banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#8b0000;color:#fff;padding:10px 20px;border-radius:6px;font-size:.82rem;z-index:999;font-family:monospace';
+    banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;border:1px solid #444;padding:10px 20px;border-radius:6px;font-size:.82rem;z-index:999;font-family:monospace';
     banner.textContent = '⚠ Server API not responding – restart: node server.js';
     document.body.appendChild(banner);
     setTimeout(() => banner.remove(), 8000);
@@ -415,7 +417,7 @@ function scheduleAutoCheck() {
 // ── Main ─────────────────────────────────────────────────────────────────────
 function runCheck() {
   const input = document.getElementById('cookieInput').value.trim();
-  if (!input) { alert('Paste a cookie string first!'); return; }
+  if (!input) { alert(tt('chk.alertPaste')); return; }
   rawSets = detect_sets(input);
   sets    = rawSets.map(process_set);
   liveResults = new Array(sets.length).fill(null);
@@ -425,7 +427,7 @@ function runCheck() {
 
 async function pasteClip() {
   try { document.getElementById('cookieInput').value = await navigator.clipboard.readText(); }
-  catch { alert('Use Ctrl+V.'); }
+  catch { alert(tt('chk.alertClip')); }
 }
 
 function clearAll() {
@@ -533,9 +535,11 @@ function buildRow(s, i, live) {
 function buildStatusBadge(live) {
   if (!live) return `<span class="badge badge-pending">—</span>`;
   const src = live.source ? `<span class="badge-src">${live.source}</span>` : '';
-  if (live.planLost)                   return `<span class="badge badge-cancelled">⚠ PLAN LOST</span><div class="badge-err">Has plan · no access</div>${src}`;
+  if (live.alive && !live.cancelled)  return `<span class="badge badge-live">✓ LIVE</span>${src}`;
+  if (live.cancelled)                  return `<span class="badge badge-cancelled">🔚 ${tt('chk.badgeCancelled')}</span>${src}`;
+  if (live.planLost)                   return `<span class="badge badge-cancelled">⚠ ${tt('chk.badgePlanLost')}</span><div class="badge-err">${tt('chk.badgePlanLostSub')}</div>${src}`;
   if (live.error && !live.alive)       return `<span class="badge badge-dead">✗ DEAD</span><div class="badge-err">${esc(live.error.substring(0,40))}</div>`;
-  if (live.paymentError && live.plan)  return `<span class="badge badge-cancelled">⚠ PLAN LOST</span>${src}`;
+  if (live.paymentError && live.plan && !live.alive)  return `<span class="badge badge-cancelled">⚠ ${tt('chk.badgePlanLost')}</span>${src}`;
   if (live.alive && live.paymentError) return `<span class="badge badge-cancelled">⚠ PAYMENT ERROR</span>${src}`;
   if (live.alive && live.cancelled)    return `<span class="badge badge-cancelled">🔚 CANCELLED</span>${src}`;
   if (live.alive)                      return `<span class="badge badge-live">✓ LIVE</span>${src}`;
@@ -588,15 +592,17 @@ async function checkAllLive() {
   // Server đã nghỉ dài — client chỉ thêm chút jitter (tránh double-wait quá lâu ở stealth)
   const gapMs = { normal: 1500, slow: 500, stealth: 0 }[pace] ?? 0;
   const wait = ms => new Promise(r=>setTimeout(r, ms));
+  let stopBatch = false;
   for (let i=0;i<todo.length;i+=CONC) {
+    if (stopBatch) break;
     const batch=todo.slice(i,i+CONC);
     await Promise.all(batch.map(async idx => {
+      if (stopBatch) return;
       try {
         const d = await safePost(`${API_BASE}/api/checker/live-check`, liveCheckBody(rawSets[idx]));
         if (d.rateLimited) {
+          stopBatch = true;
           alert(d.error || 'Hourly check limit reached');
-          showProgress(false);
-          allBtn.disabled = false;
           return;
         }
         liveResults[idx] = d; updateRow(idx, d);
@@ -605,9 +611,11 @@ async function checkAllLive() {
       }
       doneChecks++;
       showProgress(true, doneChecks, todo.length);
+      updateStats();
     }));
-    if (gapMs > 0 && i + CONC < todo.length) await wait(gapMs * (0.85 + Math.random() * 0.35));
+    if (gapMs > 0 && i + CONC < todo.length && !stopBatch) await wait(gapMs * (0.85 + Math.random() * 0.35));
   }
+  if (stopBatch) showProgress(false);
   showProgress(false);
   allBtn.disabled=false;
   updateStats();
@@ -801,14 +809,14 @@ async function runDebug() {
     box.innerHTML = `
       <div style="background:#0d0d0d;border:1px solid #333;border-radius:8px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;font-family:monospace;font-size:.75rem;color:#ccc">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <span style="color:#ff4444;font-weight:700;letter-spacing:2px">🔬 DEBUG RESULT</span>
+          <span style="color:#fff;font-weight:700;letter-spacing:2px">🔬 DEBUG RESULT</span>
           <button onclick="this.closest('div[style]').remove()" style="background:transparent;border:none;color:#888;font-size:1.2rem;cursor:pointer">✕</button>
         </div>
 
         <div style="margin-bottom:12px">
           <div style="color:#888;font-size:.68rem;letter-spacing:2px;margin-bottom:6px">NETFLIX.COM /account</div>
           <div style="background:#0a0a0a;padding:10px;border-radius:4px;border:1px solid ${d.netflix_account?.live ? '#003300' : '#330000'}">
-            <div>Status: <strong style="color:${d.netflix_account?.live ? '#00e676' : '#ff4444'}">${d.netflix_account?.status}</strong>
+            <div>Status: <strong style="color:${d.netflix_account?.live ? '#fff' : '#737373'}">${d.netflix_account?.status}</strong>
               ${d.netflix_account?.live ? ' → LIVE ✓' : ' → DEAD/REDIRECT'}
             </div>
             <div style="color:#555">HTML size: ${d.netflix_account?.html_len || 0} bytes</div>
@@ -843,3 +851,7 @@ document.getElementById('cookieInput').addEventListener('keydown', e => {
   if (saved && [...paceSel.options].some(o => o.value === saved)) paceSel.value = saved;
   paceSel.addEventListener('change', persistCheckPace);
 })();
+
+document.addEventListener('langchange', () => {
+  if (typeof render === 'function' && sets && sets.length) render();
+});

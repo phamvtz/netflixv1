@@ -1,0 +1,55 @@
+/* Language switcher — light */
+.lang-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--bd, #d4d4d4);
+  background: #f5f5f5;
+}
+
+.lang-switch button {
+  border: none;
+  background: transparent;
+  color: var(--t2, #525252);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  transition: background 0.15s, color 0.15s;
+}
+
+.lang-switch button:hover {
+  color: #000;
+}
+
+.lang-switch button.is-active {
+  background: #000;
+  color: #fff;
+}
+
+.me-nav .lang-switch {
+  margin-left: auto;
+}
+
+.hdr-right .lang-switch {
+  margin-left: 4px;
+}
+
+.panel-actions .lang-switch,
+.panel-nav + .lang-switch {
+  margin-left: 8px;
+}
+
+#authView .lang-switch-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.sw-top-actions .lang-switch {
+  flex-shrink: 0;
+}
