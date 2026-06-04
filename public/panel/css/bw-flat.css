@@ -1,156 +1,240 @@
-/* Final flat light B&W — load last */
+/* Premium SaaS Theme overrides */
 
+body {
+  background-color: var(--bg) !important;
+  color: var(--t1) !important;
+  font-family: Inter, system-ui, sans-serif !important;
+}
+
+/* ─── Seller Panel Workspace ─── */
 [data-theme="seller"] .sw-app,
-[data-theme="seller"] .sw-sidebar,
 [data-theme="seller"] .sw-main,
 [data-theme="seller"] .sw-content {
-  background: #fff !important;
-  color: #000 !important;
+  background: var(--bg) !important;
+  color: var(--t1) !important;
 }
 
 [data-theme="seller"] .sw-sidebar {
-  border-right: 1px solid #d4d4d4 !important;
+  background: var(--card) !important;
+  border-right: 1px solid var(--bd) !important;
 }
 
 [data-theme="seller"] .sw-brand-icon {
-  background: #000 !important;
+  background: var(--accent) !important;
   color: #fff !important;
 }
 
 [data-theme="seller"] .sw-nav a.is-active {
-  box-shadow: inset 3px 0 0 #000 !important;
-  background: #eee !important;
-  color: #000 !important;
+  box-shadow: inset 3px 0 0 var(--accent) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
 }
 
 [data-theme="seller"] .sw-topbar {
-  background: #fff !important;
-  border-bottom: 1px solid #d4d4d4 !important;
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--bd) !important;
 }
 
 [data-theme="seller"] .sw-topbar h1,
 [data-theme="seller"] .sw-brand-text,
 [data-theme="seller"] .sw-order-title {
-  color: #000 !important;
+  color: var(--t1) !important;
 }
 
 [data-theme="seller"] .sw-stat,
 [data-theme="seller"] .sw-card,
 [data-theme="seller"] .sw-order {
-  background: #f5f5f5 !important;
-  border: 1px solid #d4d4d4 !important;
-  box-shadow: none !important;
+  background: var(--card) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
 [data-theme="seller"] .sw-order-head {
-  background: #eee !important;
+  background: #fdfdfd !important;
+  border-bottom: 1px solid var(--bd) !important;
 }
 
 [data-theme="seller"] .sw-btn--primary,
 [data-theme="seller"] .panel-btn--primary {
-  background: #000 !important;
+  background: var(--accent) !important;
   color: #fff !important;
+  border-radius: var(--radius-sm) !important;
+  border: none !important;
 }
 
 [data-theme="seller"] .sw-btn--outline,
 [data-theme="seller"] .panel-btn--ghost {
-  background: #fff !important;
-  color: #000 !important;
-  border: 1px solid #d4d4d4 !important;
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 .panel-input {
-  background: #fff;
-  color: #000;
-  border-color: var(--bd, #d4d4d4);
+  background: var(--card);
+  color: var(--t1);
+  border-color: var(--bd);
+  border-radius: var(--radius-sm);
+  height: 48px;
 }
 
 .panel-input:focus {
-  border-color: #000;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
 [data-theme="seller"] #authView .panel-input,
 [data-theme="seller"] #authView .panel-card input {
-  background: #fff !important;
-  color: #000 !important;
-  border-color: #d4d4d4 !important;
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border-color: var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 [data-theme="seller"] #authView .panel-label {
-  color: #333 !important;
+  color: var(--t2) !important;
 }
 
 [data-theme="seller"] #authView .panel-tab {
   background: transparent !important;
-  color: #666 !important;
+  color: var(--t3) !important;
 }
 
 [data-theme="seller"] #authView .panel-tab.active {
   background: transparent !important;
-  color: #000 !important;
-  border-bottom: 2px solid #000 !important;
+  color: var(--accent) !important;
+  border-bottom: 2px solid var(--accent) !important;
 }
 
 [data-theme="seller"] #authView .panel-btn--primary {
-  background: #000 !important;
-  box-shadow: none !important;
-  border-radius: 8px !important;
+  background: var(--accent) !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 .filter-bar .chip.active {
-  background: #000;
+  background: var(--accent);
   color: #fff;
-  border-color: #000;
+  border-color: var(--accent);
 }
 
 .chk-page .wrap,
 .chk-page .editor-wrap,
 .chk-page .results-wrap,
 .chk-page body {
-  background: #fff;
+  background: var(--bg);
 }
 
 .badge-live {
-  background: #000 !important;
+  background: var(--green) !important;
   color: #fff !important;
-  border: 1px solid #000 !important;
+  border: 1px solid var(--green) !important;
 }
 
 .badge-dead {
-  background: #eee !important;
-  color: #525252 !important;
-  border: 1px solid #d4d4d4 !important;
+  background: var(--red-ui) !important;
+  color: #fff !important;
+  border: 1px solid var(--red-ui) !important;
 }
 
 .badge-cancelled {
-  background: #fff !important;
-  color: #000 !important;
-  border: 1px solid #000 !important;
+  background: var(--t3) !important;
+  color: #fff !important;
+  border: 1px solid var(--t3) !important;
 }
 
-.row-live td { background: rgba(0, 0, 0, 0.03) !important; }
-.row-cancel td { background: rgba(0, 0, 0, 0.02) !important; }
+.row-live td { background: rgba(22, 163, 74, 0.03) !important; }
+.row-cancel td { background: rgba(220, 38, 38, 0.02) !important; }
 
 .me-hero,
 .me-panel,
 .me-card {
-  background: #fff;
-  border-color: #d4d4d4;
+  background: var(--card);
+  border-color: var(--bd);
 }
 
 .me-submit,
 .me-nav a.is-active {
-  background: #000 !important;
+  background: var(--accent) !important;
   color: #fff !important;
-  border-color: #000 !important;
+  border-color: var(--accent) !important;
 }
 
 .lang-switch {
-  background: #f5f5f5;
-  border-color: #d4d4d4;
+  background: var(--bg);
+  border-color: var(--bd);
 }
 
 .lang-switch button.is-active {
-  background: #000;
+  background: var(--accent);
   color: #fff;
+}
+
+/* ─── Admin Panel UI Redesign ─── */
+[data-theme="admin"] .panel-topbar {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--bd) !important;
+  padding: 16px 24px !important;
+  margin-bottom: 24px !important;
+}
+
+[data-theme="admin"] .panel-brand,
+[data-theme="admin"] .panel-section-title {
+  color: var(--t1) !important;
+}
+
+[data-theme="admin"] .panel-card,
+[data-theme="admin"] .brand-card {
+  background: var(--card) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="admin"] .panel-table th {
+  background: var(--bg) !important;
+  border-bottom: 1px solid var(--bd) !important;
+  color: var(--t2) !important;
+}
+
+[data-theme="admin"] .panel-table td {
+  border-bottom: 1px solid var(--bd) !important;
+  color: var(--t1) !important;
+  background: transparent !important;
+}
+
+[data-theme="admin"] .panel-table tr:hover td {
+  background: var(--row-hover) !important;
+}
+
+[data-theme="admin"] .panel-stat {
+  background: var(--card) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="admin"] .panel-btn--primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+[data-theme="admin"] .panel-btn--ghost {
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+[data-theme="admin"] .panel-badge--active {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+[data-theme="admin"] .panel-badge--pending {
+  background: var(--bg) !important;
+  color: var(--t2) !important;
+  border: 1px solid var(--bd) !important;
 }
