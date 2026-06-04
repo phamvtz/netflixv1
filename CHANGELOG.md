@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Admin dashboard: Redesigned the dashboard view to use high-fidelity, tab-based navigation instead of vertically stacked panels to improve usability. Active tab state is persisted in sessionStorage.
+- Admin layout: Aligned the dashboard panels inside a centered layout container (`1200px` max-width) to improve visual density and readability on larger screens.
+
 ### Changed
 - Subdomain Routing: Split pages into specific paths per subdomain: `me.domain/me` (Get Code), `admin.domain/admin` (Admin Panel), and `seller.domain/seller` (Seller Workspace) with root `/` redirecting to their respective paths.
 - Get Code (`me/`): inbox form layout like reference — centered card, blue tabs/button, Turnstile, separate result card with green badge + blue spaced code; shared `form-card.css`; lang **Auto (by IP)** / EN / VI.

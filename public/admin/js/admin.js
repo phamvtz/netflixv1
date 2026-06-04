@@ -146,6 +146,28 @@ async function showDash() {
   show('loginCard', false);
   show('dash', true);
   await loadAll();
+  const activeTab = sessionStorage.getItem('activeAdminTab') || 'overview';
+  switchAdminTab(activeTab);
+}
+
+function switchAdminTab(tabName) {
+  sessionStorage.setItem('activeAdminTab', tabName);
+  const buttons = document.querySelectorAll('#adminSubNav .subnav-btn');
+  buttons.forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-target') === tabName);
+  });
+  const showOverview = tabName === 'overview';
+  const showSellers = tabName === 'sellers';
+  const showProducts = tabName === 'products';
+  const showKeys = tabName === 'keys';
+  const showUsers = tabName === 'users';
+  show('stats', showOverview);
+  const pendingCount = parseInt($('pendCount')?.textContent || '0', 10);
+  show('pendingSec', (showOverview || showSellers) && pendingCount > 0);
+  show('secSellers', showSellers);
+  show('secProducts', showProducts);
+  show('secKeys', showKeys);
+  show('secUsers', showUsers);
 }
 
 async function loadAll() {
@@ -171,8 +193,10 @@ async function loadSellers() {
   const pending = d.pending || [];
   allSellers = d.sellers || [];
 
-  show('pendingSec', pending.length > 0);
-  $('pendCount').textContent = pending.length;
+  const pendingCount = pending.length;
+  $('pendCount').textContent = pendingCount;
+  const activeTab = sessionStorage.getItem('activeAdminTab') || 'overview';
+  show('pendingSec', (activeTab === 'overview' || activeTab === 'sellers') && pendingCount > 0);
   $('pendBody').innerHTML = pending
     .map(
       (s) => `
@@ -485,6 +509,7 @@ window.openProductModal = openProductModal;
 window.closeProductModal = closeProductModal;
 window.saveProduct = saveProduct;
 window.toggleProduct = toggleProduct;
+window.switchAdminTab = switchAdminTab;
 
 function syncLangSelect() {
   const sel = $('langSelect');

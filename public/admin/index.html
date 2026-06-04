@@ -79,88 +79,100 @@
 
   <div class="hidden" id="dash">
       <header class="panel-topbar">
-        <div class="panel-brand"><span class="mark">●</span> <span data-i18n="admin.dash">Admin Dashboard</span></div>
-        <nav class="panel-nav" id="panelNav">
-          <a href="/" data-i18n="nav.getCode">Get code</a>
-          <a href="/seller" data-i18n="nav.seller">Seller</a>
-          <a href="/admin" class="is-active" data-i18n="nav.admin">Admin</a>
-        </nav>
-        <div class="panel-actions">
-          <div id="langSwitchDash"></div>
-          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="loadAll()" data-i18n="common.reload">Reload</button>
-          <button class="panel-btn panel-btn--sm" onclick="logout()" data-i18n="common.logout">Log out</button>
+        <div class="panel-container panel-topbar-inner">
+          <div class="panel-brand"><span class="mark">●</span> <span data-i18n="admin.dash">Admin Dashboard</span></div>
+          <nav class="panel-nav" id="panelNav">
+            <a href="/" data-i18n="nav.getCode">Get code</a>
+            <a href="/seller" data-i18n="nav.seller">Seller</a>
+            <a href="/admin" class="is-active" data-i18n="nav.admin">Admin</a>
+          </nav>
+          <div class="panel-actions">
+            <div id="langSwitchDash"></div>
+            <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="loadAll()" data-i18n="common.reload">Reload</button>
+            <button class="panel-btn panel-btn--sm" onclick="logout()" data-i18n="common.logout">Log out</button>
+          </div>
         </div>
       </header>
 
-      <div class="panel-stats" id="stats"></div>
+      <div class="panel-container">
+        <div class="panel-subnav" id="adminSubNav">
+          <button type="button" class="subnav-btn active" data-target="overview" onclick="switchAdminTab('overview')" data-i18n="admin.tabOverview">Overview</button>
+          <button type="button" class="subnav-btn" data-target="sellers" onclick="switchAdminTab('sellers')" data-i18n="admin.tabSellers">Sellers</button>
+          <button type="button" class="subnav-btn" data-target="products" onclick="switchAdminTab('products')" data-i18n="admin.tabProducts">Products</button>
+          <button type="button" class="subnav-btn" data-target="keys" onclick="switchAdminTab('keys')" data-i18n="admin.tabKeys">Keys</button>
+          <button type="button" class="subnav-btn" data-target="users" onclick="switchAdminTab('users')" data-i18n="admin.tabUsers">Seed Users</button>
+        </div>
 
-      <section class="panel-card brand-card panel-card--warn hidden" id="pendingSec">
-        <h2 class="panel-section-title"><span data-i18n="admin.pending">Sellers pending approval</span> <span class="panel-pill panel-pill--hot" id="pendCount">0</span></h2>
-        <div class="panel-table-wrap">
-          <table class="panel-table">
-            <thead><tr><th>Username</th><th>Email</th><th>Registered</th><th></th></tr></thead>
-            <tbody id="pendBody"></tbody>
-          </table>
-        </div>
-      </section>
+        <div class="panel-stats" id="stats"></div>
 
-      <section class="panel-card brand-card">
-        <h2 class="panel-section-title"><span data-i18n="admin.sellers">Sellers</span> <span class="panel-pill" id="sellerCount">0</span></h2>
-        <div class="filter-bar" id="sellerFilterBar"></div>
-        <div class="search-row">
-          <input id="sellerSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchSeller" oninput="renderSellers()" />
-        </div>
-        <div class="panel-table-wrap">
-          <table class="panel-table">
-            <thead><tr><th>Username</th><th>Email</th><th>Status</th><th></th></tr></thead>
-            <tbody id="sellersBody"></tbody>
-          </table>
-        </div>
-      </section>
+        <section class="panel-card brand-card panel-card--warn hidden" id="pendingSec">
+          <h2 class="panel-section-title"><span data-i18n="admin.pending">Sellers pending approval</span> <span class="panel-pill panel-pill--hot" id="pendCount">0</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Username</th><th>Email</th><th>Registered</th><th></th></tr></thead>
+              <tbody id="pendBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-      <section class="panel-card brand-card">
-        <h2 class="panel-section-title">
-          <span data-i18n="admin.products">Products</span>
-          <span style="display:flex;align-items:center;gap:10px">
-            <span class="panel-pill" id="productCount">0</span>
-            <button class="panel-btn panel-btn--sm panel-btn--green" onclick="openProductModal()" data-i18n="admin.addProduct">+ Add</button>
-          </span>
-        </h2>
-        <div class="filter-bar" id="productFilterBar"></div>
-        <div class="search-row">
-          <input id="productSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchProduct" oninput="renderProducts()" />
-        </div>
-        <div class="panel-table-wrap">
-          <table class="panel-table">
-            <thead><tr><th>Name</th><th>Duration</th><th>Price</th><th>Status</th><th></th></tr></thead>
-            <tbody id="productsBody"></tbody>
-          </table>
-        </div>
-      </section>
+        <section class="panel-card brand-card hidden" id="secSellers">
+          <h2 class="panel-section-title"><span data-i18n="admin.sellers">Sellers</span> <span class="panel-pill" id="sellerCount">0</span></h2>
+          <div class="filter-bar" id="sellerFilterBar"></div>
+          <div class="search-row">
+            <input id="sellerSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchSeller" oninput="renderSellers()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Username</th><th>Email</th><th>Status</th><th></th></tr></thead>
+              <tbody id="sellersBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-      <section class="panel-card brand-card">
-        <h2 class="panel-section-title"><span data-i18n="admin.keys">Keys</span> <span class="panel-pill" id="keyCount">0</span></h2>
-        <div class="filter-bar" id="keyFilterBar"></div>
-        <div class="search-row">
-          <input id="keySearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchKey" oninput="renderKeys()" />
-        </div>
-        <div class="panel-table-wrap">
-          <table class="panel-table">
-            <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Used</th><th></th></tr></thead>
-            <tbody id="keysBody"></tbody>
-          </table>
-        </div>
-      </section>
+        <section class="panel-card brand-card hidden" id="secProducts">
+          <h2 class="panel-section-title">
+            <span data-i18n="admin.products">Products</span>
+            <span style="display:flex;align-items:center;gap:10px">
+              <span class="panel-pill" id="productCount">0</span>
+              <button class="panel-btn panel-btn--sm panel-btn--green" onclick="openProductModal()" data-i18n="admin.addProduct">+ Add</button>
+            </span>
+          </h2>
+          <div class="filter-bar" id="productFilterBar"></div>
+          <div class="search-row">
+            <input id="productSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchProduct" oninput="renderProducts()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Name</th><th>Duration</th><th>Price</th><th>Status</th><th></th></tr></thead>
+              <tbody id="productsBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-      <section class="panel-card brand-card">
-        <h2 class="panel-section-title"><span data-i18n="admin.seedUsers">Seed users</span> <span class="panel-pill">DB</span></h2>
-        <div class="panel-table-wrap">
-          <table class="panel-table">
-            <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Plan</th></tr></thead>
-            <tbody id="usersBody"></tbody>
-          </table>
-        </div>
-      </section>
+        <section class="panel-card brand-card hidden" id="secKeys">
+          <h2 class="panel-section-title"><span data-i18n="admin.keys">Keys</span> <span class="panel-pill" id="keyCount">0</span></h2>
+          <div class="filter-bar" id="keyFilterBar"></div>
+          <div class="search-row">
+            <input id="keySearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchKey" oninput="renderKeys()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Used</th><th></th></tr></thead>
+              <tbody id="keysBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel-card brand-card hidden" id="secUsers">
+          <h2 class="panel-section-title"><span data-i18n="admin.seedUsers">Seed users</span> <span class="panel-pill">DB</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Plan</th></tr></thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
 
   <div class="panel-modal-backdrop" id="productModal">
