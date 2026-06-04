@@ -8,6 +8,7 @@
 - Checker: mặc định `stealth` — warmup browse→account, 1 UA/cookie, không nftoken, delay 20–45s, giới hạn 50 check/giờ.
 
 ### Added
+- Seller: tab **Checker cookie** trong workspace — dán cookie tài khoản (mỗi dòng 1 set), kiểm tra LIVE/DEAD/mất gói tuần tự, cập nhật từng dòng; dùng lại `/api/checker/live-check`.
 - Admin: tab **Quản lý sản phẩm** — bảng CRUD danh mục (thêm/sửa, ẩn/hiện), filter chips + search + modal dùng chung; nối API `GET/POST /api/admin/products`.
 - Panel UI dùng chung (`public/panel/`), filter chips admin/seller, refactor checker (search + stat cards).
 - Cấu trúc `public/`: `admin/`, `seller/`, `me/`, `user/`, tài liệu trong `CLAUDE.md` §9.

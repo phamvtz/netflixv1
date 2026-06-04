@@ -8,6 +8,7 @@ const PAGE_META = {
   emails: { title: 'Quản lý email', caption: 'Danh sách email từ đơn đã mua.' },
   transactions: { title: 'Lịch sử giao dịch', caption: 'Nạp tiền, mua hàng và số dư.' },
   profile: { title: 'Thông tin tài khoản', caption: 'Liên hệ hỗ trợ khách.' },
+  checker: { title: 'Checker cookie', caption: 'Kiểm tra cookie tài khoản còn LIVE hay không.' },
 };
 
 const PERM_DEFS = [
@@ -103,7 +104,7 @@ function closeSidebar() {
   $('swOverlay')?.classList.remove('show');
 }
 
-const VIEWS = ['stats', 'orders', 'keys', 'store', 'emails', 'transactions', 'profile'];
+const VIEWS = ['stats', 'orders', 'keys', 'store', 'emails', 'transactions', 'profile', 'checker'];
 
 function switchView(v) {
   closeSidebar();
@@ -446,6 +447,50 @@ async function loadTransactions() {
   }).join('') || '<tr><td colspan="5" class="panel-empty">Chưa có giao dịch</td></tr>';
 }
 
+// ── Checker cookie ──
+function checkerBadge(r) {
+  if (r.rateLimited) return '<span class="sw-order-badge sw-order-badge--expired">GIỚI HẠN</span>';
+  if (r.planLost || (r.paymentError && r.plan)) return '<span class="sw-order-badge sw-order-badge--expired">MẤT GÓI</span>';
+  if (r.alive && r.cancelled) return '<span class="sw-order-badge sw-order-badge--expired">CANCELLED</span>';
+  if (r.alive) return '<span class="sw-order-badge">LIVE</span>';
+  return '<span class="sw-order-badge sw-order-badge--expired">DEAD</span>';
+}
+
+function updateCheckerRow(i, r) {
+  const tr = $('chk-' + i);
+  if (!tr) return;
+  tr.children[1].innerHTML = checkerBadge(r) + (r.error ? `<div class="note-sub">${esc(r.error)}</div>` : '');
+  tr.children[2].textContent = r.plan || '—';
+  tr.children[3].textContent = r.email || '—';
+}
+
+async function runChecker() {
+  const lines = ($('chkInput').value || '')
+    .split('\n').map((s) => s.trim())
+    .filter((s) => s.includes('NetflixId=') || s.length > 30);
+  if (!lines.length) return toast('Dán cookie (có NetflixId=) trước');
+
+  const pace = $('chkPace')?.value || 'stealth';
+  const btn = $('chkBtn');
+  btn.disabled = true;
+  btn.textContent = 'Đang kiểm tra…';
+  // Render hàng "đang chờ" trước, rồi check tuần tự cập nhật từng dòng
+  $('chkResults').innerHTML = lines
+    .map((_, i) => `<tr id="chk-${i}"><td>${i + 1}</td><td><span class="sw-order-badge">…</span></td><td>—</td><td>—</td></tr>`)
+    .join('');
+
+  for (let i = 0; i < lines.length; i++) {
+    let r;
+    try { r = await api('/api/checker/live-check', { cookie: lines[i], pace }); }
+    catch (e) { r = { alive: false, error: e.message }; }
+    updateCheckerRow(i, r);
+    if (r.rateLimited) { toast(r.error || 'Đã đạt giới hạn check/giờ'); break; }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Kiểm tra';
+}
+
 function renderStats() {
   if ($('statsPermBadges')) $('statsPermBadges').innerHTML = permBadgesHtml(sellerPerms);
   if ($('statsPermHint')) $('statsPermHint').textContent = adminPermHint();
@@ -584,6 +629,7 @@ window.copyText = copyText;
 window.saveProfile = saveProfile;
 window.closeBuyModal = closeBuyModal;
 window.confirmBuy = confirmBuy;
+window.runChecker = runChecker;
 window.closeHistoryModal = closeHistoryModal;
 window.loadOrders = loadOrders;
 window.loadKeys = loadKeys;
