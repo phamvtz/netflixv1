@@ -8,6 +8,7 @@
 - Checker: mặc định `stealth` — warmup browse→account, 1 UA/cookie, không nftoken, delay 20–45s, giới hạn 50 check/giờ.
 
 ### Added
+- Admin: tab **Quản lý sản phẩm** — bảng CRUD danh mục (thêm/sửa, ẩn/hiện), filter chips + search + modal dùng chung; nối API `GET/POST /api/admin/products`.
 - Panel UI dùng chung (`public/panel/`), filter chips admin/seller, refactor checker (search + stat cards).
 - Cấu trúc `public/`: `admin/`, `seller/`, `me/`, `user/`, tài liệu trong `CLAUDE.md` §9.
 - Quyền mã Netflix: admin cấp seller (ĐN / Reset / Gia đình), seller gán subset cho từng key; inbox lọc theo key.

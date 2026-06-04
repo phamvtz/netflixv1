@@ -3,10 +3,14 @@
 let TOKEN = sessionStorage.getItem('adminToken') || '';
 let allKeys = [];
 let allSellers = [];
+let allProducts = [];
 let keyStatusFilter = 'all';
 let sellerStatusFilter = 'all';
+let productStatusFilter = 'all';
 let keyChips;
 let sellerChips;
+let productChips;
+let editingProductId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,6 +46,10 @@ function fmtTs(sec) {
   } catch {
     return '—';
   }
+}
+
+function fmtVnd(n) {
+  return new Intl.NumberFormat('vi-VN').format(n || 0) + ' đ';
 }
 
 async function jget(url) {
@@ -136,7 +144,7 @@ async function showDash() {
 }
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadSellers(), loadKeys(), loadUsers()]);
+  await Promise.all([loadStats(), loadSellers(), loadKeys(), loadUsers(), loadProducts()]);
 }
 
 async function loadStats() {
@@ -320,6 +328,116 @@ async function loadUsers() {
     .join('');
 }
 
+// ─── Products ──────────────────────────────────────────────────────────────────
+async function loadProducts() {
+  const d = await jget('/api/admin/products');
+  allProducts = d.products || [];
+  renderProducts();
+}
+
+function renderProducts() {
+  const q = $('productSearch')?.value || '';
+  const rows = PanelFilters.filterListEx(allProducts, {
+    q,
+    status: productStatusFilter,
+    searchFields: ['name', 'durationLabel', 'warrantyNote'],
+    getStatus: (p) => (p.active ? 'active' : 'inactive'),
+  });
+
+  $('productCount').textContent = rows.length;
+  const body = $('productsBody');
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="5" class="panel-empty">${allProducts.length ? 'Không khớp filter' : 'Chưa có sản phẩm'}</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows
+    .map((p) => {
+      const badge = p.active
+        ? '<span class="panel-badge panel-badge--active">Đang bán</span>'
+        : '<span class="panel-badge panel-badge--rejected">Đã ẩn</span>';
+      const dur = p.durationLabel ? esc(p.durationLabel) : `${p.durationDays} ngày`;
+      return `<tr>
+        <td>${esc(p.name)}${p.warrantyNote ? `<div class="note-sub">${esc(p.warrantyNote)}</div>` : ''}</td>
+        <td>${dur}<div class="note-sub">${p.durationDays} ngày</div></td>
+        <td>${fmtVnd(p.price)}</td>
+        <td>${badge}</td>
+        <td style="white-space:nowrap">
+          <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="openProductModal('${esc(p.id)}')">Sửa</button>
+          <button class="panel-btn panel-btn--sm ${p.active ? 'panel-btn--red' : 'panel-btn--green'}" onclick="toggleProduct('${esc(p.id)}')">${p.active ? 'Ẩn' : 'Hiện'}</button>
+        </td>
+      </tr>`;
+    })
+    .join('');
+}
+
+function openProductModal(id) {
+  editingProductId = id || null;
+  const p = id ? allProducts.find((x) => x.id === id) : null;
+  $('productModalTitle').textContent = p ? 'Sửa sản phẩm' : 'Thêm sản phẩm';
+  $('pmName').value = p?.name || '';
+  $('pmDurationLabel').value = p?.durationLabel || '';
+  $('pmDurationDays').value = p?.durationDays || 30;
+  $('pmPrice').value = p?.price ?? '';
+  $('pmWarranty').value = p?.warrantyNote || '';
+  $('pmActive').checked = p ? !!p.active : true;
+  $('pmErr').style.display = 'none';
+  $('productModal').classList.add('show');
+}
+
+function closeProductModal() {
+  $('productModal').classList.remove('show');
+  editingProductId = null;
+}
+
+async function saveProduct() {
+  const err = $('pmErr');
+  err.style.display = 'none';
+  const name = $('pmName').value.trim();
+  const price = parseInt($('pmPrice').value, 10);
+  const durationDays = parseInt($('pmDurationDays').value, 10) || 30;
+  if (!name) { err.textContent = 'Nhập tên sản phẩm.'; err.style.display = 'block'; return; }
+  if (!Number.isFinite(price) || price < 0) { err.textContent = 'Giá không hợp lệ.'; err.style.display = 'block'; return; }
+
+  const payload = {
+    name,
+    durationLabel: $('pmDurationLabel').value.trim() || null,
+    durationDays,
+    price,
+    warrantyNote: $('pmWarranty').value.trim() || null,
+    active: $('pmActive').checked,
+  };
+  if (editingProductId) payload.id = editingProductId;
+
+  $('pmSaveBtn').disabled = true;
+  const d = await jpost('/api/admin/products', payload);
+  $('pmSaveBtn').disabled = false;
+  if (d.success) {
+    toast(editingProductId ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm');
+    closeProductModal();
+    loadProducts();
+  } else {
+    err.textContent = d.error || 'Lỗi lưu sản phẩm';
+    err.style.display = 'block';
+  }
+}
+
+// Ẩn/hiện = upsert lại toàn bộ field với active đảo (API là upsert toàn phần, không patch lẻ)
+async function toggleProduct(id) {
+  const p = allProducts.find((x) => x.id === id);
+  if (!p) return;
+  const d = await jpost('/api/admin/products', {
+    id: p.id,
+    name: p.name,
+    durationLabel: p.durationLabel,
+    durationDays: p.durationDays,
+    price: p.price,
+    warrantyNote: p.warrantyNote,
+    active: !p.active,
+  });
+  if (d.success) { toast(p.active ? 'Đã ẩn sản phẩm' : 'Đã hiện sản phẩm'); loadProducts(); }
+  else toast(d.error || 'Lỗi');
+}
+
 function initFilters() {
   keyChips = PanelFilters.bindChipBar($('keyFilterBar'), [
     { id: 'all', label: 'Tất cả' },
@@ -339,6 +457,15 @@ function initFilters() {
     sellerStatusFilter = status;
     renderSellers();
   });
+
+  productChips = PanelFilters.bindChipBar($('productFilterBar'), [
+    { id: 'all', label: 'Tất cả' },
+    { id: 'active', label: 'Đang bán' },
+    { id: 'inactive', label: 'Đã ẩn' },
+  ], (status) => {
+    productStatusFilter = status;
+    renderProducts();
+  });
 }
 
 window.login = login;
@@ -352,9 +479,18 @@ window.reject = reject;
 window.delKey = delKey;
 window.renderKeys = renderKeys;
 window.renderSellers = renderSellers;
+window.renderProducts = renderProducts;
+window.loadProducts = loadProducts;
+window.openProductModal = openProductModal;
+window.closeProductModal = closeProductModal;
+window.saveProduct = saveProduct;
+window.toggleProduct = toggleProduct;
 
 document.addEventListener('DOMContentLoaded', () => {
   initFilters();
+  $('productModal')?.addEventListener('click', (e) => {
+    if (e.target === $('productModal')) closeProductModal();
+  });
   (async () => {
     if (TOKEN) {
       showDash();
