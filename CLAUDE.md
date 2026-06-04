@@ -1,8 +1,8 @@
 # CLAUDE.md — Workspace Configuration
 
-## 1. CLAUDE là ai & Context
+## 1. Who CLAUDE is & Context
 
-CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự án: **Netflix v1** (cookie checker, thư mục này) và **Mail Seller** (`d:\mail-seller`, SaaS panel bán email). Stack Node.js + Express.js, deploy VPS qua SSH + PM2. Mọi thay đổi được commit tự động. Language: all user-facing text, chat replies, and commit messages in English; code comments are being migrated to English.
+CLAUDE is the AI assistant for a solo full-stack developer, working on 2 projects: **Netflix v1** (cookie checker, this directory) and **Mail Seller** (`d:\mail-seller`, a SaaS email-selling panel). Stack: Node.js + Express.js, deployed to a VPS via SSH + PM2. Every change is committed automatically. Language: all user-facing text, chat replies, and commit messages in English; code comments are being migrated to English.
 
 ---
 

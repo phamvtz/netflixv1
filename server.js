@@ -8,7 +8,7 @@ const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
 const { nfExtractEmailFromHtml, nfDetectPaymentHold } = require('./lib/nf-email-parse');
 
-// SQLite — khởi tạo singleton trước khi route dùng query layer
+// SQLite — initialize singleton before routes use the query layer
 require('./db/database');
 const { runMigrations } = require('./db/migrate');
 const { runSeed } = require('./db/seed');
@@ -79,15 +79,15 @@ const { subdomainMiddleware } = require('./subdomain');
 const { verifyPassword, hashPassword } = require('./auth');
 const { sendVerificationEmail } = require('./mailer');
 
-// Chỉ tắt verify TLS khi thật sự cần debug cert lỗi — mặc định GIỮ bảo mật.
-// Các site dùng (netflix.com, cloudflare, nftoken.site...) đều có cert hợp lệ.
+// Only disable TLS verification when truly needed to debug cert errors — keep security ON by default.
+// The sites we use (netflix.com, cloudflare, nftoken.site...) all have valid certs.
 if (process.env.INSECURE_TLS === '1') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   console.warn('[SECURITY] TLS verification DISABLED (INSECURE_TLS=1)');
 }
 
-// Admin token: ưu tiên env. Không set → sinh ngẫu nhiên mỗi lần khởi động
-// (in ra console) thay vì mặc định dễ đoán.
+// Admin token: prefer env. If unset → generate random on each startup
+// (printed to console) instead of an easy-to-guess default.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
 const ADMIN_TOKEN_GENERATED = !process.env.ADMIN_TOKEN;
 

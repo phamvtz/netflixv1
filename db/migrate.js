@@ -84,7 +84,7 @@ const migrations = [
   {
     version: 5,
     up(db) {
-      // Bảng keys: thay keyStore Map in-memory, dùng cho seller bán key + admin quản lý
+      // keys table: replaces the in-memory keyStore Map; used by sellers to sell keys + admin management
       db.exec(`
         CREATE TABLE IF NOT EXISTS keys (
           key        TEXT PRIMARY KEY,
@@ -102,7 +102,7 @@ const migrations = [
   {
     version: 6,
     up(db) {
-      // Tài khoản panel (admin + seller) — tách khỏi bảng users (Netflix demo)
+      // Panel accounts (admin + seller) — separate from the users table (Netflix demo)
       db.exec(`
         CREATE TABLE IF NOT EXISTS accounts (
           id             TEXT PRIMARY KEY,
@@ -125,7 +125,7 @@ const migrations = [
   {
     version: 7,
     up(db) {
-      // Session panel (admin/seller) — UUID cookie tra ngược, tách khỏi sessions Netflix
+      // Panel sessions (admin/seller) — UUID cookie reverse-lookup, separate from Netflix sessions
       db.exec(`
         CREATE TABLE IF NOT EXISTS panel_sessions (
           session_id TEXT PRIMARY KEY,
@@ -142,21 +142,21 @@ const migrations = [
   {
     version: 8,
     up(db) {
-      // Gắn key với seller tạo ra nó (NULL = key legacy hoặc do admin tạo)
+      // Link a key to the seller who created it (NULL = legacy key or admin-created)
       db.exec('ALTER TABLE keys ADD COLUMN seller_id TEXT REFERENCES accounts(id)');
     },
     down(db) {
-      // SQLite cũ không hỗ trợ DROP COLUMN — rollback bỏ qua (không quan trọng)
+      // Older SQLite does not support DROP COLUMN — rollback is skipped (not important)
     },
   },
   {
     version: 9,
     up(db) {
-      // Quyền tối đa admin cấp cho seller (key ⊆ seller perms)
+      // Maximum permissions the admin grants a seller (key ⊆ seller perms)
       db.exec('ALTER TABLE accounts ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
       db.exec('ALTER TABLE accounts ADD COLUMN perm_reset INTEGER NOT NULL DEFAULT 0');
       db.exec('ALTER TABLE accounts ADD COLUMN perm_family INTEGER NOT NULL DEFAULT 1');
-      // Quyền từng key — seller chọn subset khi tạo/sửa
+      // Per-key permissions — the seller picks a subset when creating/editing
       db.exec('ALTER TABLE keys ADD COLUMN key_name TEXT');
       db.exec('ALTER TABLE keys ADD COLUMN expires_at INTEGER');
       db.exec('ALTER TABLE keys ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
