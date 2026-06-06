@@ -56,12 +56,14 @@ function fmtVnd(n) {
 
 async function jget(url) {
   const r = await fetch(url, { headers: authHeaders() });
+  if (r.status === 401) { forceLogout(); return { success: false, status: 401 }; }
   return r.ok ? r.json() : { success: false, status: r.status };
 }
 
 async function jpost(url, body) {
   const h = authHeaders({ 'Content-Type': 'application/json' });
   const r = await fetch(url, { method: 'POST', headers: h, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { forceLogout(); return { success: false, status: 401 }; }
   return r.ok ? r.json() : { success: false, status: r.status };
 }
 
@@ -71,7 +73,23 @@ async function jpatch(url, body) {
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
+  if (r.status === 401) { forceLogout(); return { success: false, status: 401 }; }
   return r.ok ? r.json() : { success: false, status: r.status };
+}
+
+// Xoá token lỗi thời và quay về màn login
+function forceLogout() {
+  sessionStorage.removeItem('adminToken');
+  TOKEN = '';
+  show('dash', false);
+  show('loginCard', true);
+  const err = $('loginErr');
+  if (err) {
+    err.textContent = 'Phiên đã hết hạn hoặc token không hợp lệ. Vui lòng đăng nhập lại.';
+    err.style.display = 'block';
+  }
+  // Restore URL
+  history.replaceState(null, '', '/admin');
 }
 
 function sellerPermBadges(s) {
@@ -142,34 +160,82 @@ async function logout() {
   location.reload();
 }
 
+// ── URL Routing ─────────────────────────────────────────────────
+const TAB_SLUGS = {
+  overview: 'overview',
+  sellers:  'sellers',
+  products: 'products',
+  keys:     'keys',
+  users:    'users',
+};
+const SLUG_TO_TAB = Object.fromEntries(Object.entries(TAB_SLUGS).map(([k, v]) => [v, k]));
+
+function getTabFromUrl() {
+  const path = window.location.pathname;           // e.g. /admin/sellers
+  const parts = path.split('/').filter(Boolean);   // ['admin', 'sellers']
+  const slug = parts[1] || 'overview';
+  return SLUG_TO_TAB[slug] || 'overview';
+}
+
+function setTabUrl(tabName) {
+  const slug = TAB_SLUGS[tabName] || 'overview';
+  const newPath = `/admin/${slug}`;
+  if (window.location.pathname !== newPath) {
+    history.pushState({ tab: tabName }, '', newPath);
+  }
+}
+
+// Handle browser back/forward
+window.addEventListener('popstate', (e) => {
+  const tab = e.state?.tab || getTabFromUrl();
+  switchAdminTab(tab, false); // false = don't push URL again
+});
+
 async function showDash() {
   show('loginCard', false);
   show('dash', true);
-  await loadAll();
-  const activeTab = sessionStorage.getItem('activeAdminTab') || 'overview';
-  switchAdminTab(activeTab);
+  // Load tab hiện tại ngay lập tức, load phần còn lại nền
+  const tab = getTabFromUrl();
+  switchAdminTab(tab, false);
+  await loadTabData(tab);           // load data của tab đang hiện
+  loadAll();                        // load phần còn lại ở nền
 }
 
-function switchAdminTab(tabName) {
+// Load data chỉ cho tab đang active
+async function loadTabData(tabName) {
+  if (tabName === 'overview') return Promise.all([loadStats(), loadSellers()]);
+  if (tabName === 'sellers')  return Promise.all([loadStats(), loadSellers()]);
+  if (tabName === 'products') return loadProducts();
+  if (tabName === 'keys')     return loadKeys();
+  if (tabName === 'users')    return loadUsers();
+}
+
+function switchAdminTab(tabName, pushUrl = true) {
+  if (pushUrl) setTabUrl(tabName);
   sessionStorage.setItem('activeAdminTab', tabName);
+
   const buttons = document.querySelectorAll('#adminSubNav .subnav-btn');
   buttons.forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-target') === tabName);
   });
+
   const showOverview = tabName === 'overview';
-  const showSellers = tabName === 'sellers';
+  const showSellers  = tabName === 'sellers';
   const showProducts = tabName === 'products';
-  const showKeys = tabName === 'keys';
-  const showUsers = tabName === 'users';
+  const showKeys     = tabName === 'keys';
+  const showUsers    = tabName === 'users';
+
   show('stats', showOverview);
   const pendingCount = parseInt($('pendCount')?.textContent || '0', 10);
   show('pendingSec', (showOverview || showSellers) && pendingCount > 0);
-  show('secSellers', showSellers);
+  show('secSellers',  showSellers);
   show('secProducts', showProducts);
-  show('secKeys', showKeys);
-  show('secUsers', showUsers);
-}
+  show('secKeys',     showKeys);
+  show('secUsers',    showUsers);
 
+  // Lazy load: nếu data chưa được load cho tab này
+  loadTabData(tabName);
+}
 async function loadAll() {
   await Promise.all([loadStats(), loadSellers(), loadKeys(), loadUsers(), loadProducts()]);
 }
@@ -186,6 +252,185 @@ async function loadStats() {
         `<div class="panel-stat"><div class="panel-stat-num ${hot ? 'hot' : ''}">${n ?? 0}</div><div class="panel-stat-label">${l}</div></div>`
     )
     .join('');
+
+  // Render 3D charts with real data
+  initCharts3D(s, labels, vals);
+}
+
+// ── 3D ECharts ──────────────────────────────────────────────────
+let _chart3dBar = null;
+let _chart3dPie = null;
+
+function initCharts3D(s, labels, vals) {
+  if (typeof echarts === 'undefined') return;
+
+  // ── Chart 1: 3D Bar ───────────────────────────────────────────
+  const barEl = $('chart3dBar');
+  if (barEl) {
+    if (_chart3dBar) _chart3dBar.dispose();
+    _chart3dBar = echarts.init(barEl, null, { renderer: 'canvas' });
+
+    const categories = labels.slice(0, 7);  // bỏ pendingSellers
+    const barData = vals.slice(0, 7);
+
+    // Màu gradient cho từng cột
+    const colors = [
+      ['#3b82f6', '#1d4ed8'],
+      ['#8b5cf6', '#6d28d9'],
+      ['#06b6d4', '#0e7490'],
+      ['#10b981', '#059669'],
+      ['#f59e0b', '#d97706'],
+      ['#ef4444', '#dc2626'],
+      ['#ec4899', '#db2777'],
+    ];
+
+    _chart3dBar.setOption({
+      backgroundColor: 'transparent',
+      grid3D: {
+        boxWidth: 200,
+        boxHeight: 80,
+        boxDepth: 60,
+        viewControl: {
+          autoRotate: true,
+          autoRotateSpeed: 5,
+          distance: 220,
+          beta: 20,
+          alpha: 22,
+          rotateSensitivity: 1,
+          zoomSensitivity: 0.5,
+        },
+        light: {
+          main: { intensity: 1.5, shadow: true, shadowQuality: 'high' },
+          ambient: { intensity: 0.4 },
+        },
+        postEffect: {
+          enable: true,
+          bloom: { enable: true, bloomIntensity: 0.08 },
+          SSAO: { enable: true, radius: 4, quality: 'medium', intensity: 1.2 },
+        },
+      },
+      xAxis3D: {
+        type: 'category',
+        data: categories,
+        axisLabel: { fontSize: 10, color: '#64748b', margin: 8 },
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+      yAxis3D: {
+        type: 'value',
+        axisLabel: { fontSize: 9, color: '#94a3b8' },
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        splitLine: { lineStyle: { color: 'rgba(226,232,240,0.5)' } },
+      },
+      zAxis3D: { type: 'value', show: false },
+      series: [{
+        type: 'bar3D',
+        data: categories.map((cat, i) => ({
+          value: [i, barData[i] ?? 0, 0],
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: colors[i][0] },
+                { offset: 1, color: colors[i][1] },
+              ],
+            },
+            opacity: 0.92,
+          },
+        })),
+        label: {
+          show: true,
+          position: 'top',
+          formatter: (p) => p.value[1],
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#334155',
+          distance: 2,
+        },
+        shading: 'lambert',
+        barSize: 18,
+      }],
+      tooltip: {
+        show: true,
+        formatter: (p) => `<b>${p.value[0] !== undefined ? categories[p.value[0]] : ''}</b>: ${p.value[1]}`,
+        backgroundColor: '#fff',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#0f172a', fontSize: 12 },
+      },
+    });
+
+    window.addEventListener('resize', () => _chart3dBar?.resize());
+  }
+
+  // ── Chart 2: 3D Pie (keys used vs unused) ─────────────────────
+  const pieEl = $('chart3dPie');
+  if (pieEl) {
+    if (_chart3dPie) _chart3dPie.dispose();
+    _chart3dPie = echarts.init(pieEl, null, { renderer: 'canvas' });
+
+    const keysTotal  = s.keys      ?? 0;
+    const keysUsed   = s.keysUsed  ?? 0;
+    const keysUnused = Math.max(0, keysTotal - keysUsed);
+
+    const pieColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
+    const pieSlices = [
+      { name: 'Key đã dùng',   value: keysUsed,                  color: '#3b82f6' },
+      { name: 'Key chưa dùng', value: keysUnused,                color: '#10b981' },
+      { name: 'Users',         value: s.users    ?? 0,           color: '#8b5cf6' },
+      { name: 'Sellers',       value: s.sellers  ?? 0,           color: '#f59e0b' },
+      { name: 'Sessions',      value: s.sessions ?? 0,           color: '#06b6d4' },
+    ].filter(p => p.value > 0);
+
+    _chart3dPie.setOption({
+      backgroundColor: 'transparent',
+      legend: {
+        orient: 'vertical',
+        right: '5%',
+        top: 'center',
+        textStyle: { fontSize: 11, color: '#64748b' },
+        icon: 'circle',
+        itemWidth: 10,
+        itemHeight: 10,
+      },
+      series: [{
+        type: 'pie',
+        radius: ['38%', '68%'],
+        center: ['42%', '52%'],
+        data: pieSlices.map((p) => ({
+          name: p.name,
+          value: p.value,
+          itemStyle: { color: p.color, borderRadius: 6 },
+        })),
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%',
+          fontSize: 10,
+          color: '#334155',
+          fontWeight: 600,
+        },
+        labelLine: { length: 12, length2: 8 },
+        emphasis: {
+          scale: true,
+          scaleSize: 8,
+          itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.2)' },
+        },
+        animationType: 'scale',
+        animationEasing: 'elasticOut',
+        animationDelay: (i) => i * 60,
+      }],
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)',
+        backgroundColor: '#fff',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#0f172a', fontSize: 12 },
+      },
+    });
+
+    window.addEventListener('resize', () => _chart3dPie?.resize());
+  }
 }
 
 async function loadSellers() {
@@ -246,56 +491,83 @@ function renderSellers() {
     .join('');
 }
 
-async function pickSellerPerms(username) {
-  const login = confirm(`Seller "${username}" — allow Login code?\nOK = yes, Cancel = no`);
-  const reset = confirm(`Allow Password reset link?`);
-  const family = confirm(`Allow Household code?`);
-  return { permLogin: login, permReset: reset, permFamily: family };
+// ── Permissions Modal (replaces ugly confirm() dialogs) ─────────
+let _permsResolve = null;
+
+function openPermsModal(title, sub, defaults = {}) {
+  return new Promise((resolve) => {
+    _permsResolve = resolve;
+    $('permsModalTitle').textContent = title;
+    $('permsModalSub').textContent = sub || 'Chọn quyền truy cập cho seller.';
+    $('permLoginCheck').checked  = !!defaults.permLogin;
+    $('permResetCheck').checked  = !!defaults.permReset;
+    $('permFamilyCheck').checked = !!defaults.permFamily;
+    $('permsModal').classList.add('show');
+  });
+}
+
+function closePermsModal() {
+  $('permsModal').classList.remove('show');
+  if (_permsResolve) { _permsResolve(null); _permsResolve = null; }
+}
+
+function confirmPerms() {
+  const result = {
+    permLogin:  $('permLoginCheck').checked,
+    permReset:  $('permResetCheck').checked,
+    permFamily: $('permFamilyCheck').checked,
+  };
+  $('permsModal').classList.remove('show');
+  if (_permsResolve) { _permsResolve(result); _permsResolve = null; }
 }
 
 async function approve(id, username) {
-  const perms = await pickSellerPerms(username || id);
+  const perms = await openPermsModal(
+    `Duyệt: ${username}`,
+    `Cấp quyền cho seller "${username}". Có thể thay đổi sau.`,
+    { permLogin: true, permReset: true, permFamily: true }
+  );
+  if (!perms) return; // cancelled
   const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve', perms);
-  if (d.success) {
-    toast('Seller approved');
-    loadSellers();
-    loadStats();
-  } else toast('Approve failed');
-}
-
-async function topupSeller(id, username) {
-  const raw = prompt(`Top up for seller "${username}" (VND):`, '300000');
-  if (raw == null) return;
-  const amount = parseInt(String(raw).replace(/\D/g, ''), 10);
-  if (!amount || amount < 1000) return toast('Minimum amount 1,000đ');
-  const r = await fetch('/api/admin/sellers/' + encodeURIComponent(id) + '/topup', {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ amount, description: 'Admin top up' }),
-  });
-  const d = await r.json();
-  if (d.success) toast('Topped up ' + amount.toLocaleString('vi-VN') + 'đ — balance: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
-  else toast(d.error || 'Top up failed');
+  if (d.success) { toast('✓ Seller đã được duyệt'); loadSellers(); loadStats(); }
+  else toast('Lỗi: ' + (d.error || 'Approve failed'));
 }
 
 async function editSellerPerms(id, username) {
-  const perms = await pickSellerPerms(username || id);
+  const seller = allSellers.find((s) => s.id === id) || {};
+  const perms = await openPermsModal(
+    `Quyền: ${username}`,
+    `Chỉnh sửa quyền truy cập cho seller "${username}".`,
+    { permLogin: seller.permLogin, permReset: seller.permReset, permFamily: seller.permFamily }
+  );
+  if (!perms) return;
   const d = await jpatch('/api/admin/sellers/' + encodeURIComponent(id) + '/perms', perms);
-  if (d.success) {
-    toast('Seller permissions updated');
-    loadSellers();
-  } else toast(d.error || 'Update failed');
+  if (d.success) { toast('✓ Cập nhật quyền thành công'); loadSellers(); }
+  else toast(d.error || 'Update failed');
 }
 
 async function reject(id) {
-  if (!confirm('Reject / lock this seller?')) return;
+  if (!confirm('Khóa / từ chối seller này?')) return;
   const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/reject');
-  if (d.success) {
-    toast('Updated');
-    loadSellers();
-    loadStats();
-  } else toast('Error');
+  if (d.success) { toast('Đã cập nhật'); loadSellers(); loadStats(); }
+  else toast('Lỗi');
 }
+
+async function topupSeller(id, username) {
+  const raw = prompt(`Nạp tiền cho seller "${username}" (VND):`, '300000');
+  if (raw == null) return;
+  const amount = parseInt(String(raw).replace(/\D/g, ''), 10);
+  if (!amount || amount < 1000) return toast('Tối thiểu 1.000đ');
+  const r = await fetch('/api/admin/sellers/' + encodeURIComponent(id) + '/topup', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ amount, description: 'Admin nạp tiền' }),
+  });
+  const d = await r.json();
+  if (d.success) toast('✓ Đã nạp ' + amount.toLocaleString('vi-VN') + 'đ — số dư: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
+  else toast(d.error || 'Top up thất bại');
+}
+
 
 async function loadKeys() {
   const d = await jget('/api/admin/keys');
@@ -495,9 +767,12 @@ function initFilters() {
 window.login = login;
 window.loginToken = loginToken;
 window.logout = logout;
+window.forceLogout = forceLogout;
 window.toggleTokenMode = toggleTokenMode;
 window.approve = approve;
 window.editSellerPerms = editSellerPerms;
+window.closePermsModal = closePermsModal;
+window.confirmPerms = confirmPerms;
 window.topupSeller = topupSeller;
 window.reject = reject;
 window.delKey = delKey;
@@ -548,16 +823,34 @@ document.addEventListener('DOMContentLoaded', () => {
   $('productModal')?.addEventListener('click', (e) => {
     if (e.target === $('productModal')) closeProductModal();
   });
+  $('permsModal')?.addEventListener('click', (e) => {
+    if (e.target === $('permsModal')) closePermsModal();
+  });
   (async () => {
+    // Kiểm tra token trong sessionStorage — có thể cũ sau khi server restart
     if (TOKEN) {
-      showDash();
-      return;
+      const check = await fetch('/api/admin/stats', { headers: { 'X-Admin-Token': TOKEN } });
+      if (check.ok) {
+        showDash();
+        return;
+      }
+      // Token hết hạn — xoá và thử tiếp
+      sessionStorage.removeItem('adminToken');
+      TOKEN = '';
     }
-    const r = await fetch('/api/panel/me');
-    if (r.ok) {
-      const d = await r.json();
-      if (d.success && d.account.role === 'admin') showDash();
-    }
+    // Thử session cookie (đăng nhập bằng tài khoản admin)
+    try {
+      const r = await fetch('/api/panel/me');
+      if (r.ok) {
+        const d = await r.json();
+        if (d.success && d.account.role === 'admin') {
+          showDash();
+          return;
+        }
+      }
+    } catch {}
+    // Không có auth hợp lệ — hiển thị login
+    show('loginCard', true);
   })();
 });
 

@@ -1,21 +1,24 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Orders | Seller · Netflix Key</title>
+  <title>Seller Panel · Netflix Key</title>
+  <meta name="description" content="Seller workspace – quản lý đơn hàng, keys và email Netflix." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
   <link rel="stylesheet" href="/panel/css/tokens.css" />
   <link rel="stylesheet" href="/panel/css/form-card.css" />
   <link rel="stylesheet" href="/panel/css/brand.css" />
   <link rel="stylesheet" href="/panel/css/components.css" />
   <link rel="stylesheet" href="/panel/css/seller-workspace.css" />
-  <link rel="stylesheet" href="/panel/css/seller-cyber.css" />
   <link rel="stylesheet" href="/panel/css/depth.css" />
   <link rel="stylesheet" href="/panel/css/i18n.css" />
-  <link rel="stylesheet" href="/panel/css/bw-flat.css" />
   <link rel="stylesheet" href="/panel/css/seller-auth.css" />
+  <link rel="stylesheet" href="/panel/css/seller-components.css" />
 </head>
-<body data-theme="seller" class="ui-scene ui-scene--cyber" data-i18n-title="seller.title">
+<body data-theme="seller" class="ui-scene" data-i18n-title="seller.title">
   <div id="authView" class="seller-auth-page">
     <div class="seller-auth-shell">
       <div class="seller-auth-card panel-card brand-card">
@@ -195,12 +198,9 @@
       </nav>
 
       <div class="sw-support">
-        <div class="sup-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.5 8a6.5 6.5 0 0 0-13 0c0 7-3 9-3 9h19s-3-2-3-9z"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span data-i18n="seller.supTitle">Cần hỗ trợ?</span>
-        </div>
-        <a href="https://t.me/" target="_blank" rel="noopener" class="sup-link" data-i18n="seller.supTelegram">Telegram Support</a>
-        <div class="sup-status"><span class="sup-dot"></span><span data-i18n="seller.supOnline">Online</span></div>
+        <div class="sup-label">Hỗ trợ Seller</div>
+        <div class="sup-phone">Zalo <b>058.529.5072</b></div>
+        <div class="sup-name">Hùng Smart</div>
       </div>
       <button type="button" class="sw-logout" onclick="logout()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -353,14 +353,20 @@
             </div>
           </div>
           <div class="sw-card">
-            <div class="sw-toolbar">
-              <input id="orderSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="seller.orders.searchPh" placeholder="ORD-... / email / mã / sản phẩm..." oninput="debounceLoadOrders()" />
-              <select id="orderStatusSelect" class="panel-input" style="width:auto;margin:0;min-width:160px" onchange="loadOrders()">
-                <option value="all" data-i18n="common.all">Tất cả</option>
-                <option value="active" selected data-i18n="chip.active">Đang dùng</option>
-                <option value="expired" data-i18n="seller.orders.expired">Hết hạn</option>
-              </select>
-              <button type="button" class="sw-btn sw-btn--outline" onclick="loadOrders()" data-i18n="common.reload">Làm mới</button>
+            <div class="sw-toolbar-pro">
+              <div class="sw-search-box">
+                <svg class="sw-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input id="orderSearch" type="search" class="sw-search-input" placeholder="Tìm theo ORD, email, mã sản phẩm..." oninput="debounceLoadOrders()" />
+              </div>
+              <div class="sw-filter-tabs" id="orderStatusTabs">
+                <button type="button" class="sw-filter-tab" data-status="all" onclick="setOrderStatus('all',this)">Tất cả</button>
+                <button type="button" class="sw-filter-tab is-active" data-status="active" onclick="setOrderStatus('active',this)">Đang dùng</button>
+                <button type="button" class="sw-filter-tab" data-status="expired" onclick="setOrderStatus('expired',this)">Hết hạn</button>
+              </div>
+              <button type="button" class="sw-reload-btn" onclick="loadOrders()" title="Làm mới">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              </button>
+              <input type="hidden" id="orderStatusSelect" value="active" />
             </div>
             <div id="ordersList"></div>
             <div class="sw-pagination" id="ordersPagination"></div>
@@ -390,14 +396,6 @@
               <select class="panel-input" style="width:auto;min-width:120px" id="storeType">
                 <option value="all" data-i18n="common.all">Tất cả</option>
               </select>
-            </div>
-            <div class="sw-cart-bar" id="storeCart">
-              <div class="cart-info"><span id="cartCount">1 sản phẩm · 1 loại</span></div>
-              <div class="cart-total">Tạm tính · <span id="cartTotal">0 đ</span></div>
-              <div style="display:flex;gap:8px">
-                <button type="button" class="sw-btn sw-btn--outline" onclick="clearCart()" data-i18n="seller.store.clearCart">Xóa giỏ</button>
-                <button type="button" class="sw-btn sw-btn--primary" onclick="checkoutCart()" data-i18n="seller.store.checkout">Thanh toán</button>
-              </div>
             </div>
             <div class="sw-store-grid" id="storeGrid"></div>
           </div>
@@ -448,28 +446,57 @@
               <h2 data-i18n="seller.deposit.qrTitle">Mã QR chuyển khoản</h2>
               <p class="sub" data-i18n="seller.deposit.qrSub">Quét bằng app ngân hàng.</p>
               <div class="sw-qr-img"><img id="depositQr" alt="QR" /></div>
+              <div class="sw-qr-status-badge">
+                <span class="dot-ping"></span>
+                <span>Đang theo dõi giao dịch...</span>
+              </div>
               <div class="sw-qr-hint" data-i18n="seller.deposit.qrHint">Sau khi chuyển khoản thành công, bạn sẽ nhận được thông báo realtime ngay tại đây trong vài giây.</div>
             </div>
             <div class="sw-card">
               <h2 data-i18n="seller.deposit.bankTitle">Thông tin chuyển khoản</h2>
               <p class="sub" data-i18n="seller.deposit.bankSub">Sao chép thông tin để chuyển sang app ngân hàng.</p>
               <div class="sw-bank-row">
-                <div><div class="lbl" data-i18n="seller.deposit.bank">Ngân hàng</div><div class="val" id="depBank">Vietcombank</div></div>
-                <button type="button" class="sw-icon-btn" data-copy-from="depBank">⎘</button>
+                <div><div class="lbl" data-i18n="seller.deposit.bank">Ngân hàng</div><div class="val" id="depBank">—</div></div>
+                <button type="button" class="sw-icon-btn" data-copy-from="depBank" aria-label="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
               </div>
               <div class="sw-bank-row">
-                <div><div class="lbl" data-i18n="seller.deposit.acctNo">Số tài khoản</div><div class="val" id="depAcct">1064044256</div></div>
-                <button type="button" class="sw-icon-btn" data-copy-from="depAcct">⎘</button>
+                <div><div class="lbl" data-i18n="seller.deposit.acctNo">Số tài khoản</div><div class="val" id="depAcct">—</div></div>
+                <button type="button" class="sw-icon-btn" data-copy-from="depAcct" aria-label="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
               </div>
               <div class="sw-bank-row">
-                <div><div class="lbl" data-i18n="seller.deposit.holder">Chủ tài khoản</div><div class="val" id="depHolder">NGUYEN TAN THANG</div></div>
-                <button type="button" class="sw-icon-btn" data-copy-from="depHolder">⎘</button>
+                <div><div class="lbl" data-i18n="seller.deposit.holder">Chủ tài khoản</div><div class="val" id="depHolder">—</div></div>
+                <button type="button" class="sw-icon-btn" data-copy-from="depHolder" aria-label="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
               </div>
               <div class="sw-bank-row is-hl">
-                <div><div class="lbl" data-i18n="seller.deposit.memo">Nội dung (bắt buộc)</div><div class="val" id="depMemo">chuyen tien USERNAME</div></div>
-                <button type="button" class="sw-icon-btn" data-copy-from="depMemo">⎘</button>
+                <div style="flex:1">
+                  <div class="lbl" data-i18n="seller.deposit.memo">Nội dung chuyển khoản (bắt buộc)</div>
+                  <div class="val" id="depMemo">—</div>
+                  <div class="note">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block;vertical-align:-1px;margin-right:2px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span data-i18n="seller.deposit.memoNote">Sai nội dung sẽ không tự động cộng tiền — phải nhờ admin đối soát thủ công.</span>
+                  </div>
+                </div>
+                <button type="button" class="sw-icon-btn" data-copy-from="depMemo" aria-label="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
               </div>
-              <p class="sub" style="margin-top:10px" data-i18n="seller.deposit.memoNote">Sai nội dung sẽ không tự cộng được — phải mở admin hỗ trợ thủ công.</p>
+              <div class="sw-deposit-info">
+                <div class="info-head">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  <span>Số tiền do bạn nhập trên app ngân hàng</span>
+                </div>
+                <div class="info-body">
+                  <div class="info-title">Tối thiểu nạp</div>
+                  <div class="info-val">10.000đ</div>
+                  <div class="info-sub">- số tiền nhỏ hơn sẽ bị hệ thống bỏ qua. Hệ thống tự nhận đúng số bạn chuyển.</div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="sw-card">
@@ -618,11 +645,26 @@
               </div>
               <p class="sub" data-i18n="seller.profile.pwSub">Tối thiểu 6 ký tự, không chia sẻ với bất kỳ ai.</p>
               <label class="panel-label" data-i18n="seller.profile.pwOld">Mật khẩu hiện tại</label>
-              <input id="pfPwOld" type="password" class="panel-input" autocomplete="current-password" />
+              <div class="pf-pw-input-wrapper">
+                <input id="pfPwOld" type="password" class="panel-input" autocomplete="current-password" />
+                <button type="button" class="pf-pw-input-toggle" onclick="togglePfPw('pfPwOld', this)" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
               <label class="panel-label" data-i18n="seller.profile.pwNew">Mật khẩu mới</label>
-              <input id="pfPwNew" type="password" class="panel-input" autocomplete="new-password" />
+              <div class="pf-pw-input-wrapper">
+                <input id="pfPwNew" type="password" class="panel-input" autocomplete="new-password" />
+                <button type="button" class="pf-pw-input-toggle" onclick="togglePfPw('pfPwNew', this)" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
               <label class="panel-label" data-i18n="seller.profile.pwNew2">Nhập lại mật khẩu mới</label>
-              <input id="pfPwNew2" type="password" class="panel-input" autocomplete="new-password" />
+              <div class="pf-pw-input-wrapper">
+                <input id="pfPwNew2" type="password" class="panel-input" autocomplete="new-password" />
+                <button type="button" class="pf-pw-input-toggle" onclick="togglePfPw('pfPwNew2', this)" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
               <p class="panel-msg-err" id="pfPwErr"></p>
               <p class="panel-msg-ok" id="pfPwOk"></p>
               <button type="button" class="sw-btn sw-btn--primary" style="margin-top:14px" onclick="changePassword()">
@@ -636,7 +678,7 @@
     </div>
   </div>
 
-  <div class="panel-modal-backdrop" id="buyModal">
+  <div class="panel-modal-backdrop hidden" id="buyModal">
     <div class="panel-modal sw-modal-wide">
       <h3 id="buyTitle">Buy product</h3>
       <p class="sub" id="buyPrice"></p>
@@ -652,7 +694,7 @@
     </div>
   </div>
 
-  <div class="panel-modal-backdrop" id="historyModal">
+  <div class="panel-modal-backdrop hidden" id="historyModal">
     <div class="panel-modal sw-modal-wide">
       <h3 id="histTitle">Order history</h3>
       <div id="histList"></div>
@@ -662,11 +704,11 @@
     </div>
   </div>
 
-  <div class="panel-modal-backdrop" id="createKeyModal">
+  <div class="panel-modal-backdrop hidden" id="createKeyModal">
     <div class="panel-modal sw-modal-wide">
       <div class="sw-modal-head">
         <h3>Create new Key</h3>
-        <button type="button" class="sw-modal-close" onclick="closeCreateKeyModal()">├ù</button>
+        <button type="button" class="sw-modal-close" onclick="closeCreateKeyModal()">✕</button>
       </div>
       <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
       <label class="panel-label">Account (purchased email)</label>
@@ -675,30 +717,33 @@
       <input type="hidden" id="crOrderId" />
       <p class="perm-hint">Type to search orders by email or ORD code.</p>
       <div class="sw-sync-box">
-        <div class="title">≡ƒöù Sync across keys</div>
+        <div class="title">🔗 Sync across keys</div>
         <label><input type="checkbox" id="crSyncName" checked /> Name</label>
         <label><input type="checkbox" id="crSyncExpires" checked /> Duration</label>
         <label><input type="checkbox" id="crSyncPerms" checked /> Permissions</label>
         <p class="perm-hint">On: share one value across all keys. Off: each key has its own value.</p>
       </div>
       <div id="crKeyRows"></div>
-      <button type="button" class="sw-btn sw-btn--outline" id="crAddRowBtn" onclick="addCreateKeyRow()">Γèò Add key</button>
+      <button type="button" class="sw-btn sw-btn--outline" id="crAddRowBtn" onclick="addCreateKeyRow()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Add key
+      </button>
       <p class="panel-msg-err" id="crErr"></p>
       <div class="panel-modal-actions sw-modal-foot-split">
         <span id="crKeyCount" class="perm-hint">1/5 keys</span>
         <div>
           <button type="button" class="sw-btn sw-btn--outline" onclick="closeCreateKeyModal()">Cancel</button>
-          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()">≡ƒÆ╛ Save Key</button>
+          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()">💾 Save Key</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="panel-modal-backdrop" id="editModal">
+  <div class="panel-modal-backdrop hidden" id="editModal">
     <div class="panel-modal sw-modal-wide">
       <div class="sw-modal-head">
         <h3 id="editTitle">Edit Key</h3>
-        <button type="button" class="sw-modal-close" onclick="closeEditModal()">├ù</button>
+        <button type="button" class="sw-modal-close" onclick="closeEditModal()">✕</button>
       </div>
       <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
       <label class="panel-label">Account (purchased email)</label>
@@ -719,7 +764,7 @@
       <p class="sw-perm-note" id="edPermHint"></p>
       <div class="panel-modal-actions">
         <button type="button" class="sw-btn sw-btn--outline" onclick="closeEditModal()">Cancel</button>
-        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()">≡ƒÆ╛ Save changes</button>
+        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()">💾 Save changes</button>
       </div>
     </div>
   </div>
@@ -727,7 +772,16 @@
   <div class="panel-toast" id="toast"></div>
   <script src="/panel/js/i18n.js"></script>
   <script src="/panel/js/filters.js"></script>
-  <script src="/seller/js/seller.js"></script>
+  <!-- Seller workspace — split per view (classic scripts share global scope; load bootstrap last) -->
+  <script src="/seller/js/seller-core.js"></script>
+  <script src="/seller/js/seller-dashboard.js"></script>
+  <script src="/seller/js/seller-orders.js"></script>
+  <script src="/seller/js/seller-store.js"></script>
+  <script src="/seller/js/seller-emails.js"></script>
+  <script src="/seller/js/seller-transactions.js"></script>
+  <script src="/seller/js/seller-profile.js"></script>
+  <script src="/seller/js/seller-auth.js"></script>
   <script src="/seller/js/seller-keys.js"></script>
+  <script src="/seller/js/seller-app.js"></script>
 </body>
 </html>

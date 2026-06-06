@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/checker.css" />
   <link rel="stylesheet" href="/panel/css/depth.css" />
   <link rel="stylesheet" href="/panel/css/bw-flat.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
 <body class="ui-scene ui-scene--cinematic chk-page" data-i18n-title="chk.title">
 
@@ -100,6 +101,20 @@
       <div class="stat-card stat-card-pending" id="sc-pending" onclick="setFilter('pending')">
         <div class="sc-num" id="sc-pending-n">0</div>
         <div class="sc-label" data-i18n="chk.statPending">Pending</div>
+      </div>
+    </div>
+
+    <!-- 3D Donut Chart — hiện sau khi check -->
+    <div class="chk-chart-wrap" id="chkChartWrap" style="display:none">
+      <div class="chk-chart-card">
+        <div class="chk-chart-header">
+          <span class="chk-chart-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.21 15.89A9 9 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            Phân tích kết quả
+          </span>
+          <span class="chk-chart-sub" id="chkChartSub">0 cookies phân tích</span>
+        </div>
+        <div id="chkChart3d" class="chk-chart-canvas"></div>
       </div>
     </div>
 

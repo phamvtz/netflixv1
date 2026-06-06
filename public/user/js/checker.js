@@ -287,6 +287,129 @@ function updateStatCards() {
   document.getElementById('sc-pending-n').textContent= pending;
   document.getElementById('statCards').style.display = 'grid';
   document.getElementById('toolbar').style.display   = 'flex';
+
+  // Update 3D chart
+  updateCheckerChart({ total, live, dead, cancelled, pending });
+}
+
+// ── 3D EChart cho Checker ─────────────────────────────────────────────────────
+let _chkChart = null;
+
+function updateCheckerChart({ total, live, dead, cancelled, pending }) {
+  if (typeof echarts === 'undefined') return;
+  const wrap = document.getElementById('chkChartWrap');
+  const el   = document.getElementById('chkChart3d');
+  const sub  = document.getElementById('chkChartSub');
+  if (!wrap || !el) return;
+
+  // Hiện chart
+  wrap.style.display = 'block';
+  if (sub) sub.textContent = `${total} cookie${total !== 1 ? 's' : ''} phân tích`;
+
+  // Init chart nếu chưa có
+  if (!_chkChart) {
+    _chkChart = echarts.init(el, null, { renderer: 'canvas' });
+    window.addEventListener('resize', () => _chkChart?.resize());
+  }
+
+  const slices = [
+    { name: '✓ Live',      value: live,      color: '#10b981', glow: '#34d399' },
+    { name: '✗ Dead',      value: dead,      color: '#ef4444', glow: '#f87171' },
+    { name: '⚠ Cancelled', value: cancelled, color: '#f59e0b', glow: '#fbbf24' },
+    { name: '⏳ Pending',   value: pending,   color: '#94a3b8', glow: '#cbd5e1' },
+  ].filter(s => s.value > 0);
+
+  // Nếu toàn bộ vẫn pending, hiển thị loading placeholder
+  const showSlices = slices.length > 0 ? slices : [
+    { name: 'Đang chờ…', value: 1, color: '#e2e8f0', glow: '#e2e8f0' },
+  ];
+
+  _chkChart.setOption({
+    backgroundColor: 'transparent',
+    legend: {
+      orient: 'vertical',
+      right: '4%',
+      top: 'middle',
+      textStyle: { fontSize: 12, color: '#334155', fontFamily: 'Inter, system-ui, sans-serif' },
+      icon: 'circle',
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 12,
+      formatter: (name) => {
+        const s = showSlices.find(x => x.name === name);
+        return s ? `${name}  ${s.value}` : name;
+      },
+    },
+    series: [{
+      type: 'pie',
+      radius: ['42%', '70%'],
+      center: ['38%', '50%'],
+      data: showSlices.map(s => ({
+        name: s.name,
+        value: s.value,
+        itemStyle: {
+          color: s.color,
+          borderRadius: 8,
+          shadowBlur: 12,
+          shadowColor: s.glow + '55',
+        },
+      })),
+      label: {
+        show: total <= 10,
+        formatter: '{d}%',
+        fontSize: 11,
+        fontWeight: 700,
+        color: '#fff',
+        position: 'inside',
+      },
+      labelLine: { show: false },
+      emphasis: {
+        scale: true,
+        scaleSize: 6,
+        itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,.25)' },
+        label: { show: true, fontSize: 13, fontWeight: 700, color: '#0f172a', position: 'outside' },
+      },
+      animationType: 'scale',
+      animationEasing: 'backOut',
+      animationDuration: 600,
+    }],
+    tooltip: {
+      trigger: 'item',
+      formatter: (p) => `<b>${p.name}</b><br/>${p.value} (${p.percent}%)`,
+      backgroundColor: '#fff',
+      borderColor: '#e2e8f0',
+      borderWidth: 1,
+      textStyle: { color: '#0f172a', fontSize: 12, fontFamily: 'Inter, system-ui, sans-serif' },
+      extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.1); border-radius: 10px;',
+    },
+    graphic: [{
+      type: 'text',
+      left: '38%',
+      top: '44%',
+      style: {
+        text: String(total),
+        textAlign: 'center',
+        fill: '#0f172a',
+        fontSize: 26,
+        fontWeight: 900,
+        fontFamily: 'Inter, system-ui, sans-serif',
+      },
+      z: 10,
+    }, {
+      type: 'text',
+      left: '38%',
+      top: '56%',
+      style: {
+        text: 'total',
+        textAlign: 'center',
+        fill: '#94a3b8',
+        fontSize: 11,
+        fontWeight: 600,
+        fontFamily: 'Inter, system-ui, sans-serif',
+      },
+      z: 10,
+    }],
+  }, true);
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -441,6 +564,10 @@ function clearAll() {
   document.getElementById('exportDropdown').style.display='none';
   document.getElementById('autoWrap').style.display='none';
   document.getElementById('autoCheck').checked = false;
+  // Ẩn chart
+  const cw = document.getElementById('chkChartWrap');
+  if (cw) cw.style.display = 'none';
+  if (_chkChart) { _chkChart.dispose(); _chkChart = null; }
   clearTimeout(autoTimer); autoTimer = null;
   sets=[]; rawSets=[]; liveResults=[]; activeDetail=-1;
   const rs = document.getElementById('resultSearch');

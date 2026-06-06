@@ -653,3 +653,51 @@ a { text-decoration: none; color: inherit; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--t3); }
+
+/* ══ 3D CHART ═══════════════════════════════════════════════════════════ */
+.chk-chart-wrap {
+  animation: slideIn .25s cubic-bezier(.16,1,.3,1);
+}
+.chk-chart-card {
+  background: #fff;
+  border: 1px solid var(--fc-bd, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(59,130,246,.08), 0 2px 8px rgba(15,23,42,.04);
+  overflow: hidden;
+  position: relative;
+}
+.chk-chart-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #10b981, #f59e0b, #ef4444);
+}
+.chk-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 10px;
+}
+.chk-chart-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -.01em;
+}
+.chk-chart-title svg { color: #3b82f6; flex-shrink: 0; }
+.chk-chart-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.chk-chart-canvas {
+  width: 100%;
+  height: 240px;
+}
