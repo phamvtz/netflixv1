@@ -918,6 +918,7 @@ async function fullCheck(cookieStr, paceId) {
     }));
 
     let nft = NFT_SKIPPED;
+    let inconclusiveVerify = false;
 
     if (!pace.skipNftoken) {
       if (mode === 'parallel') {
@@ -933,15 +934,27 @@ async function fullCheck(cookieStr, paceId) {
     // Netflix renders payment-hold/dead banners client-side, so SSR HTML can look
     // active on a dead/on-hold account. nftoken actually mints a token, so a
     // definitive DEAD verdict here overrides the HTML-only LIVE (even in stealth).
+    // Retry on transient/inconclusive nftoken responses so a single network blip
+    // can't silently fall back to a false LIVE ("fail-open").
     const verifyLiveEnabled = process.env.VERIFY_LIVE_NFTOKEN !== '0' && mode !== 'off';
     if (verifyLiveEnabled && nft.skipped && nf.reachable && nf.alive) {
-      await randDelay(pace.nftMin || 400, pace.nftMax || 1500);
-      nft = await runNftokenCheck(cookieStr);
+      const maxTries = Math.max(1, parseInt(process.env.VERIFY_LIVE_RETRIES || '2', 10) || 2);
+      for (let attempt = 1; attempt <= maxTries; attempt++) {
+        await randDelay(pace.nftMin || 400, pace.nftMax || 1500);
+        nft = await runNftokenCheck(cookieStr);
+        // Stop as soon as nftoken gives a definitive verdict (alive or dead).
+        if (nft.definitiveDead || nft.alive) break;
+        // Otherwise it was a transient error / inconclusive response — retry.
+      }
+      inconclusiveVerify = !nft.definitiveDead && !nft.alive;
     }
 
     const out = mergeCheckResults(nf, nft);
     out.checkPace = pace.key;
     if (pace.skipNftoken && nft.skipped) out.nftokenSkippedStealth = true;
+    // Could not confirm a LIVE-looking account with nftoken (all attempts failed)
+    // — surface it so the UI can warn instead of showing a confident LIVE.
+    if (inconclusiveVerify) out.verifyInconclusive = true;
     return out;
   } catch (e) {
     const out = { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
