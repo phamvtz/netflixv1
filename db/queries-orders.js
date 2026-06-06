@@ -4,6 +4,20 @@ const crypto = require('crypto');
 const defaultDb = () => require('./database');
 const { boolToInt, clampKeyPerms, getSellerMaxPerms } = require('./queries');
 
+// Run fn inside a SQLite transaction (node:sqlite has no .transaction() helper).
+// Commits when fn returns normally (including early returns), rolls back on throw.
+function runInTransaction(conn, fn) {
+  conn.exec('BEGIN');
+  try {
+    const result = fn();
+    conn.exec('COMMIT');
+    return result;
+  } catch (err) {
+    conn.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function genOrderId() {
   return 'ORD-' + crypto.randomBytes(4).toString('hex').toUpperCase() + crypto.randomBytes(2).toString('hex').toUpperCase();
 }
@@ -472,9 +486,29 @@ module.exports = {
   recordDepositIntent,
   findDepositIntentByRef,
   listRecentDepositIntents,
+  getDepositIntentsBySeller,
+  listUnmatchedDepositIntents,
+  assignDepositIntent,
 };
 
 // ── Deposit intents (bank webhook log) ─────────────────────────────
+function mapDepositIntent(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    provider: row.provider,
+    txRef: row.tx_ref,
+    accountId: row.account_id,
+    amount: row.amount,
+    memo: row.memo,
+    matchedUser: row.matched_user,
+    status: row.status,
+    transactionId: row.transaction_id,
+    receivedAt: row.received_at,
+    creditedAt: row.credited_at,
+  };
+}
+
 function findDepositIntentByRef(provider, txRef, db) {
   const conn = db || defaultDb();
   return conn.prepare(
@@ -486,14 +520,68 @@ function listRecentDepositIntents(limit = 50, db) {
   const conn = db || defaultDb();
   return conn.prepare(
     'SELECT * FROM deposit_intents ORDER BY received_at DESC LIMIT ?',
-  ).all(limit);
+  ).all(limit).map(mapDepositIntent);
+}
+
+// Deposit history for one seller — only intents credited to their account.
+function getDepositIntentsBySeller(sellerId, limit = 50, db) {
+  const conn = db || defaultDb();
+  return conn.prepare(
+    'SELECT * FROM deposit_intents WHERE account_id = ? ORDER BY received_at DESC LIMIT ?',
+  ).all(sellerId, limit).map(mapDepositIntent);
+}
+
+// Deposits the system could not auto-match to a seller (admin review queue).
+function listUnmatchedDepositIntents(limit = 100, db) {
+  const conn = db || defaultDb();
+  return conn.prepare(
+    "SELECT * FROM deposit_intents WHERE status = 'unmatched' ORDER BY received_at DESC LIMIT ?",
+  ).all(limit).map(mapDepositIntent);
+}
+
+// Manually assign an unmatched deposit to a seller and credit their balance.
+// Idempotent guard: only acts on intents still in 'unmatched' status.
+// Returns { intent, transactionId, balance } or { error }.
+function assignDepositIntent(intentId, sellerId, db) {
+  const conn = db || defaultDb();
+  return runInTransaction(conn, () => {
+    const row = conn.prepare('SELECT * FROM deposit_intents WHERE id = ?').get(intentId);
+    if (!row) return { error: 'Deposit not found' };
+    if (row.status !== 'unmatched') return { error: `Deposit already ${row.status}` };
+
+    const seller = conn.prepare(
+      "SELECT id, username FROM accounts WHERE id = ? AND role = 'seller' AND status = 'active'",
+    ).get(sellerId);
+    if (!seller) return { error: 'Seller not found or not active' };
+
+    const credit = adjustBalance(sellerId, row.amount, {
+      type: 'topup',
+      refId: String(row.tx_ref),
+      description: row.memo ? `Manual top-up · ${row.memo}` : 'Manual top-up (admin)',
+    }, conn);
+    if (!credit || credit.error) return { error: credit?.error || 'Credit failed' };
+
+    conn.prepare(`
+      UPDATE deposit_intents
+         SET status = 'credited', account_id = ?, matched_user = ?,
+             transaction_id = ?, credited_at = unixepoch()
+       WHERE id = ?
+    `).run(sellerId, seller.username, credit.transactionId, intentId);
+
+    const updated = conn.prepare('SELECT * FROM deposit_intents WHERE id = ?').get(intentId);
+    return {
+      intent: mapDepositIntent(updated),
+      transactionId: credit.transactionId,
+      balance: credit.balance,
+    };
+  });
 }
 
 // Insert a fresh intent and atomically credit the seller if a username matched.
 // Returns { intent, credited, transactionId, balance, error }.
 function recordDepositIntent({ provider, txRef, amount, memo, matchedUser, accountId, payload }, db) {
   const conn = db || defaultDb();
-  const tx = conn.transaction(() => {
+  return runInTransaction(conn, () => {
     try {
       conn.prepare(`
         INSERT INTO deposit_intents (provider, tx_ref, account_id, amount, memo, matched_user, status, payload, received_at)
@@ -527,5 +615,4 @@ function recordDepositIntent({ provider, txRef, amount, memo, matchedUser, accou
     `).run(credit.transactionId, provider, String(txRef));
     return { credited: true, transactionId: credit.transactionId, balance: credit.balance };
   });
-  return tx();
 }

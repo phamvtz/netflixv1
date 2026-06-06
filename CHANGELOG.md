@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Seller deposit history: new "Deposit history" table in the seller workspace Deposit view showing all bank transfers recorded for the account (gateway, bank tx ref, amount, memo, status), backed by `GET /api/seller/deposits`.
+- Admin deposit review: new "Deposits" tab in the admin panel listing unmatched bank transfers with a per-row seller dropdown to manually assign + credit them (`GET /api/admin/deposit-intents/unmatched`, `POST /api/admin/deposit-intents/:id/assign`), plus a recent-deposits table.
 - Bank deposit webhook (`POST /api/deposit/webhook`): auto-credits a seller's balance on incoming bank transfer. Supports Casso (array payload) and SePay (single object) formats, authorizes via `BANK_WEBHOOK_TOKEN` (Bearer header or `?token=`), matches the seller by memo prefix (`BANK_MEMO_PREFIX`, default `NAP`), and is idempotent via a UNIQUE `tx_ref` in the new `deposit_intents` table (migration v11). Seller deposit config exposed via `GET /api/deposit/config`; admin visibility via `GET /api/admin/deposit-intents`.
 - Admin dashboard: Redesigned the dashboard view to use high-fidelity, tab-based navigation instead of vertically stacked panels to improve usability. Active tab state is persisted in sessionStorage.
 - Admin layout: Aligned the dashboard panels inside a centered layout container (`1200px` max-width) to improve visual density and readability on larger screens.
@@ -15,6 +17,7 @@
 - UI: **light B&W** — white background, black text; primary buttons black-on-white; `bw-flat.css` on all panel pages.
 
 ### Fixed
+- Bank webhook crash: `recordDepositIntent`/`assignDepositIntent` used `conn.transaction()` (a better-sqlite3 API) which does not exist on `node:sqlite` — replaced with a `runInTransaction` BEGIN/COMMIT/ROLLBACK helper so auto-credit and manual assign actually work.
 - Checker: tài khoản **LIVE** UI tiếng Việt (Gói Cao cấp + ngày thanh toán tương lai) không còn báo nhầm **PLAN LOST** khi thiếu nút Cancel tiếng Anh / `data-uia` payment.
 - Checker: **ngày thanh toán tương lai** → luôn **LIVE**; bỏ false positive `cập nhật phương thức thanh toán`; `mergeCheckResults` không gán lại PLAN LOST sau khi server đã resolve.
 - Checker: sửa false positive `"hasPaymentIssue":false` và từ khóa `payment issue` trong HTML → không còn MẤT GÓI khi có ngày TT tương lai (vd. `6 tháng 6, 2026`).

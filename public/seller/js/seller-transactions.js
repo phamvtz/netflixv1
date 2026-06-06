@@ -126,4 +126,32 @@ async function loadDeposit() {
       </tr>`;
     }).join('') : `<tr><td colspan="5" class="panel-empty">${tt('seller.tx.empty')}</td></tr>`;
   }
+  await loadDepositHistory();
+}
+
+// Status badge for a deposit intent (credited / pending / unmatched / error)
+function depStatusBadge(status) {
+  const map = {
+    credited: { cls: 'perm-badge--on', txt: tt('seller.deposit.stCredited') },
+    pending: { cls: 'perm-badge--off', txt: tt('seller.deposit.stPending') },
+    unmatched: { cls: 'perm-badge--off', txt: tt('seller.deposit.stUnmatched') },
+    error: { cls: 'perm-badge--off', txt: tt('seller.deposit.stError') },
+  };
+  const m = map[status] || { cls: 'perm-badge--off', txt: status || '—' };
+  return `<span class="perm-badge ${m.cls}">${m.txt}</span>`;
+}
+
+async function loadDepositHistory() {
+  const body = $('depHistoryBody');
+  if (!body) return;
+  const d = await api('/api/seller/deposits');
+  const rows = d?.deposits || [];
+  body.innerHTML = rows.length ? rows.map((dep) => `<tr>
+    <td>${fmtTs(dep.creditedAt || dep.receivedAt)}</td>
+    <td>${esc(dep.provider || '—')}</td>
+    <td style="font-family:var(--sw-mono);font-size:0.78rem">${esc(dep.txRef || '—')}</td>
+    <td style="color:#16A34A;font-weight:700">+${fmtVnd(dep.amount)}</td>
+    <td>${esc(dep.memo || '')}</td>
+    <td>${depStatusBadge(dep.status)}</td>
+  </tr>`).join('') : `<tr><td colspan="6" class="panel-empty">${tt('seller.deposit.historyEmpty')}</td></tr>`;
 }

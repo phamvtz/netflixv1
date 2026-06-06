@@ -141,6 +141,9 @@
           <a href="/admin/keys" class="subnav-btn" data-target="keys"
              onclick="event.preventDefault(); switchAdminTab('keys')"
              data-i18n="admin.tabKeys">Keys</a>
+          <a href="/admin/deposits" class="subnav-btn" data-target="deposits"
+             onclick="event.preventDefault(); switchAdminTab('deposits')"
+             data-i18n="admin.tabDeposits">Deposits</a>
           <a href="/admin/users" class="subnav-btn" data-target="users"
              onclick="event.preventDefault(); switchAdminTab('users')"
              data-i18n="admin.tabUsers">Seed Users</a>
@@ -220,6 +223,38 @@
             <table class="panel-table">
               <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Used</th><th></th></tr></thead>
               <tbody id="keysBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel-card brand-card hidden" id="secDeposits">
+          <h2 class="panel-section-title"><span data-i18n="admin.deposits.unmatchedTitle">Unmatched deposits</span> <span class="panel-pill" id="depUnmatchedCount">0</span></h2>
+          <p class="panel-section-sub" data-i18n="admin.deposits.unmatchedSub">Bank transfers the system could not auto-match to a seller. Assign each to the correct seller to credit their balance.</p>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr>
+                <th data-i18n="admin.deposits.colTime">Time</th>
+                <th data-i18n="admin.deposits.colProvider">Gateway</th>
+                <th data-i18n="admin.deposits.colRef">Bank tx ref</th>
+                <th data-i18n="admin.deposits.colAmount">Amount</th>
+                <th data-i18n="admin.deposits.colMemo">Memo</th>
+                <th data-i18n="admin.deposits.colAssign">Assign to seller</th>
+              </tr></thead>
+              <tbody id="depUnmatchedBody"></tbody>
+            </table>
+          </div>
+          <h2 class="panel-section-title" style="margin-top:24px"><span data-i18n="admin.deposits.recentTitle">Recent deposits</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr>
+                <th data-i18n="admin.deposits.colTime">Time</th>
+                <th data-i18n="admin.deposits.colProvider">Gateway</th>
+                <th data-i18n="admin.deposits.colRef">Bank tx ref</th>
+                <th data-i18n="admin.deposits.colAmount">Amount</th>
+                <th data-i18n="admin.deposits.colSeller">Seller</th>
+                <th data-i18n="admin.deposits.colStatus">Status</th>
+              </tr></thead>
+              <tbody id="depRecentAdminBody"></tbody>
             </table>
           </div>
         </section>

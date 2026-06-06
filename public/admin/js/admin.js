@@ -6,6 +6,7 @@ let TOKEN = sessionStorage.getItem('adminToken') || '';
 let allKeys = [];
 let allSellers = [];
 let allProducts = [];
+let allUnmatchedDeposits = [];
 let keyStatusFilter = 'all';
 let sellerStatusFilter = 'all';
 let productStatusFilter = 'all';
@@ -207,6 +208,7 @@ async function loadTabData(tabName) {
   if (tabName === 'sellers')  return Promise.all([loadStats(), loadSellers()]);
   if (tabName === 'products') return loadProducts();
   if (tabName === 'keys')     return loadKeys();
+  if (tabName === 'deposits') return loadDeposits();
   if (tabName === 'users')    return loadUsers();
 }
 
@@ -223,6 +225,7 @@ function switchAdminTab(tabName, pushUrl = true) {
   const showSellers  = tabName === 'sellers';
   const showProducts = tabName === 'products';
   const showKeys     = tabName === 'keys';
+  const showDeposits = tabName === 'deposits';
   const showUsers    = tabName === 'users';
 
   show('stats', showOverview);
@@ -231,6 +234,7 @@ function switchAdminTab(tabName, pushUrl = true) {
   show('secSellers',  showSellers);
   show('secProducts', showProducts);
   show('secKeys',     showKeys);
+  show('secDeposits', showDeposits);
   show('secUsers',    showUsers);
 
   // Lazy load: nếu data chưa được load cho tab này
@@ -611,6 +615,87 @@ async function delKey(key) {
   await loadStats();
 }
 
+// ─── Deposits (bank webhook review) ───────────────────────────────────────────
+function depStatusPill(status) {
+  const map = {
+    credited: 'panel-pill--green',
+    pending: 'panel-pill--amber',
+    unmatched: 'panel-pill--amber',
+    error: 'panel-pill--red',
+  };
+  const label = (typeof I18n !== 'undefined' && I18n.t)
+    ? I18n.t('admin.deposits.st_' + status) : null;
+  return `<span class="panel-pill ${map[status] || ''}">${esc(label || status || '—')}</span>`;
+}
+
+async function loadDeposits() {
+  // Make sure we have the seller list for the assign dropdowns.
+  if (!allSellers.length) {
+    const s = await jget('/api/admin/sellers');
+    allSellers = s.sellers || [];
+  }
+  const [unmatched, recent] = await Promise.all([
+    jget('/api/admin/deposit-intents/unmatched'),
+    jget('/api/admin/deposit-intents'),
+  ]);
+  allUnmatchedDeposits = unmatched.intents || [];
+  renderUnmatchedDeposits();
+  renderRecentDeposits(recent.intents || []);
+}
+
+function sellerOptions() {
+  return allSellers
+    .filter((s) => s.status === 'active')
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.username)}</option>`)
+    .join('');
+}
+
+function renderUnmatchedDeposits() {
+  const rows = allUnmatchedDeposits;
+  $('depUnmatchedCount').textContent = rows.length;
+  const opts = sellerOptions();
+  $('depUnmatchedBody').innerHTML = rows.length ? rows.map((d) => `
+    <tr data-dep="${d.id}">
+      <td>${fmtTs(d.receivedAt)}</td>
+      <td>${esc(d.provider || '—')}</td>
+      <td style="font-family:monospace;font-size:0.8rem">${esc(d.txRef || '—')}</td>
+      <td style="font-weight:700;color:#15803d">+${fmtVnd(d.amount)}</td>
+      <td>${esc(d.memo || '')}</td>
+      <td style="white-space:nowrap">
+        <select class="panel-input panel-input--sm" id="depSel-${d.id}">
+          <option value="">—</option>
+          ${opts}
+        </select>
+        <button class="panel-btn panel-btn--sm panel-btn--green" onclick="assignDeposit(${d.id})" data-i18n="admin.deposits.assignBtn">Assign</button>
+      </td>
+    </tr>`).join('')
+    : `<tr><td colspan="6" class="panel-empty" data-i18n="admin.deposits.noUnmatched">No unmatched deposits.</td></tr>`;
+  if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply();
+}
+
+function renderRecentDeposits(rows) {
+  $('depRecentAdminBody').innerHTML = rows.length ? rows.map((d) => `
+    <tr>
+      <td>${fmtTs(d.creditedAt || d.receivedAt)}</td>
+      <td>${esc(d.provider || '—')}</td>
+      <td style="font-family:monospace;font-size:0.8rem">${esc(d.txRef || '—')}</td>
+      <td style="font-weight:700;color:#15803d">+${fmtVnd(d.amount)}</td>
+      <td>${esc(d.matchedUser || '—')}</td>
+      <td>${depStatusPill(d.status)}</td>
+    </tr>`).join('')
+    : `<tr><td colspan="6" class="panel-empty" data-i18n="admin.deposits.noRecent">No deposits yet.</td></tr>`;
+  if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply();
+}
+
+async function assignDeposit(id) {
+  const sel = $('depSel-' + id);
+  const sellerId = sel?.value || '';
+  if (!sellerId) { alert(I18n?.t?.('admin.deposits.pickSeller') || 'Pick a seller first.'); return; }
+  const d = await jpost('/api/admin/deposit-intents/' + id + '/assign', { sellerId });
+  if (!d.success) { alert(d.error || 'Assign failed'); return; }
+  await loadDeposits();
+}
+
 async function loadUsers() {
   const d = await jget('/api/admin/users');
   const users = d.users || [];
@@ -776,6 +861,8 @@ window.confirmPerms = confirmPerms;
 window.topupSeller = topupSeller;
 window.reject = reject;
 window.delKey = delKey;
+window.assignDeposit = assignDeposit;
+window.loadDeposits = loadDeposits;
 window.renderKeys = renderKeys;
 window.renderSellers = renderSellers;
 window.renderProducts = renderProducts;

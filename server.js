@@ -95,6 +95,9 @@ const {
   recordDepositIntent,
   findDepositIntentByRef,
   listRecentDepositIntents,
+  getDepositIntentsBySeller,
+  listUnmatchedDepositIntents,
+  assignDepositIntent,
 } = require('./db/queries-orders');
 const { subdomainMiddleware } = require('./subdomain');
 const { verifyPassword, hashPassword } = require('./auth');
@@ -771,7 +774,7 @@ app.get('/admin', (req, res) => res.sendFile(PAGE.admin));
 app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
 
 // Admin SPA sub-routes — serve same HTML, client handles routing
-const ADMIN_VIEWS = ['overview', 'sellers', 'products', 'keys', 'users'];
+const ADMIN_VIEWS = ['overview', 'sellers', 'products', 'keys', 'deposits', 'users'];
 ADMIN_VIEWS.forEach((slug) => {
   app.get(`/admin/${slug}`, (req, res) => res.sendFile(PAGE.admin));
 });
@@ -1220,6 +1223,23 @@ app.get('/api/admin/deposit-intents', requireAdmin, (req, res) => {
   return res.json({ success: true, intents: rows });
 });
 
+// Unmatched deposits the system could not auto-credit (admin review queue).
+app.get('/api/admin/deposit-intents/unmatched', requireAdmin, (req, res) => {
+  return res.json({ success: true, intents: listUnmatchedDepositIntents(100) });
+});
+
+// Manually assign an unmatched deposit to a seller and credit their balance.
+app.post('/api/admin/deposit-intents/:id/assign', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const sellerId = String(req.body.sellerId || '').trim();
+  if (!Number.isInteger(id) || !sellerId) {
+    return res.status(400).json({ success: false, error: 'Missing deposit id or sellerId' });
+  }
+  const out = assignDepositIntent(id, sellerId);
+  if (out.error) return res.status(400).json({ success: false, error: out.error });
+  return res.json({ success: true, ...out });
+});
+
 // ─── Temp Mail Inbox API ──────────────────────────────────────────────────────
 app.get('/api/inbox', async (req, res) => {
   try {
@@ -1592,6 +1612,14 @@ app.get('/api/seller/transactions', requireSeller, (req, res) => {
     success: true,
     transactions: getTransactions(req.account.id),
     summary: getTransactionSummary(req.account.id),
+  });
+});
+
+// Deposit history for the logged-in seller (matched/credited intents).
+app.get('/api/seller/deposits', requireSeller, (req, res) => {
+  return res.json({
+    success: true,
+    deposits: getDepositIntentsBySeller(req.account.id, 100),
   });
 });
 
