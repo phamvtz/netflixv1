@@ -665,9 +665,17 @@ async function checkAccountDetails(cookieStr) {
     const hasPremium = alive && isNetflixPremiumPlan(plan);
     const paymentError = !!(data?.paymentError || data?.payment_error);
 
-    return { alive, hasPremium, plan, email, screens, paymentError, raw: data };
+    // Definitive dead/expired verdict from nftoken — used to override an
+    // HTML-only LIVE (Netflix renders payment-hold banners client-side, so the
+    // SSR HTML can look perfectly active even when the account is on hold/dead).
+    const statusStr = String(data?.status || '').toUpperCase();
+    const msgStr = String(data?.message || data?.msg || data?.error || '').toLowerCase();
+    const definitiveDead = !!data && statusStr !== 'SUCCESS'
+      && (statusStr === 'DEAD' || /dead|expired|invalid|cancel|hold|inactive|fail/i.test(msgStr));
+
+    return { alive, hasPremium, plan, email, screens, paymentError, definitiveDead, raw: data };
   } catch (e) {
-    return { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, raw: null, error: e.message };
+    return { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, definitiveDead: false, raw: null, error: e.message };
   }
 }
 
@@ -804,7 +812,7 @@ function getNftokenMode() {
   return 'off';
 }
 
-const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, raw: null, skipped: true };
+const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, definitiveDead: false, raw: null, skipped: true };
 
 function mergeCheckResults(nf, nft) {
   const plan = nf.plan || nft.plan || null;
@@ -841,9 +849,21 @@ function mergeCheckResults(nf, nft) {
     alive = !!nft.alive && !paymentError;
   }
 
+  // nftoken gave a definitive DEAD/expired/hold verdict → override HTML-only LIVE.
+  // Netflix renders payment-hold banners client-side, so SSR HTML can look active
+  // even when the account is dead/on-hold; nftoken actually tries to mint a token.
+  if (!nft.skipped && nft.definitiveDead) {
+    alive = false;
+    paymentHold = true;
+    paymentError = true;
+    planLost = !!plan;
+  }
+
   let source = 'none';
   if (nft.skipped) {
     source = nf.reachable ? 'direct' : 'none';
+  } else if (nft.definitiveDead) {
+    source = 'nftoken';
   } else if (nf.reachable && nft.alive) {
     source = planLost ? 'direct' : 'direct+nftoken';
   } else if (nft.alive && !nf.reachable) {
@@ -867,7 +887,7 @@ function mergeCheckResults(nf, nft) {
     billingText:  nf.billingText   || null,
     cancelled:    !!(nf.cancelled && !planLost) || (!alive && nf.reachable && !planLost),
     reachable:    !!(nf.reachable),
-    _nft: nft.skipped ? { skipped: true } : { alive: nft.alive, error: nft.error },
+    _nft: nft.skipped ? { skipped: true } : { alive: nft.alive, definitiveDead: !!nft.definitiveDead, error: nft.error },
     _nf:  { reachable: nf.reachable, alive: nf.alive, error: nf.error },
   };
 }
@@ -875,7 +895,7 @@ function mergeCheckResults(nf, nft) {
 async function runNftokenCheck(cookieStr) {
   return checkAccountDetails(cookieStr).catch(e => ({
     alive: false, hasPremium: false, plan: null, email: null, screens: null,
-    paymentError: false, raw: null, error: e.message, skipped: false,
+    paymentError: false, definitiveDead: false, raw: null, error: e.message, skipped: false,
   }));
 }
 
@@ -909,9 +929,19 @@ async function fullCheck(cookieStr, paceId) {
       }
     }
 
+    // Verify-LIVE: if direct HTML looks alive but nftoken hasn't run yet, verify it.
+    // Netflix renders payment-hold/dead banners client-side, so SSR HTML can look
+    // active on a dead/on-hold account. nftoken actually mints a token, so a
+    // definitive DEAD verdict here overrides the HTML-only LIVE (even in stealth).
+    const verifyLiveEnabled = process.env.VERIFY_LIVE_NFTOKEN !== '0' && mode !== 'off';
+    if (verifyLiveEnabled && nft.skipped && nf.reachable && nf.alive) {
+      await randDelay(pace.nftMin || 400, pace.nftMax || 1500);
+      nft = await runNftokenCheck(cookieStr);
+    }
+
     const out = mergeCheckResults(nf, nft);
     out.checkPace = pace.key;
-    if (pace.skipNftoken) out.nftokenSkippedStealth = true;
+    if (pace.skipNftoken && nft.skipped) out.nftokenSkippedStealth = true;
     return out;
   } catch (e) {
     const out = { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
@@ -2108,26 +2138,30 @@ try {
   process.exit(1);
 }
 
-app.listen(PORT, () => {
-  console.log('\n\x1b[31m███╗   ██╗███████╗████████╗███████╗██╗     ██╗██╗  ██╗\x1b[0m');
-  console.log('\x1b[31m████╗  ██║██╔════╝╚══██╔══╝██╔════╝██║     ██║╚██╗██╔╝\x1b[0m');
-  console.log('\x1b[31m██╔██╗ ██║█████╗     ██║   █████╗  ██║     ██║ ╚███╔╝ \x1b[0m');
-  console.log('\x1b[31m██║╚██╗██║██╔══╝     ██║   ██╔══╝  ██║     ██║ ██╔██╗ \x1b[0m');
-  console.log('\x1b[31m██║ ╚████║███████╗   ██║   ██║     ███████╗██║██╔╝ ██╗\x1b[0m');
-  console.log('\x1b[31m╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝     ╚══════╝╚═╝╚═╝  ╚═╝\x1b[0m');
-  console.log(`\n  Listening: \x1b[36mhttp://localhost:${PORT}\x1b[0m`);
-  console.log('  \x1b[33m/\x1b[0m Get Code   \x1b[33m/checker\x1b[0m   \x1b[33m/seller\x1b[0m   \x1b[33m/admin\x1b[0m\n');
-  if (ADMIN_TOKEN_GENERATED) {
-    console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
-    console.log('    (set env ADMIN_TOKEN to pin)\n');
-  }
-  if (TURNSTILE_CFG.reason === 'production') {
-    console.log('  \x1b[32m●\x1b[0m Turnstile: production site key active');
-  } else if (TURNSTILE_CFG.reason === 'test') {
-    console.log('  \x1b[33m●\x1b[0m Turnstile: TEST keys (set TURNSTILE_SITE_KEY in .env for real widget)');
-  } else if (TURNSTILE_CFG.reason === 'missing_keys') {
-    console.log('  \x1b[33m●\x1b[0m Turnstile: off — add TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY to .env');
-  } else {
-    console.log('  \x1b[33m●\x1b[0m Turnstile: disabled (TURNSTILE_DISABLED=1)');
-  }
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log('\n\x1b[31m███╗   ██╗███████╗████████╗███████╗██╗     ██╗██╗  ██╗\x1b[0m');
+    console.log('\x1b[31m████╗  ██║██╔════╝╚══██╔══╝██╔════╝██║     ██║╚██╗██╔╝\x1b[0m');
+    console.log('\x1b[31m██╔██╗ ██║█████╗     ██║   █████╗  ██║     ██║ ╚███╔╝ \x1b[0m');
+    console.log('\x1b[31m██║╚██╗██║██╔══╝     ██║   ██╔══╝  ██║     ██║ ██╔██╗ \x1b[0m');
+    console.log('\x1b[31m██║ ╚████║███████╗   ██║   ██║     ███████╗██║██╔╝ ██╗\x1b[0m');
+    console.log('\x1b[31m╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝     ╚══════╝╚═╝╚═╝  ╚═╝\x1b[0m');
+    console.log(`\n  Listening: \x1b[36mhttp://localhost:${PORT}\x1b[0m`);
+    console.log('  \x1b[33m/\x1b[0m Get Code   \x1b[33m/checker\x1b[0m   \x1b[33m/seller\x1b[0m   \x1b[33m/admin\x1b[0m\n');
+    if (ADMIN_TOKEN_GENERATED) {
+      console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
+      console.log('    (set env ADMIN_TOKEN to pin)\n');
+    }
+    if (TURNSTILE_CFG.reason === 'production') {
+      console.log('  \x1b[32m●\x1b[0m Turnstile: production site key active');
+    } else if (TURNSTILE_CFG.reason === 'test') {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: TEST keys (set TURNSTILE_SITE_KEY in .env for real widget)');
+    } else if (TURNSTILE_CFG.reason === 'missing_keys') {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: off — add TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY to .env');
+    } else {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: disabled (TURNSTILE_DISABLED=1)');
+    }
+  });
+}
+
+module.exports = { mergeCheckResults };
