@@ -18,6 +18,7 @@
 - UI: **light B&W** — white background, black text; primary buttons black-on-white; `bw-flat.css` on all panel pages.
 
 ### Fixed
+- Checker false LIVE on held accounts: an explicit `/account` hold banner ("Your account is on hold", "couldn't process your last payment", `isOnHold`/`pastDue` JSON flags) is now authoritative. A future "Next payment" date shown on a held account is only the retry date, so it no longer promotes the account to LIVE in either `nfResolveSubscriptionStatus` or `mergeCheckResults`. Added the `accountPaymentHold` signal to the merge step, expanded hold phrases ("couldn't/could not process", "retry your payment"), and added a regression test.
 - Bank webhook crash: `recordDepositIntent`/`assignDepositIntent` used `conn.transaction()` (a better-sqlite3 API) which does not exist on `node:sqlite` — replaced with a `runInTransaction` BEGIN/COMMIT/ROLLBACK helper so auto-credit and manual assign actually work.
 - Checker: tài khoản **LIVE** UI tiếng Việt (Gói Cao cấp + ngày thanh toán tương lai) không còn báo nhầm **PLAN LOST** khi thiếu nút Cancel tiếng Anh / `data-uia` payment.
 - Checker: **ngày thanh toán tương lai** → luôn **LIVE**; bỏ false positive `cập nhật phương thức thanh toán`; `mergeCheckResults` không gán lại PLAN LOST sau khi server đã resolve.

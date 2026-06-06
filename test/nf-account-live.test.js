@@ -9,7 +9,7 @@ const {
   nfHasPaymentElement,
   nfResolveSubscriptionStatus,
 } = require('../lib/nf-account-live');
-const { nfDetectPaymentHold } = require('../lib/nf-email-parse');
+const { nfDetectPaymentHold, nfAccountPagePaymentHold } = require('../lib/nf-email-parse');
 
 describe('Netflix account LIVE signals', () => {
   it('nfBillingIsFuture parses Vietnamese next payment date', () => {
@@ -122,5 +122,37 @@ describe('Netflix account LIVE signals', () => {
     assert.equal(out.isLive, true);
     assert.equal(out.planLost, false);
     assert.equal(out.paymentError, false);
+  });
+
+  it('on-hold account with future "Next payment" retry date → NOT live (regression)', () => {
+    // Reproduces real screenshot: banner "Your account is on hold. Retry your
+    // payment. We couldn't process your last payment." with Premium plan and a
+    // future "Next payment: July 5, 2026" (which is only the retry date).
+    const html = `
+      <div>Your account is on hold. Retry your payment.</div>
+      <div>We couldn't process your last payment. Retry (MASTERCARD - 6095) or update your payment info to keep enjoying Netflix.</div>
+      <button>Update Payment Method</button>
+      <button>Retry Payment</button>
+      <span>Member since June 2026</span>
+      <div>Premium plan</div>
+      <div>Next payment: July 5, 2026</div>
+      <a href="#">Manage membership</a>
+    `;
+    const billing = 'Next payment: July 5, 2026';
+    assert.equal(nfAccountPagePaymentHold(html), true);
+    const out = nfResolveSubscriptionStatus({
+      html,
+      plan: 'Premium plan',
+      billingText: billing,
+      profiles: ['Main'],
+      accountPaymentHold: true,
+      paymentHold: true,
+      paymentError: true,
+      membershipActiveUi: true,
+    });
+    assert.equal(out.isLive, false);
+    assert.equal(out.paymentHold, true);
+    assert.equal(out.planLost, true);
+    assert.equal(out.cancelled, false);
   });
 });

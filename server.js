@@ -622,6 +622,7 @@ async function fetchNetflixAccountInfo(cookieStr, pace) {
       profiles,
       paymentError,
       paymentHold,
+      accountPaymentHold,
       futureBilling: resolved.futureBilling,
       browsePaymentHold: browsePaymentHold || browseVerifyHold,
       emailFromHtml,
@@ -819,6 +820,13 @@ function mergeCheckResults(nf, nft) {
       planLost = false;
       paymentError = false;
       paymentHold = false;
+    } else if (nf.accountPaymentHold) {
+      // Explicit /account hold banner is authoritative — a future "next payment"
+      // date on a held account is only the retry date, not a healthy renewal.
+      alive = false;
+      paymentHold = true;
+      paymentError = true;
+      planLost = !!plan;
     } else {
       const hasProfiles = Array.isArray(nf.profiles) && nf.profiles.length > 0;
       const futureBill = !!(nf.futureBilling || (nf.billingText && nfBillingIsFuture(nf.billingText)));
