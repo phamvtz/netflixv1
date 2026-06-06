@@ -3,10 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- Bank deposit webhook (`POST /api/deposit/webhook`): auto-credits a seller's balance on incoming bank transfer. Supports Casso (array payload) and SePay (single object) formats, authorizes via `BANK_WEBHOOK_TOKEN` (Bearer header or `?token=`), matches the seller by memo prefix (`BANK_MEMO_PREFIX`, default `NAP`), and is idempotent via a UNIQUE `tx_ref` in the new `deposit_intents` table (migration v11). Seller deposit config exposed via `GET /api/deposit/config`; admin visibility via `GET /api/admin/deposit-intents`.
 - Admin dashboard: Redesigned the dashboard view to use high-fidelity, tab-based navigation instead of vertically stacked panels to improve usability. Active tab state is persisted in sessionStorage.
 - Admin layout: Aligned the dashboard panels inside a centered layout container (`1200px` max-width) to improve visual density and readability on larger screens.
 
 ### Changed
+- Seller workspace JS split from one 1040-line `seller.js` into per-view modules under `public/seller/js/`: `seller-core` (state/helpers/api/switchView), `seller-dashboard`, `seller-orders`, `seller-store`, `seller-emails`, `seller-transactions` (+deposit), `seller-profile`, `seller-auth`, and `seller-app` (bootstrap, loaded last). Classic scripts sharing global scope — no behavior change, 55/55 tests pass.
 - Subdomain Routing: Split pages into specific paths per subdomain: `me.domain/me` (Get Code), `admin.domain/admin` (Admin Panel), and `seller.domain/seller` (Seller Workspace) with root `/` redirecting to their respective paths.
 - Get Code (`me/`): inbox form layout like reference — centered card, blue tabs/button, Turnstile, separate result card with green badge + blue spaced code; shared `form-card.css`; lang **Auto (by IP)** / EN / VI.
 - Seller auth: same lang dropdown + `form-card.css` tokens.

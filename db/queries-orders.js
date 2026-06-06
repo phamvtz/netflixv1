@@ -52,6 +52,7 @@ function mapProduct(row) {
     price: row.price,
     warrantyNote: row.warranty_note,
     active: row.active === 1,
+    createdAt: row.created_at,
   };
 }
 
@@ -468,4 +469,63 @@ module.exports = {
   adminCreateOrderForSeller,
   getOrderByEmailForInbox,
   logOrderEvent,
+  recordDepositIntent,
+  findDepositIntentByRef,
+  listRecentDepositIntents,
 };
+
+// ── Deposit intents (bank webhook log) ─────────────────────────────
+function findDepositIntentByRef(provider, txRef, db) {
+  const conn = db || defaultDb();
+  return conn.prepare(
+    'SELECT * FROM deposit_intents WHERE provider = ? AND tx_ref = ?',
+  ).get(provider, String(txRef));
+}
+
+function listRecentDepositIntents(limit = 50, db) {
+  const conn = db || defaultDb();
+  return conn.prepare(
+    'SELECT * FROM deposit_intents ORDER BY received_at DESC LIMIT ?',
+  ).all(limit);
+}
+
+// Insert a fresh intent and atomically credit the seller if a username matched.
+// Returns { intent, credited, transactionId, balance, error }.
+function recordDepositIntent({ provider, txRef, amount, memo, matchedUser, accountId, payload }, db) {
+  const conn = db || defaultDb();
+  const tx = conn.transaction(() => {
+    try {
+      conn.prepare(`
+        INSERT INTO deposit_intents (provider, tx_ref, account_id, amount, memo, matched_user, status, payload, received_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, unixepoch())
+      `).run(provider, String(txRef), accountId || null, amount, memo || null, matchedUser || null, payload || null);
+    } catch (e) {
+      if (String(e.message).includes('UNIQUE')) {
+        return { duplicate: true };
+      }
+      throw e;
+    }
+    if (!accountId) {
+      conn.prepare("UPDATE deposit_intents SET status = 'unmatched' WHERE provider = ? AND tx_ref = ?")
+        .run(provider, String(txRef));
+      return { unmatched: true };
+    }
+    const credit = adjustBalance(accountId, amount, {
+      type: 'topup',
+      refId: String(txRef),
+      description: memo ? `Auto top-up · ${memo}` : 'Auto top-up',
+    }, conn);
+    if (!credit || credit.error) {
+      conn.prepare("UPDATE deposit_intents SET status = 'error' WHERE provider = ? AND tx_ref = ?")
+        .run(provider, String(txRef));
+      return { error: credit?.error || 'Credit failed' };
+    }
+    conn.prepare(`
+      UPDATE deposit_intents
+         SET status = 'credited', transaction_id = ?, credited_at = unixepoch()
+       WHERE provider = ? AND tx_ref = ?
+    `).run(credit.transactionId, provider, String(txRef));
+    return { credited: true, transactionId: credit.transactionId, balance: credit.balance };
+  });
+  return tx();
+}

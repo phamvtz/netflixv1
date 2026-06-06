@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { DatabaseSync } = require('node:sqlite');
-const { runMigrations } = require('../db/migrate');
+const { runMigrations, migrations } = require('../db/migrate');
 const { runSeed } = require('../db/seed');
 const { deleteExpiredSessions, getAllContent } = require('../db/queries');
 
@@ -31,9 +31,10 @@ describe('Integration: startup sequence', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('schema_migrations có 10 version', () => {
+  it('schema_migrations khớp với tất cả migration đã định nghĩa', () => {
     const rows = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const expected = migrations.map(m => m.version).sort((a, b) => a - b);
+    assert.deepEqual(rows.map(r => r.version), expected);
   });
 
   it('PRAGMA journal_mode = wal và foreign_keys = ON', () => {

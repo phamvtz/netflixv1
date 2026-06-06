@@ -229,6 +229,35 @@ const migrations = [
     },
     down(db) {},
   },
+  {
+    version: 11,
+    up(db) {
+      // Idempotent log of every bank-webhook delivery.
+      // tx_ref is the bank's own transaction id — UNIQUE so the same payment
+      // can never be credited twice even if the provider retries.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deposit_intents (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          provider      TEXT NOT NULL,
+          tx_ref        TEXT NOT NULL UNIQUE,
+          account_id    TEXT REFERENCES accounts(id),
+          amount        INTEGER NOT NULL,
+          memo          TEXT,
+          matched_user  TEXT,
+          status        TEXT NOT NULL DEFAULT 'pending',
+          transaction_id TEXT REFERENCES transactions(id),
+          payload       TEXT,
+          received_at   INTEGER DEFAULT (unixepoch()),
+          credited_at   INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_dep_status ON deposit_intents(status);
+        CREATE INDEX IF NOT EXISTS idx_dep_account ON deposit_intents(account_id);
+      `);
+    },
+    down(db) {
+      db.exec('DROP TABLE IF EXISTS deposit_intents');
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {

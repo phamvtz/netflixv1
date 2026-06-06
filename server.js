@@ -92,6 +92,9 @@ const {
   getOrderByEmailForInbox,
   getProductById,
   logOrderEvent,
+  recordDepositIntent,
+  findDepositIntentByRef,
+  listRecentDepositIntents,
 } = require('./db/queries-orders');
 const { subdomainMiddleware } = require('./subdomain');
 const { verifyPassword, hashPassword } = require('./auth');
@@ -714,8 +717,20 @@ function serveSubdomainRoot(req, res, next) {
   if (req.subdomain === 'seller' && req.path === '/seller') {
     return res.sendFile(PAGE.seller);
   }
+  // Seller SPA deep links: only known view slugs, NOT static asset paths (/seller/js/, etc.)
+  const SELLER_VIEW_SLUGS = ['dashboard', 'orders', 'keys', 'store', 'emails', 'deposit', 'transactions', 'profile'];
+  if (req.subdomain === 'seller' && req.path.startsWith('/seller/')) {
+    const slug = req.path.split('/')[2];
+    if (SELLER_VIEW_SLUGS.includes(slug)) return res.sendFile(PAGE.seller);
+  }
   if (req.subdomain === 'admin' && req.path === '/admin') {
     return res.sendFile(PAGE.admin);
+  }
+  // Admin SPA deep links: /admin/sellers, /admin/products, etc.
+  if (req.subdomain === 'admin' && req.path.startsWith('/admin/')) {
+    const slug = req.path.split('/')[2];
+    if (['overview', 'sellers', 'products', 'keys', 'users'].includes(slug))
+      return res.sendFile(PAGE.admin);
   }
 
   return next();
@@ -754,6 +769,18 @@ app.get('/getcode.html', (req, res) => {
 // Panel trên domain chính (redirect API login)
 app.get('/admin', (req, res) => res.sendFile(PAGE.admin));
 app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
+
+// Admin SPA sub-routes — serve same HTML, client handles routing
+const ADMIN_VIEWS = ['overview', 'sellers', 'products', 'keys', 'users'];
+ADMIN_VIEWS.forEach((slug) => {
+  app.get(`/admin/${slug}`, (req, res) => res.sendFile(PAGE.admin));
+});
+
+// Seller SPA sub-routes — serve same HTML, client handles routing
+const SELLER_VIEWS = ['dashboard', 'orders', 'keys', 'store', 'emails', 'deposit', 'transactions', 'profile'];
+SELLER_VIEWS.forEach((slug) => {
+  app.get(`/seller/${slug}`, (req, res) => res.sendFile(PAGE.seller));
+});
 
 app.get('/', (req, res) => {
   res.redirect('/me');
@@ -1038,6 +1065,159 @@ app.get('/api/turnstile/config', (req, res) => {
     testMode: TURNSTILE_TEST_MODE,
     reason: TURNSTILE_CFG.reason,
   });
+});
+
+// Bank/deposit config from .env (no hardcoded values in the UI)
+app.get('/api/deposit/config', requireSeller, (req, res) => {
+  const bankCode  = String(process.env.BANK_CODE || '').trim();
+  const bankName  = String(process.env.BANK_NAME || '').trim();
+  const accountNo = String(process.env.BANK_ACCOUNT_NO || '').trim();
+  const holder    = String(process.env.BANK_ACCOUNT_NAME || '').trim();
+  const configured = !!(bankCode && accountNo && holder);
+  const memo = `${String(process.env.BANK_MEMO_PREFIX || 'NAP').trim()} ${req.account.username}`.trim();
+  let qrUrl = null;
+  if (configured) {
+    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankCode)}-${encodeURIComponent(accountNo)}-compact2.png`
+      + `?addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(holder)}`;
+  }
+  return res.json({
+    success: true,
+    configured,
+    bankName: bankName || bankCode,
+    bankCode,
+    accountNo,
+    holder,
+    memo,
+    qrUrl,
+  });
+});
+
+// ── Bank webhook: auto-credit seller balance on incoming transfer ──────
+// Accepts Casso (array under data[]) or SePay (single-object) payloads.
+// Authorization: shared secret in `BANK_WEBHOOK_TOKEN` env, sent as
+// `Authorization: Bearer <token>` or `?token=` (Casso supports both).
+// Idempotency: each transaction's bank-side tx id (tid / id) is stored
+// UNIQUE in `deposit_intents`, so retries / re-deliveries are no-ops.
+function bankWebhookAuthorized(req) {
+  const expected = String(process.env.BANK_WEBHOOK_TOKEN || '').trim();
+  if (!expected) return false; // refuse if not configured
+  const header = String(req.headers.authorization || '').trim();
+  const bearer = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  const queryToken = String(req.query.token || '').trim();
+  return bearer === expected || queryToken === expected || header === expected;
+}
+
+function normalizeWebhookEvents(body) {
+  if (!body) return [];
+  // Casso: { error: 0, data: [ { tid, amount, description, when, gateway } ] }
+  if (Array.isArray(body.data)) {
+    return body.data.map((d) => ({
+      provider: 'casso',
+      txRef: String(d.tid ?? d.id ?? ''),
+      amount: Number(d.amount ?? 0),
+      memo: String(d.description ?? d.content ?? ''),
+      when: d.when || d.transactionDateTime || null,
+      raw: d,
+    }));
+  }
+  // SePay: { id, gateway, transferAmount, content, transferType, transactionDate }
+  if (body.id != null && (body.transferAmount != null || body.content != null)) {
+    return [{
+      provider: 'sepay',
+      txRef: String(body.id),
+      amount: Number(body.transferAmount ?? body.amount ?? 0),
+      memo: String(body.content ?? body.description ?? ''),
+      when: body.transactionDate || null,
+      raw: body,
+    }];
+  }
+  // Generic fallback
+  if (body.tx_ref || body.txRef) {
+    return [{
+      provider: String(body.provider || 'generic'),
+      txRef: String(body.tx_ref ?? body.txRef),
+      amount: Number(body.amount ?? 0),
+      memo: String(body.memo ?? body.description ?? ''),
+      when: body.timestamp || null,
+      raw: body,
+    }];
+  }
+  return [];
+}
+
+function extractUsernameFromMemo(memo) {
+  if (!memo) return null;
+  const prefix = String(process.env.BANK_MEMO_PREFIX || 'NAP').trim();
+  // Strip diacritics, normalize whitespace
+  const flat = String(memo)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ').trim();
+  // Match: <prefix> <username> (username = alnum/underscore, 3–32 chars)
+  const re = new RegExp(`(?:^|\\s)${prefix}\\s+([a-zA-Z0-9_]{3,32})`, 'i');
+  const m = flat.match(re);
+  if (m) return m[1].toLowerCase();
+  // Fallback: any alnum token >= 3 chars that matches an existing username
+  return null;
+}
+
+app.post('/api/deposit/webhook', express.json({ limit: '256kb' }), (req, res) => {
+  if (!bankWebhookAuthorized(req)) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  const events = normalizeWebhookEvents(req.body);
+  if (!events.length) {
+    return res.status(400).json({ success: false, error: 'Unrecognized payload' });
+  }
+  const results = [];
+  for (const ev of events) {
+    if (!ev.txRef) {
+      results.push({ ok: false, error: 'missing tx_ref' });
+      continue;
+    }
+    if (ev.amount <= 0) {
+      results.push({ txRef: ev.txRef, ok: false, error: 'non-credit ignored' });
+      continue;
+    }
+    const existing = findDepositIntentByRef(ev.provider, ev.txRef);
+    if (existing) {
+      results.push({ txRef: ev.txRef, ok: true, duplicate: true, status: existing.status });
+      continue;
+    }
+    const username = extractUsernameFromMemo(ev.memo);
+    let acc = null;
+    if (username) {
+      const a = getAccountByUsername(username);
+      if (a && a.role === 'seller' && a.status === 'active') acc = a;
+    }
+    const out = recordDepositIntent({
+      provider: ev.provider,
+      txRef: ev.txRef,
+      amount: ev.amount,
+      memo: ev.memo,
+      matchedUser: username,
+      accountId: acc ? acc.id : null,
+      payload: JSON.stringify(ev.raw).slice(0, 8000),
+    });
+    if (out.duplicate) {
+      results.push({ txRef: ev.txRef, ok: true, duplicate: true });
+    } else if (out.unmatched) {
+      results.push({ txRef: ev.txRef, ok: true, unmatched: true, memo: ev.memo });
+    } else if (out.error) {
+      results.push({ txRef: ev.txRef, ok: false, error: out.error });
+    } else {
+      results.push({
+        txRef: ev.txRef, ok: true, credited: true,
+        username, amount: ev.amount, balance: out.balance, transactionId: out.transactionId,
+      });
+    }
+  }
+  return res.json({ success: true, processed: results.length, results });
+});
+
+// Recent deposit intents — admin-visibility
+app.get('/api/admin/deposit-intents', requireAdmin, (req, res) => {
+  const rows = listRecentDepositIntents(100);
+  return res.json({ success: true, intents: rows });
 });
 
 // ─── Temp Mail Inbox API ──────────────────────────────────────────────────────
