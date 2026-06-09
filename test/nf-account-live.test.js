@@ -11,28 +11,38 @@ const {
 } = require('../lib/nf-account-live');
 const { nfDetectPaymentHold, nfAccountPagePaymentHold } = require('../lib/nf-email-parse');
 
+// Build a Vietnamese "D tháng M, YYYY" string N days from today, so these tests
+// stay valid over time instead of hard-coding a date that eventually goes stale.
+function viDateOffset(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getDate()} tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+const VI_FUTURE = viDateOffset(180);  // ~6 months ahead
+const VI_PAST = viDateOffset(-180);   // ~6 months ago
+
 describe('Netflix account LIVE signals', () => {
   it('nfBillingIsFuture parses Vietnamese next payment date', () => {
-    assert.equal(nfBillingIsFuture('Ngày thanh toán tiếp theo: 30 tháng 6, 2026'), true);
-    assert.equal(nfBillingIsFuture('6 tháng 6, 2026'), true);
-    assert.equal(nfBillingIsFuture('30 tháng 6 năm 2020'), false);
+    assert.equal(nfBillingIsFuture(`Ngày thanh toán tiếp theo: ${VI_FUTURE}`), true);
+    assert.equal(nfBillingIsFuture(VI_FUTURE), true);
+    assert.equal(nfBillingIsFuture(VI_PAST), false);
   });
 
   it('nfHasActiveMembershipSignals: VI Premium + billing + manage link → active', () => {
     const html = `
       <div data-uia="account-overview-page+membership-card+title">Gói Cao cấp</div>
       <div>Thành viên từ tháng 5 năm 2025</div>
-      <div>Ngày thanh toán tiếp theo: 30 tháng 6, 2026</div>
+      <div>Ngày thanh toán tiếp theo: ${VI_FUTURE}</div>
       <a href="#">Quản lý tư cách thành viên</a>
       <span>VISA **** **** **** 8127</span>
     `;
-    const billing = 'Ngày thanh toán tiếp theo: 30 tháng 6, 2026';
+    const billing = `Ngày thanh toán tiếp theo: ${VI_FUTURE}`;
     assert.equal(nfHasActiveMembershipSignals(html, billing), true);
   });
 
   it('nfHasActiveMembershipSignals: plan name only in JSON, no payment uia → still active via billing', () => {
-    const html = '<script>{"planName":"Gói Cao cấp"}</script><p>Ngày thanh toán tiếp theo: 1 tháng 7, 2026</p>';
-    assert.equal(nfHasActiveMembershipSignals(html, '1 tháng 7, 2026'), true);
+    const html = `<script>{"planName":"Gói Cao cấp"}</script><p>Ngày thanh toán tiếp theo: ${VI_FUTURE}</p>`;
+    assert.equal(nfHasActiveMembershipSignals(html, VI_FUTURE), true);
   });
 
   it('nfHasPaymentElement detects payment data-uia', () => {
@@ -40,12 +50,12 @@ describe('Netflix account LIVE signals', () => {
     assert.equal(nfHasPaymentElement(html), true);
   });
 
-  it('nfResolveSubscriptionStatus: 6 tháng 6 2026 billing → LIVE', () => {
-    const html = '<div>Gói Cao cấp</div><div>Ngày thanh toán tiếp theo: 6 tháng 6, 2026</div>';
+  it('nfResolveSubscriptionStatus: future billing → LIVE', () => {
+    const html = `<div>Gói Cao cấp</div><div>Ngày thanh toán tiếp theo: ${VI_FUTURE}</div>`;
     const out = nfResolveSubscriptionStatus({
       html,
       plan: 'Gói Cao cấp',
-      billingText: 'Ngày thanh toán tiếp theo: 6 tháng 6, 2026',
+      billingText: `Ngày thanh toán tiếp theo: ${VI_FUTURE}`,
       accountPaymentHold: false,
       paymentHold: true,
       paymentError: true,
@@ -97,10 +107,10 @@ describe('Netflix account LIVE signals', () => {
     const html = `
       <h1>Tư cách thành viên</h1>
       <p>Gói Cao cấp</p>
-      <p>Lần thanh toán tiếp theo: 30 tháng 6, 2026</p>
+      <p>Lần thanh toán tiếp theo: ${VI_FUTURE}</p>
       <a>Hủy tư cách thành viên</a>
     `;
-    assert.equal(nfHasActiveMembershipSignals(html, '30 tháng 6, 2026'), true);
+    assert.equal(nfHasActiveMembershipSignals(html, VI_FUTURE), true);
   });
 
   it('nfResolveSubscriptionStatus: future billing → LIVE despite false payment hold', () => {
@@ -108,7 +118,7 @@ describe('Netflix account LIVE signals', () => {
       <div>Gói Cao cấp</div>
       <a>Cập nhật phương thức thanh toán</a>
     `;
-    const billing = 'Ngày thanh toán tiếp theo: 30 tháng 6, 2026';
+    const billing = `Ngày thanh toán tiếp theo: ${VI_FUTURE}`;
     assert.equal(nfDetectPaymentHold(html), false);
     const out = nfResolveSubscriptionStatus({
       html,
