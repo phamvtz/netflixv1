@@ -52,6 +52,12 @@ function mapOrderRow(row, keyCount = 0) {
     note: row.note,
     createdAt: row.created_at,
     status: expired ? 'expired' : 'active',
+    // Warranty auto-check fields. Never expose the raw cookie to clients —
+    // only whether one is stored, plus the last automated check result.
+    hasCookie: !!row.cookie,
+    lastCheckStatus: row.last_check_status || null,
+    lastCheckedAt: row.last_checked_at || null,
+    checkCount: row.check_count || 0,
     keyCount,
   };
 }
@@ -243,6 +249,51 @@ function getSellerOrders(sellerId, db) {
   return rows.map((r) => mapOrderRow(r, countKeysForOrder(r.id, conn)));
 }
 
+// Internal-only: read the stored cookie for an order (server-side warranty check).
+// Scoped by seller_id so a seller can only act on their own orders.
+function getOrderCookie(orderId, sellerId, db) {
+  const conn = db || defaultDb();
+  const row = conn.prepare(
+    'SELECT cookie FROM seller_orders WHERE id = ? AND seller_id = ?',
+  ).get(orderId, sellerId);
+  return row ? (row.cookie || null) : null;
+}
+
+// Persist the result of an automated/manual warranty check.
+function recordOrderCheck(orderId, status, db) {
+  const conn = db || defaultDb();
+  const now = Math.floor(Date.now() / 1000);
+  conn.prepare(`
+    UPDATE seller_orders
+    SET last_check_status = ?, last_checked_at = ?, check_count = check_count + 1
+    WHERE id = ?
+  `).run(String(status || 'unknown'), now, orderId);
+  return { orderId, status, checkedAt: now };
+}
+
+// Orders eligible for the background warranty checker: active (not expired),
+// have a stored cookie, and weren't checked within `minIntervalSec`.
+function listOrdersDueForCheck(minIntervalSec = 21600, limit = 25, db) {
+  const conn = db || defaultDb();
+  const now = Math.floor(Date.now() / 1000);
+  const rows = conn.prepare(`
+    SELECT id, seller_id, account_email, cookie, last_checked_at
+    FROM seller_orders
+    WHERE cookie IS NOT NULL AND cookie != ''
+      AND expires_at > ?
+      AND (last_checked_at IS NULL OR last_checked_at <= ?)
+    ORDER BY last_checked_at IS NOT NULL, last_checked_at ASC
+    LIMIT ?
+  `).all(now, now - minIntervalSec, limit);
+  return rows.map((r) => ({
+    id: r.id,
+    sellerId: r.seller_id,
+    accountEmail: r.account_email,
+    cookie: r.cookie,
+    lastCheckedAt: r.last_checked_at || null,
+  }));
+}
+
 function updateSellerOrder(orderId, sellerId, updates, db) {
   const conn = db || defaultDb();
   const existing = conn.prepare('SELECT * FROM seller_orders WHERE id = ? AND seller_id = ?').get(orderId, sellerId);
@@ -256,6 +307,10 @@ function updateSellerOrder(orderId, sellerId, updates, db) {
   if (o.accountPassword !== undefined) {
     sets.push('account_password = ?');
     vals.push(o.accountPassword || null);
+  }
+  if (o.cookie !== undefined) {
+    sets.push('cookie = ?');
+    vals.push(o.cookie ? String(o.cookie).trim() : null);
   }
   if (o.viaEmail !== undefined) {
     sets.push('via_email = ?');
@@ -471,6 +526,9 @@ module.exports = {
   createSellerOrder,
   getSellerOrderById,
   getSellerOrders,
+  getOrderCookie,
+  recordOrderCheck,
+  listOrdersDueForCheck,
   updateSellerOrder,
   renewSellerOrder,
   getOrderHistory,

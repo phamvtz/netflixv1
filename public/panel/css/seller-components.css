@@ -102,6 +102,23 @@
 [data-theme="seller"] .sw-order-status--active  { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
 [data-theme="seller"] .sw-order-status--expired { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 
+/* ── Warranty auto-check badge ─────────────────────────────────── */
+[data-theme="seller"] .sw-chk {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 100px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  margin-left: 4px;
+}
+[data-theme="seller"] .sw-chk--ok   { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+[data-theme="seller"] .sw-chk--warn { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+[data-theme="seller"] .sw-chk--bad  { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+[data-theme="seller"] .sw-chk--mut  { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+[data-theme="seller"] .sw-field--wide { grid-column: 1 / -1; }
+
 [data-theme="seller"] .sw-order-body { padding: 16px 18px; width: 100%; box-sizing: border-box; display: block; }
 
 /* Force ordersList to single-column stack (overridden by grid above) */

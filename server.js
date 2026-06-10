@@ -79,6 +79,9 @@ const {
   getTransactionSummary,
   getSellerOrders,
   getSellerOrderById,
+  getOrderCookie,
+  recordOrderCheck,
+  listOrdersDueForCheck,
   updateSellerOrder,
   renewSellerOrder,
   getOrderHistory,
@@ -907,6 +910,19 @@ function shouldFallbackNftoken(nf) {
   return false;
 }
 
+// Map a fullCheck result into a compact warranty status string for storage/UI.
+// live | payment_hold | plan_lost | dead | inconclusive | unknown
+function checkResultToStatus(out) {
+  if (!out || typeof out !== 'object') return 'unknown';
+  if (out.rateLimited) return 'inconclusive';
+  if (out.alive) return 'live';
+  if (out.paymentHold) return 'payment_hold';
+  if (out.planLost) return 'plan_lost';
+  if (out.verifyInconclusive) return 'inconclusive';
+  if (out.reachable === false && !out.source) return 'inconclusive';
+  return 'dead';
+}
+
 // ─── Full check — direct netflix.com (+ nftoken tùy NFTOKEN_MODE) ─────────────
 async function fullCheck(cookieStr, paceId) {
   try {
@@ -1686,9 +1702,9 @@ app.get('/api/seller/orders/:id', requireSeller, (req, res) => {
 
 app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
   try {
-    const { accountPassword, viaEmail, note, permLogin, permReset, permFamily } = req.body;
+    const { accountPassword, viaEmail, note, permLogin, permReset, permFamily, cookie } = req.body;
     const order = updateSellerOrder(req.params.id, req.account.id, {
-      accountPassword, viaEmail, note, permLogin, permReset, permFamily,
+      accountPassword, viaEmail, note, permLogin, permReset, permFamily, cookie,
     });
     if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
     return res.json({ success: true, order });
@@ -1709,6 +1725,28 @@ app.get('/api/seller/orders/:id/history', requireSeller, (req, res) => {
     return res.status(404).json({ success: false, error: 'Order not found' });
   }
   return res.json({ success: true, events });
+});
+
+// Manual warranty re-check: run the live checker against the order's stored
+// cookie and persist the verdict. Cookie is read server-side only.
+app.post('/api/seller/orders/:id/recheck', requireSeller, async (req, res) => {
+  try {
+    const order = getSellerOrderById(req.params.id, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+    const cookie = getOrderCookie(req.params.id, req.account.id);
+    if (!cookie) return res.status(400).json({ success: false, error: 'No cookie stored for this order' });
+
+    const out = await fullCheck(cookie, req.body.pace);
+    if (out.rateLimited) {
+      return res.status(429).json({ success: false, error: 'Hourly check limit reached — try again later', rateLimited: true });
+    }
+    const status = checkResultToStatus(out);
+    recordOrderCheck(req.params.id, status);
+    logOrderEvent(req.params.id, 'warranty_check', `manual: ${status}`);
+    return res.json({ success: true, status, checkedAt: Math.floor(Date.now() / 1000) });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
 });
 
 app.post('/api/seller/orders/:id/keys', requireSeller, (req, res) => {
@@ -2250,6 +2288,53 @@ try {
   process.exit(1);
 }
 
+// ─── Background warranty checker ──────────────────────────────────────────────
+// Periodically re-checks active orders that have a stored cookie and records the
+// verdict so the seller panel can flag dead / payment-hold accounts still under
+// warranty. Disabled with WARRANTY_CHECK=0. Runs sequentially with delays to
+// avoid bursting Netflix/nftoken and to respect the hourly check budget.
+let warrantyJobRunning = false;
+async function runWarrantyCheckBatch() {
+  if (warrantyJobRunning) return;
+  warrantyJobRunning = true;
+  try {
+    const minInterval = Math.max(600, parseInt(process.env.WARRANTY_MIN_INTERVAL_SEC || '21600', 10) || 21600);
+    const batchSize = Math.max(1, parseInt(process.env.WARRANTY_BATCH || '10', 10) || 10);
+    const due = listOrdersDueForCheck(minInterval, batchSize);
+    if (!due.length) return;
+    console.log(`[warranty] checking ${due.length} order(s)`);
+    for (const order of due) {
+      try {
+        const out = await fullCheck(order.cookie);
+        if (out.rateLimited) { console.warn('[warranty] hit rate limit — pausing batch'); break; }
+        const status = checkResultToStatus(out);
+        recordOrderCheck(order.id, status);
+        logOrderEvent(order.id, 'warranty_check', `auto: ${status}`);
+      } catch (e) {
+        console.error(`[warranty] order ${order.id} check failed:`, e.message);
+      }
+      // Space out checks to stay gentle on upstreams.
+      await new Promise((r) => setTimeout(r, 4000 + Math.random() * 4000));
+    }
+  } catch (e) {
+    console.error('[warranty] batch error:', e.message);
+  } finally {
+    warrantyJobRunning = false;
+  }
+}
+
+function startWarrantyChecker() {
+  if (process.env.WARRANTY_CHECK === '0') {
+    console.log('  \x1b[33m●\x1b[0m Warranty auto-check: disabled (WARRANTY_CHECK=0)');
+    return;
+  }
+  const everyMin = Math.max(5, parseInt(process.env.WARRANTY_INTERVAL_MIN || '30', 10) || 30);
+  // First run shortly after boot, then on the configured interval.
+  setTimeout(() => { runWarrantyCheckBatch(); }, 60000).unref();
+  setInterval(() => { runWarrantyCheckBatch(); }, everyMin * 60000).unref();
+  console.log(`  \x1b[32m●\x1b[0m Warranty auto-check: every ${everyMin}m`);
+}
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log('\n\x1b[31m███╗   ██╗███████╗████████╗███████╗██╗     ██╗██╗  ██╗\x1b[0m');
@@ -2273,6 +2358,7 @@ if (require.main === module) {
     } else {
       console.log('  \x1b[33m●\x1b[0m Turnstile: disabled (TURNSTILE_DISABLED=1)');
     }
+    startWarrantyChecker();
   });
 }
 

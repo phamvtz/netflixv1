@@ -61,6 +61,23 @@ function renderOrders(pagination) {
   });
 }
 
+// Warranty auto-check status → badge (label + colour class).
+function warrantyBadgeHtml(o) {
+  const map = {
+    live:         { cls: 'ok',   key: 'seller.order.checkLive' },
+    payment_hold: { cls: 'warn', key: 'seller.order.checkHold' },
+    plan_lost:    { cls: 'warn', key: 'seller.order.checkPlanLost' },
+    dead:         { cls: 'bad',  key: 'seller.order.checkDead' },
+    inconclusive: { cls: 'mut',  key: 'seller.order.checkInconclusive' },
+  };
+  const m = map[o.lastCheckStatus];
+  if (!m) {
+    return `<span class="sw-chk sw-chk--mut" title="${tt('seller.order.checkNever')}">${tt('seller.order.checkNever')}</span>`;
+  }
+  const when = o.lastCheckedAt ? fmtTs(o.lastCheckedAt) : '';
+  return `<span class="sw-chk sw-chk--${m.cls}" title="${tt('seller.order.lastChecked')}: ${when}">${tt(m.key)}</span>`;
+}
+
 function orderCardHtml(o) {
   const expired = o.status === 'expired';
   const badge = expired
@@ -94,6 +111,7 @@ function orderCardHtml(o) {
         <div class="sw-order-headend">
           <span class="sw-order-id">${esc(o.id)}</span>
           ${badge}
+          ${warrantyBadgeHtml(o)}
         </div>
       </div>
       <div class="sw-order-body">
@@ -111,6 +129,13 @@ function orderCardHtml(o) {
             <div class="sw-pwd-row">
               <input type="text" class="panel-input" data-pwd="${esc(o.id)}" value="${esc(o.accountPassword || '')}" placeholder="—" style="margin:0" />
               <button type="button" class="sw-icon-btn" data-act="savepwd" data-id="${esc(o.id)}" title="${tt('seller.order.savePwd')}">✓</button>
+            </div>
+          </div>
+          <div class="sw-field sw-field--wide">
+            <label>${tt('seller.order.cookie')} ${o.hasCookie ? `<span class="sw-chk sw-chk--ok">●</span>` : ''}</label>
+            <div class="sw-pwd-row">
+              <input type="text" class="panel-input mono" data-cookie="${esc(o.id)}" value="" placeholder="${o.hasCookie ? tt('seller.order.cookieStored') : tt('seller.order.cookiePlaceholder')}" style="margin:0" />
+              <button type="button" class="sw-icon-btn" data-act="savecookie" data-id="${esc(o.id)}" title="${tt('seller.order.saveCookie')}">✓</button>
             </div>
           </div>
           <div class="sw-field">
@@ -131,6 +156,7 @@ function orderCardHtml(o) {
         <div class="sw-order-foot">
           <button type="button" class="sw-btn sw-btn--primary sw-btn--sm" data-act="renew" data-id="${esc(o.id)}">${tt('seller.order.renew')}</button>
           <button type="button" class="sw-btn sw-btn--outline sw-btn--sm" data-act="history" data-id="${esc(o.id)}">${tt('seller.order.history')}</button>
+          ${o.hasCookie ? `<button type="button" class="sw-btn sw-btn--outline sw-btn--sm" data-act="recheck" data-id="${esc(o.id)}">${tt('seller.order.recheck')}</button>` : ''}
           ${keyBtn}
         </div>
       </div>
@@ -173,6 +199,34 @@ function bindOrderEvents() {
       const d = await api(`/api/seller/orders/${encodeURIComponent(id)}`, { accountPassword: inp?.value || '' }, 'PATCH');
       if (d.success) toast('Password saved');
       else toast(d.error || 'Error');
+    });
+  });
+
+  box.querySelectorAll('[data-act="savecookie"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const inp = box.querySelector(`[data-cookie="${id}"]`);
+      const val = (inp?.value || '').trim();
+      if (!val) { toast(tt('seller.order.cookieEmpty')); return; }
+      const d = await api(`/api/seller/orders/${encodeURIComponent(id)}`, { cookie: val }, 'PATCH');
+      if (d.success) { toast(tt('seller.order.cookieSaved')); loadOrders(); }
+      else toast(d.error || 'Error');
+    });
+  });
+
+  box.querySelectorAll('[data-act="recheck"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = tt('seller.order.checking');
+      try {
+        const d = await api(`/api/seller/orders/${encodeURIComponent(id)}/recheck`, {}, 'POST');
+        if (d.success) { toast(`${tt('seller.order.checkResult')}: ${d.status}`); loadOrders(); }
+        else { toast(d.error || 'Error'); btn.disabled = false; btn.textContent = orig; }
+      } catch (e) {
+        toast('Error'); btn.disabled = false; btn.textContent = orig;
+      }
     });
   });
 

@@ -258,6 +258,21 @@ const migrations = [
       db.exec('DROP TABLE IF EXISTS deposit_intents');
     },
   },
+  {
+    version: 12,
+    up(db) {
+      // Warranty auto-check: store the account cookie (server-only, never echoed
+      // to clients) plus the last automated check result so the seller panel can
+      // flag dead / payment-hold accounts that are still within warranty.
+      db.exec(`
+        ALTER TABLE seller_orders ADD COLUMN cookie TEXT;
+        ALTER TABLE seller_orders ADD COLUMN last_check_status TEXT;
+        ALTER TABLE seller_orders ADD COLUMN last_checked_at INTEGER;
+        ALTER TABLE seller_orders ADD COLUMN check_count INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+    down(db) {},
+  },
 ];
 
 function ensureMigrationsTable(db) {
