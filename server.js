@@ -1149,6 +1149,11 @@ function filterEmailsByPerms(emails, perms) {
     .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 }
 
+// ─── Temp-mail provider selection ─────────────────────────────────────────────
+// MAIL_PROVIDER = tempmail (default, tempmail.id.vn API) | generator (generator.email scrape)
+const MAIL_PROVIDER = String(process.env.MAIL_PROVIDER || 'tempmail').toLowerCase();
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 // ─── Temp-mail provider: tempmail.id.vn (Bearer-token, account-scoped) ────────
 // Reading an inbox is a 3-step flow: list mailboxes → find the one matching the
 // address → list its messages → read each message body. The mailbox must belong
@@ -1198,7 +1203,7 @@ async function findMailboxId(email) {
   return null;
 }
 
-async function fetchInboxForEmail(email, perms) {
+async function fetchInboxTempmail(email, perms) {
   if (!MAIL_API_TOKEN) {
     console.warn('[inbox] TEMPMAIL_TOKEN not configured — cannot fetch mail');
     return { success: true, emails: [], total: 0 };
@@ -1223,6 +1228,82 @@ async function fetchInboxForEmail(email, perms) {
   let emails = detailed.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
   if (perms) emails = filterEmailsByPerms(emails, perms);
   return { success: true, emails, total: emails.length };
+}
+
+// ─── Temp-mail provider: generator.email (no official API — HTML scrape) ──────
+// Mechanism (verified live): the mailbox is rendered server-side at GET /{email}
+// with a `surl` cookie; the page JS only polls /check_mail.php for a reload
+// signal. So we GET the mailbox page and parse the message blocks out of the
+// HTML. Class names are obfuscated (prefix "e7m"), so we parse by stable
+// structure/anchors (message containers carry an id) rather than brittle classes,
+// then reuse parseNetflixEmail which extracts codes regardless of markup.
+function genEmailHeaders(email) {
+  return {
+    'User-Agent': BROWSER_UA,
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'en-US,en;q=0.9',
+    // generator.email keys the mailbox off this cookie pair.
+    'Cookie': `surl=${encodeURIComponent(email)}`,
+    'Referer': `https://generator.email/${encodeURIComponent(email)}`,
+  };
+}
+
+// Split the mailbox HTML into per-message chunks. generator.email wraps each
+// received mail in a container whose id encodes the message id (e.g. id="...").
+// We locate message bodies by the `e7m` block that holds subject/from/body.
+function genParseMailbox(html) {
+  if (!html || typeof html !== 'string') return [];
+  // Each opened mail lives under a div carrying an onclick/open handler or a
+  // unique data id. Capture chunks between message anchors.
+  const chunks = [];
+  // Anchor on the per-mail container. generator.email uses elements like
+  // <div class="e7m ... mail_inb..." onclick="...mailid...">. Be permissive.
+  const re = /<div[^>]*\bid="([a-z0-9]{6,})"[^>]*>([\s\S]*?)(?=<div[^>]*\bid="[a-z0-9]{6,}"|<\/body)/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const id = m[1];
+    const inner = m[2] || '';
+    // Skip layout/nav containers — only keep blocks that look like a mail
+    // (contain a sender address or a subject-ish line).
+    if (/@/.test(inner) || /subject/i.test(inner)) {
+      chunks.push({ id, html: inner });
+    }
+  }
+  return chunks;
+}
+
+async function fetchInboxGenerator(email, perms) {
+  const r = await nodeRequest(`https://generator.email/${encodeURIComponent(email)}`, {
+    method: 'GET', headers: genEmailHeaders(email), timeout: 12000,
+  });
+  if (r.status !== 200) {
+    console.warn(`[inbox] generator.email returned ${r.status}`);
+    return { success: true, emails: [], total: 0 };
+  }
+  const html = r.text();
+  const chunks = genParseMailbox(html).slice(0, MAIL_MAX_MESSAGES);
+
+  let emails = chunks.map((c) => {
+    // Strip tags for the text body; keep html for link/code extraction.
+    const text = c.html.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+    const fromMatch = c.html.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    return parseNetflixEmail({
+      id: c.id,
+      subject: '',
+      body: text,
+      html: c.html,
+      from: fromMatch ? fromMatch[0] : '',
+    });
+  }).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  if (perms) emails = filterEmailsByPerms(emails, perms);
+  return { success: true, emails, total: emails.length };
+}
+
+// Dispatcher — pick the configured provider.
+async function fetchInboxForEmail(email, perms) {
+  if (MAIL_PROVIDER === 'generator') return fetchInboxGenerator(email, perms);
+  return fetchInboxTempmail(email, perms);
 }
 
 app.get('/api/turnstile/config', (req, res) => {
