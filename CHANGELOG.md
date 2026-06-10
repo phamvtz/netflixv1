@@ -17,6 +17,13 @@
 - Seller auth: same lang dropdown + `form-card.css` tokens.
 - UI: **light B&W** — white background, black text; primary buttons black-on-white; `bw-flat.css` on all panel pages.
 
+### Security
+- Inbox API hardened: removed the unauthenticated `GET /api/inbox` (leaked all parsed codes without permission filtering); `POST /api/inbox` now fails closed — emails not bound to a valid key or a via-email order get 403 instead of unfiltered codes.
+- Per-IP rate limits on abuse-prone endpoints: panel login (20/15m), seller register (10/h), verify-email (10/15m — blocks 6-digit OTP brute force), resend-code (5/15m), inbox lookup (30/5m).
+- Batch checker: capped at `CHECK_BATCH_MAX` (default 50) cookies per request and each entry validated as a non-empty string; `/api/checker/debug` now counts against the hourly check budget and returns 429 when exhausted.
+- Admin auth: `ADMIN_TOKEN` is accepted via the `X-Admin-Token` header only — query-string tokens (leak via logs/Referer/history) no longer work.
+- Panel session cookie supports `Secure` flag via `COOKIE_SECURE=1` (enable behind TLS); admin manual top-up capped at 100,000,000đ per operation.
+
 ### Fixed
 - Checker false LIVE on client-side payment holds: Netflix renders "account is on hold / retry your payment" banners client-side, so the server-side `/account` HTML can look fully active (`membershipStatus: CURRENT_MEMBER`, future "Next payment" date, valid card) even when the account is dead/on-hold. Checker now **verifies any HTML-only LIVE result with nftoken** (`fullCheck`, runs even in the `stealth` pace; toggle with `VERIFY_LIVE_NFTOKEN=0`), retries on transient/inconclusive nftoken responses (`VERIFY_LIVE_RETRIES`, default 2) to avoid failing open to a false LIVE, and a definitive nftoken DEAD/expired verdict overrides the HTML LIVE in `mergeCheckResults` → result becomes PLAN LOST. Inconclusive verification is surfaced as `verifyInconclusive`. Added `test/checker-merge.test.js` (4 tests). Note: this sends the cookie to nftoken.site and adds latency.
 - Checker false LIVE on held accounts: an explicit `/account` hold banner ("Your account is on hold", "couldn't process your last payment", `isOnHold`/`pastDue` JSON flags) is now authoritative. A future "Next payment" date shown on a held account is only the retry date, so it no longer promotes the account to LIVE in either `nfResolveSubscriptionStatus` or `mergeCheckResults`. Added the `accountPaymentHold` signal to the merge step, expanded hold phrases ("couldn't/could not process", "retry your payment"), and added a regression test.

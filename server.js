@@ -986,6 +986,13 @@ app.post('/api/checker/batch', async (req, res) => {
     if (!Array.isArray(cookies) || !cookies.length) {
       return res.status(400).json({ error: 'Missing cookies array' });
     }
+    const BATCH_MAX = Math.max(1, parseInt(process.env.CHECK_BATCH_MAX || '50', 10) || 50);
+    if (cookies.length > BATCH_MAX) {
+      return res.status(400).json({ error: `Too many cookies — max ${BATCH_MAX} per batch` });
+    }
+    if (cookies.some(c => typeof c !== 'string' || !c.trim())) {
+      return res.status(400).json({ error: 'Each cookie must be a non-empty string' });
+    }
     // CONCURRENCY=1: check tuần tự từ cùng 1 IP → tránh burst song song dễ bị Netflix flag.
     // Mỗi fullCheck đã có randDelay nội bộ; thêm khoảng nghỉ giữa các cookie cho tự nhiên.
     const pace = resolveCheckPace(req.body.pace);
@@ -1069,6 +1076,32 @@ function getClientIp(req) {
   if (fwd) return String(fwd).split(',')[0].trim();
   return req.socket?.remoteAddress || req.ip || '';
 }
+
+// ─── Per-IP rate limiter for abuse-prone endpoints (login brute force, OTP
+// guessing, inbox scraping). Fixed window, in-memory — đủ cho single instance.
+const ipRateBuckets = new Map();
+function ipRateLimit(name, max, windowMs) {
+  return (req, res, next) => {
+    const key = `${name}:${getClientIp(req)}`;
+    const now = Date.now();
+    let bucket = ipRateBuckets.get(key);
+    if (!bucket || now - bucket.start > windowMs) {
+      bucket = { start: now, count: 0 };
+      ipRateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      return res.status(429).json({ success: false, error: 'Too many requests — try again later' });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const cutoff = Date.now() - 3600000;
+  for (const [key, bucket] of ipRateBuckets) {
+    if (bucket.start < cutoff) ipRateBuckets.delete(key);
+  }
+}, 600000).unref();
 
 // Chỉ trả loại mã key được phép — seller/admin cấp qua key
 function filterEmailsByPerms(emails, perms) {
@@ -1292,20 +1325,9 @@ app.post('/api/admin/deposit-intents/:id/assign', requireAdmin, (req, res) => {
 });
 
 // ─── Temp Mail Inbox API ──────────────────────────────────────────────────────
-app.get('/api/inbox', async (req, res) => {
-  try {
-    const email = (req.query.email || '').trim().toLowerCase();
-    if (!email || !email.includes('@'))
-      return res.status(400).json({ success: false, error: 'Invalid email' });
-
-    const result = await fetchInboxForEmail(email);
-    return res.json(result);
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-app.post('/api/inbox', async (req, res) => {
+// Codes are only released for emails bound to a valid key or a via-email order
+// (security: an unauthenticated GET variant used to leak unfiltered codes).
+app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
     const keyStr = (req.body.key || '').trim();
@@ -1339,6 +1361,9 @@ app.post('/api/inbox', async (req, res) => {
         return res.status(403).json({ success: false, error: 'Order expired' });
       }
       perms = { permLogin: orderRow.permLogin, permReset: orderRow.permReset, permFamily: orderRow.permFamily };
+    } else {
+      // Fail closed: unknown email (no key, no order) must not receive any codes.
+      return res.status(403).json({ success: false, error: 'No key or order found for this email' });
     }
 
     const result = await fetchInboxForEmail(email, perms);
@@ -1382,12 +1407,15 @@ function parseNetflixEmail(raw) {
 
 // ─── Panel auth (admin/seller accounts) ───────────────────────────────────────
 const PANEL_COOKIE = 'panelSession';
+// Set COOKIE_SECURE=1 in production (TLS) so the session cookie is never sent over plain HTTP.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 
 function setPanelCookie(res, sessionId) {
   res.cookie(PANEL_COOKIE, sessionId, {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
     sameSite: 'lax',
+    secure: COOKIE_SECURE,
     path: '/',
   });
 }
@@ -1413,7 +1441,7 @@ function requireSeller(req, res, next) {
 }
 
 // Đăng nhập panel (admin hoặc seller)
-app.post('/api/panel/login', (req, res) => {
+app.post('/api/panel/login', ipRateLimit('login', 20, 15 * 60000), (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ success: false, error: 'Missing username or password' });
@@ -1462,7 +1490,7 @@ app.get('/api/panel/me', (req, res) => {
 });
 
 // Seller tự đăng ký → tạo account pending + gửi mã xác minh email
-app.post('/api/seller/register', async (req, res) => {
+app.post('/api/seller/register', ipRateLimit('register', 10, 3600000), async (req, res) => {
   try {
     const captcha = await verifyTurnstile(req.body.turnstileToken || req.body.token || '', getClientIp(req));
     if (!captcha.success) {
@@ -1504,7 +1532,7 @@ app.post('/api/seller/register', async (req, res) => {
 });
 
 // Xác minh email bằng mã 6 số
-app.post('/api/seller/verify-email', (req, res) => {
+app.post('/api/seller/verify-email', ipRateLimit('verify', 10, 15 * 60000), (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
     if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
@@ -1523,7 +1551,7 @@ app.post('/api/seller/verify-email', (req, res) => {
 });
 
 // Gửi lại mã xác minh
-app.post('/api/seller/resend-code', async (req, res) => {
+app.post('/api/seller/resend-code', ipRateLimit('resend', 5, 15 * 60000), async (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
     if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
@@ -1908,8 +1936,8 @@ app.get('/api/key/resolve', (req, res) => {
 
 // ─── Admin API (X-Admin-Token) ────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  // 1) Token cũ (backward-compat)
-  const token = req.headers['x-admin-token'] || req.query.token || '';
+  // Header-only: query-string tokens leak via logs/Referer/history.
+  const token = req.headers['x-admin-token'] || '';
   if (token && token === ADMIN_TOKEN) return next();
   // 2) Hoặc session tài khoản admin
   const acc = getPanelAccount(req);
@@ -1973,6 +2001,7 @@ app.post('/api/admin/sellers/:id/topup', requireAdmin, (req, res) => {
   try {
     const amount = parseInt(req.body.amount, 10);
     if (!amount || amount < 1000) return res.status(400).json({ success: false, error: 'Minimum amount is 1,000đ' });
+    if (amount > 100000000) return res.status(400).json({ success: false, error: 'Maximum amount is 100,000,000đ per top-up' });
     const r = adjustBalance(req.params.id, amount, {
       type: 'topup',
       description: req.body.description || 'Admin nạp tiền',
@@ -2059,7 +2088,9 @@ console.log('[BOOT] /api/checker/ping registered OK');
 app.post('/api/checker/debug', async (req, res) => {
   try {
     const { cookie } = req.body;
-    if (!cookie) return res.status(400).json({ error: 'no cookie' });
+    if (!cookie || typeof cookie !== 'string') return res.status(400).json({ error: 'no cookie' });
+    // Debug probes hit Netflix/nftoken too — count against the hourly budget.
+    assertCheckRateLimit();
 
     // Test 1: can we reach /account ?
     const cookie_full = cookie.trim();
@@ -2125,7 +2156,8 @@ app.post('/api/checker/debug', async (req, res) => {
       nftokenMode:     nftMode,
     });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    const status = e.code === 'RATE_LIMIT' ? 429 : 500;
+    return res.status(status).json({ error: e.message, rateLimited: e.code === 'RATE_LIMIT' });
   }
 });
 
