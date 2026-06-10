@@ -1133,21 +1133,78 @@ function filterEmailsByPerms(emails, perms) {
     .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 }
 
-async function fetchInboxForEmail(email, perms) {
-  const [user, domain] = email.split('@');
-  const url = `https://tinyhost.shop/api/email/${encodeURIComponent(domain)}/${encodeURIComponent(user)}/?limit=20`;
-  const r   = await nodeRequest(url, {
-    method: 'GET',
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
-    timeout: 12000,
+// ─── Temp-mail provider: tempmail.id.vn (Bearer-token, account-scoped) ────────
+// Reading an inbox is a 3-step flow: list mailboxes → find the one matching the
+// address → list its messages → read each message body. The mailbox must belong
+// to the account that owns TEMPMAIL_TOKEN.
+const MAIL_API_BASE  = String(process.env.TEMPMAIL_API_BASE || 'https://tempmail.id.vn').replace(/\/+$/, '');
+const MAIL_API_TOKEN = String(process.env.TEMPMAIL_TOKEN || '').trim();
+const MAIL_MAX_MESSAGES = Math.max(1, parseInt(process.env.TEMPMAIL_MAX_MESSAGES || '15', 10) || 15);
+
+function mailAuthHeaders() {
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${MAIL_API_TOKEN}`,
+    'User-Agent': 'Mozilla/5.0',
+  };
+}
+
+async function mailGet(path) {
+  const r = await nodeRequest(`${MAIL_API_BASE}${path}`, {
+    method: 'GET', headers: mailAuthHeaders(), timeout: 12000,
   });
+  if (r.status !== 200) return null;
+  try { return r.json(); } catch { return null; }
+}
 
-  let data;
-  try { data = r.json(); } catch { return { success: true, emails: [], total: 0 }; }
-  if (r.status !== 200) return { success: true, emails: [], total: 0 };
+// Normalize the many possible array wrappers the API may use.
+function mailListOf(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  return data.data || data.emails || data.messages || data.mails || [];
+}
 
-  const raw    = data.emails || data.data || [];
-  let emails = raw.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+function mailAddressOf(m) {
+  return String(m.email || m.address || m.mail || `${m.user || ''}@${m.domain || ''}`).toLowerCase();
+}
+
+function mailIdOf(m) {
+  return m.id || m._id || m.mail_id || m.message_id || null;
+}
+
+// Find the mailbox id for an address (must belong to the token's account).
+async function findMailboxId(email) {
+  const data = await mailGet('/api/email');
+  const target = email.toLowerCase();
+  for (const m of mailListOf(data)) {
+    if (mailAddressOf(m) === target) return mailIdOf(m);
+  }
+  return null;
+}
+
+async function fetchInboxForEmail(email, perms) {
+  if (!MAIL_API_TOKEN) {
+    console.warn('[inbox] TEMPMAIL_TOKEN not configured — cannot fetch mail');
+    return { success: true, emails: [], total: 0 };
+  }
+
+  const mailId = await findMailboxId(email);
+  if (!mailId) return { success: true, emails: [], total: 0 };
+
+  const list = mailListOf(await mailGet(`/api/email/${encodeURIComponent(mailId)}`));
+  const top  = list.slice(0, MAIL_MAX_MESSAGES);
+
+  // Message-list items often omit the body — fetch full content when missing.
+  const detailed = await Promise.all(top.map(async (m) => {
+    if (m.body || m.text_body || m.html_body || m.html) return m;
+    const id = mailIdOf(m);
+    if (!id) return m;
+    const full = await mailGet(`/api/message/${encodeURIComponent(id)}`).catch(() => null);
+    const body = full ? (full.data || full.message || full) : null;
+    return body ? { ...m, ...body } : m;
+  }));
+
+  let emails = detailed.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
   if (perms) emails = filterEmailsByPerms(emails, perms);
   return { success: true, emails, total: emails.length };
 }
@@ -1385,12 +1442,12 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
 });
 
 function parseNetflixEmail(raw) {
-  const subject  = String(raw.subject   || '');
-  const body     = String(raw.body      || raw.text_body || '');
-  const html     = String(raw.html_body || raw.html      || '');
-  const from     = String(raw.from      || raw.sender    || '');
-  const id       = raw.id || raw._id || '';
-  const time     = raw.created_at || raw.date || '';
+  const subject  = String(raw.subject   || raw.title || '');
+  const body     = String(raw.body      || raw.text_body || raw.text || raw.content || '');
+  const html     = String(raw.html_body || raw.html      || raw.body_html || '');
+  const from     = String(raw.from      || raw.sender    || raw.from_email || raw.from_address || '');
+  const id        = raw.id || raw._id || raw.message_id || raw.mail_id || '';
+  const time     = raw.created_at || raw.date || raw.received_at || raw.time || '';
   const full     = (subject + ' ' + body + ' ' + html).replace(/<[^>]+>/g, ' ');
 
   let code = null, reset_link = null, family_code = null, priority = 0;
@@ -2070,11 +2127,11 @@ app.post('/api/admin/sellers/:id/orders', requireAdmin, (req, res) => {
 
 app.get('/api/domains', async (req, res) => {
   try {
-    const r = await nodeRequest('https://tinyhost.shop/api/random-domains/?limit=30', {
-      method: 'GET', headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }, timeout: 8000,
-    });
-    let d; try { d = r.json(); } catch { return res.json({ success: true, domains: [] }); }
-    return res.json({ success: true, domains: d.domains || [] });
+    // tempmail.id.vn has no public "random domains" endpoint — serve the
+    // allowed list from env (comma-separated TEMPMAIL_DOMAINS).
+    const domains = String(process.env.TEMPMAIL_DOMAINS || 'tempmail.id.vn')
+      .split(',').map(d => d.trim()).filter(Boolean);
+    return res.json({ success: true, domains });
   } catch (e) { return serverError(req, res, e); }
 });
 
