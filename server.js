@@ -964,7 +964,7 @@ async function fullCheck(cookieStr, paceId) {
 }
 
 // ─── Live check – single cookie set ──────────────────────────────────────────
-app.post('/api/checker/live-check', async (req, res) => {
+app.post('/api/checker/live-check', ipRateLimit('check', CHECK_MAX_PER_HOUR, 3600000), async (req, res) => {
   try {
     const { cookie } = req.body;
     if (!cookie || typeof cookie !== 'string') {
@@ -974,13 +974,14 @@ app.post('/api/checker/live-check', async (req, res) => {
     return res.json(result);
   } catch (e) {
     console.error('[live-check] ERROR:', e.message);
-    const status = e.code === 'RATE_LIMIT' ? 429 : 500;
-    return res.status(status).json({ alive: false, error: e.message, profiles: [], rateLimited: e.code === 'RATE_LIMIT' });
+    const limited = e.code === 'RATE_LIMIT';
+    // Rate-limit message is user-facing guidance; anything else stays generic.
+    return res.status(limited ? 429 : 500).json({ alive: false, error: limited ? e.message : 'Internal server error', profiles: [], rateLimited: limited });
   }
 });
 
 // ─── Batch live check – multiple sets ────────────────────────────────────────
-app.post('/api/checker/batch', async (req, res) => {
+app.post('/api/checker/batch', ipRateLimit('batch', 10, 3600000), async (req, res) => {
   try {
     const { cookies } = req.body;
     if (!Array.isArray(cookies) || !cookies.length) {
@@ -1007,7 +1008,7 @@ app.post('/api/checker/batch', async (req, res) => {
     return res.json({ results });
   } catch (e) {
     console.error('[batch] ERROR:', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -1102,6 +1103,13 @@ setInterval(() => {
     if (bucket.start < cutoff) ipRateBuckets.delete(key);
   }
 }, 600000).unref();
+
+// 500s: log the real error server-side, return a generic message to the client
+// (raw e.message can leak DB schema / internal paths / upstream details).
+function serverError(req, res, e) {
+  console.error(`[500] ${req.method} ${req.path}:`, e.message);
+  return res.status(500).json({ success: false, error: 'Internal server error' });
+}
 
 // Chỉ trả loại mã key được phép — seller/admin cấp qua key
 function filterEmailsByPerms(emails, perms) {
@@ -1372,7 +1380,7 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
     }
     return res.json(result);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1461,7 +1469,7 @@ app.post('/api/panel/login', ipRateLimit('login', 20, 15 * 60000), (req, res) =>
     setPanelCookie(res, sid);
     return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role }, redirect: acc.role === 'admin' ? '/admin' : '/seller' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1527,7 +1535,7 @@ app.post('/api/seller/register', ipRateLimit('register', 10, 3600000), async (re
     const mail = await sendVerificationEmail(email, code).catch(() => ({ sent: false }));
     return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Account created. Enter the verification code sent to your email.' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1546,7 +1554,7 @@ app.post('/api/seller/verify-email', ipRateLimit('verify', 10, 15 * 60000), (req
     markEmailVerified(acc.id);
     return res.json({ success: true, message: 'Verified successfully. Waiting for admin approval.' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1562,7 +1570,7 @@ app.post('/api/seller/resend-code', ipRateLimit('resend', 5, 15 * 60000), async 
     const mail = await sendVerificationEmail(acc.email, code).catch(() => ({ sent: false }));
     return res.json({ success: true, emailSent: mail.sent });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1628,7 +1636,7 @@ app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
     if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
     return res.json({ success: true, order });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1667,7 +1675,7 @@ app.post('/api/seller/orders/:id/keys', requireSeller, (req, res) => {
     logOrderEvent(order.id, 'key_created', key, null);
     return res.json({ success: true, key: row });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1682,7 +1690,7 @@ app.post('/api/seller/store/buy', requireSeller, (req, res) => {
     if (result.error) return res.status(400).json({ success: false, error: result.error });
     return res.json({ success: true, order: result.order, balance: result.balance });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1735,7 +1743,7 @@ app.post('/api/seller/change-password', requireSeller, (req, res) => {
     setAccountPassword(req.account.id, hashPassword(newPassword));
     return res.json({ success: true });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1751,7 +1759,7 @@ app.post('/api/seller/mail', requireSeller, async (req, res) => {
     result.permissions = perms;
     return res.json(result);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1810,7 +1818,7 @@ app.post('/api/key/register', requireSeller, (req, res) => {
     if (order) logOrderEvent(order.id, 'key_created', key, null);
     return res.json({ success: true, key, email: row.email, permissions: perms });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1867,7 +1875,7 @@ app.post('/api/seller/keys/batch', requireSeller, (req, res) => {
     }
     return res.json({ success: true, keys: created, count: created.length });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1905,7 +1913,7 @@ app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
       permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily,
     } : null });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -2009,7 +2017,7 @@ app.post('/api/admin/sellers/:id/topup', requireAdmin, (req, res) => {
     if (!r || r.error) return res.status(400).json({ success: false, error: r?.error || 'Top-up failed' });
     return res.json({ success: true, balance: r.balance });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -2032,7 +2040,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
     });
     return res.json({ success: true, product: p });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -2056,7 +2064,7 @@ app.post('/api/admin/sellers/:id/orders', requireAdmin, (req, res) => {
     });
     return res.json({ success: true, order });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -2067,7 +2075,7 @@ app.get('/api/domains', async (req, res) => {
     });
     let d; try { d = r.json(); } catch { return res.json({ success: true, domains: [] }); }
     return res.json({ success: true, domains: d.domains || [] });
-  } catch (e) { return res.status(500).json({ success: false, error: e.message }); }
+  } catch (e) { return serverError(req, res, e); }
 });
 
 // ─── Ping ─────────────────────────────────────────────────────────────────────
@@ -2085,7 +2093,7 @@ app.get('/api/checker/ping', (req, res) => {
 console.log('[BOOT] /api/checker/ping registered OK');
 
 // ─── Debug: test one cookie, return raw details ───────────────────────────────
-app.post('/api/checker/debug', async (req, res) => {
+app.post('/api/checker/debug', ipRateLimit('debug', 10, 3600000), async (req, res) => {
   try {
     const { cookie } = req.body;
     if (!cookie || typeof cookie !== 'string') return res.status(400).json({ error: 'no cookie' });
@@ -2156,8 +2164,8 @@ app.post('/api/checker/debug', async (req, res) => {
       nftokenMode:     nftMode,
     });
   } catch (e) {
-    const status = e.code === 'RATE_LIMIT' ? 429 : 500;
-    return res.status(status).json({ error: e.message, rateLimited: e.code === 'RATE_LIMIT' });
+    const limited = e.code === 'RATE_LIMIT';
+    return res.status(limited ? 429 : 500).json({ error: limited ? e.message : 'Internal server error', rateLimited: limited });
   }
 });
 
@@ -2167,7 +2175,9 @@ app.post('/api/checker/debug', async (req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[EXPRESS ERR]', req.method, req.path, err.message);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const status = err.status || 500;
+  // 4xx (e.g. body-parser JSON errors) are safe to surface; 5xx stay generic.
+  res.status(status).json({ error: status < 500 ? (err.message || 'Bad request') : 'Internal server error' });
 });
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
