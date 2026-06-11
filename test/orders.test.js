@@ -11,6 +11,7 @@ const {
   getProducts,
   purchaseProduct,
   adjustBalance,
+  getSellerBalance,
   getSellerOrders,
   updateSellerOrder,
   renewSellerOrder,
@@ -24,6 +25,25 @@ function createTestDb() {
   runMigrations(db);
   runSeed(db);
   return db;
+}
+
+// Wrap a db so the seller_orders INSERT throws — simulates a failure that
+// happens AFTER the balance has already been debited inside purchaseProduct.
+function dbThatFailsOrderInsert(realDb) {
+  return new Proxy(realDb, {
+    get(target, prop) {
+      if (prop === 'prepare') {
+        return (sql) => {
+          if (/INSERT INTO seller_orders/i.test(sql)) {
+            throw new Error('Injected failure: seller_orders insert');
+          }
+          return target.prepare(sql);
+        };
+      }
+      const val = target[prop];
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+  });
 }
 
 describe('Seller orders & store', () => {
@@ -63,6 +83,23 @@ describe('Seller orders & store', () => {
 
     const orders = getSellerOrders(sellerId, db);
     assert.equal(orders.length, 1);
+  });
+
+  it('mua hàng atomic: lỗi tạo đơn → hoàn lại số dư (rollback)', () => {
+    const product = getProducts(true, db)[0];
+    const balanceBefore = getSellerBalance(sellerId, db);
+    const ordersBefore = getSellerOrders(sellerId, db).length;
+
+    // The order INSERT throws after the balance debit; the transaction must roll back.
+    assert.throws(() => {
+      purchaseProduct(sellerId, product.id, {
+        accountEmail: 'rollback@tinyhost.shop',
+      }, dbThatFailsOrderInsert(db));
+    }, /Injected failure/);
+
+    // Balance unchanged and no order created — the debit was rolled back.
+    assert.equal(getSellerBalance(sellerId, db), balanceBefore);
+    assert.equal(getSellerOrders(sellerId, db).length, ordersBefore);
   });
 
   it('cập nhật đơn: via_email, quyền, mật khẩu', () => {

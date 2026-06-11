@@ -415,28 +415,32 @@ function purchaseProduct(sellerId, productId, { accountEmail, accountPassword },
   if (!product || !product.active) return { error: 'Product not found' };
   if (!accountEmail?.includes('@')) return { error: 'Invalid account email' };
 
-  const bal = adjustBalance(sellerId, -product.price, {
-    type: 'purchase',
-    refId: productId,
-    description: `Mua ${product.name}`,
-  }, conn);
-  if (bal?.error) return bal;
+  // Atomic: deduct balance + create the order in one transaction so a failure
+  // after the debit can never leave the seller charged without an order.
+  return runInTransaction(conn, () => {
+    const bal = adjustBalance(sellerId, -product.price, {
+      type: 'purchase',
+      refId: productId,
+      description: `Purchase ${product.name}`,
+    }, conn);
+    if (bal?.error) return bal;
 
-  const order = createSellerOrder({
-    sellerId,
-    productId: product.id,
-    productName: product.name,
-    durationLabel: product.durationLabel,
-    durationDays: product.durationDays,
-    accountEmail,
-    accountPassword: accountPassword || null,
-    viaEmail: true,
-    permLogin: true,
-    permReset: false,
-    permFamily: true,
-  }, conn);
+    const order = createSellerOrder({
+      sellerId,
+      productId: product.id,
+      productName: product.name,
+      durationLabel: product.durationLabel,
+      durationDays: product.durationDays,
+      accountEmail,
+      accountPassword: accountPassword || null,
+      viaEmail: true,
+      permLogin: true,
+      permReset: false,
+      permFamily: true,
+    }, conn);
 
-  return { order, balance: bal.balance };
+    return { order, balance: bal.balance };
+  });
 }
 
 function migrateOrphanKeysToOrders(db) {
