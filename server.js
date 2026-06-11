@@ -24,7 +24,9 @@ const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
-const { nfExtractEmailFromHtml, nfDetectPaymentHold, nfAccountPagePaymentHold } = require('./lib/nf-email-parse');
+const { nfExtractEmailFromHtml, nfDetectPaymentHold, nfAccountPagePaymentHold, nfParseEmail } = require('./lib/nf-email-parse');
+// Shared extraction logic lives in lib/nf-email-parse.js (unit-tested there).
+const parseNetflixEmail = nfParseEmail;
 const {
   nfHasPaymentElement,
   nfHasActiveMembershipSignals,
@@ -32,6 +34,8 @@ const {
   nfBillingIsFuture,
   nfResolveSubscriptionStatus,
 } = require('./lib/nf-account-live');
+// Temp-mail response normalization (unit-tested in test/tempmail.test.js).
+const { mailListOf, mailBodyOf, mailAddressOf, mailIdOf } = require('./lib/tempmail');
 
 // SQLite — initialize singleton before routes use the query layer
 require('./db/database');
@@ -1178,21 +1182,6 @@ async function mailGet(path) {
   try { return r.json(); } catch { return null; }
 }
 
-// Normalize the many possible array wrappers the API may use.
-function mailListOf(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return data.data || data.emails || data.messages || data.mails || [];
-}
-
-function mailAddressOf(m) {
-  return String(m.email || m.address || m.mail || `${m.user || ''}@${m.domain || ''}`).toLowerCase();
-}
-
-function mailIdOf(m) {
-  return m.id || m._id || m.mail_id || m.message_id || null;
-}
-
 // Find the mailbox id for an address (must belong to the token's account).
 async function findMailboxId(email) {
   const data = await mailGet('/api/email');
@@ -1221,7 +1210,7 @@ async function fetchInboxTempmail(email, perms) {
     const id = mailIdOf(m);
     if (!id) return m;
     const full = await mailGet(`/api/message/${encodeURIComponent(id)}`).catch(() => null);
-    const body = full ? (full.data || full.message || full) : null;
+    const body = mailBodyOf(full);
     return body ? { ...m, ...body } : m;
   }));
 
@@ -1537,35 +1526,6 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
     return serverError(req, res, e);
   }
 });
-
-function parseNetflixEmail(raw) {
-  const subject  = String(raw.subject   || raw.title || '');
-  const body     = String(raw.body      || raw.text_body || raw.text || raw.content || '');
-  const html     = String(raw.html_body || raw.html      || raw.body_html || '');
-  const from     = String(raw.from      || raw.sender    || raw.from_email || raw.from_address || '');
-  const id        = raw.id || raw._id || raw.message_id || raw.mail_id || '';
-  const time     = raw.created_at || raw.date || raw.received_at || raw.time || '';
-  const full     = (subject + ' ' + body + ' ' + html).replace(/<[^>]+>/g, ' ');
-
-  let code = null, reset_link = null, family_code = null, priority = 0;
-
-  // Netflix OTP 4-8 digits
-  const otp = full.match(/(?:mã|code|passcode|verify)[:\s]+(\d{4,8})/i)
-    || full.match(/\b(\d{4,8})\b(?=[^<]{0,80}(?:netflix|sign\s*in|login|xác nhận))/i)
-    || subject.match(/\b(\d{4,8})\b/);
-  if (otp) { code = otp[1]; priority = 10; }
-
-  // Reset link
-  const rl = full.match(/https?:\/\/[^\s"'<>]+(?:reset|password)[^\s"'<>]*/i)
-    || full.match(/https?:\/\/www\.netflix\.com\/[^\s"'<>]+/i);
-  if (rl && !code) { reset_link = rl[0]; priority = 8; }
-
-  // Household code
-  const fam = full.match(/(?:household|family)[:\s]+([A-Z0-9]{4,12})/i);
-  if (fam) { family_code = fam[1]; priority = 9; }
-
-  return { id, subject, from, time, extracted_code: code, reset_link, family_code, priority };
-}
 
 // ─── Panel auth (admin/seller accounts) ───────────────────────────────────────
 const PANEL_COOKIE = 'panelSession';

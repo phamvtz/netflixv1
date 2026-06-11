@@ -8,6 +8,7 @@ const {
   nfExtractEmailFromHtml,
   nfDetectPaymentHold,
   nfAccountPagePaymentHold,
+  nfParseEmail,
 } = require('../lib/nf-email-parse');
 
 describe('Netflix email parse', () => {
@@ -67,5 +68,70 @@ describe('Netflix email parse', () => {
     `;
     assert.equal(nfAccountPagePaymentHold(html), false);
     assert.equal(nfDetectPaymentHold(html), false);
+  });
+});
+
+describe('nfParseEmail — login / household / reset', () => {
+  it('login code (EN): extracts the OTP and prioritizes it', () => {
+    const r = nfParseEmail({
+      subject: 'Your Netflix verification code',
+      html: '<p>Enter this code to sign in: <b>458213</b></p>',
+    });
+    assert.equal(r.extracted_code, '458213');
+    assert.equal(r.priority, 10);
+  });
+
+  it('login code (VI): extracts after "mã đăng nhập"', () => {
+    const r = nfParseEmail({
+      subject: 'Mã đăng nhập Netflix của bạn',
+      html: '<p>Mã đăng nhập: <b>739104</b> để tiếp tục đăng nhập.</p>',
+    });
+    assert.equal(r.extracted_code, '739104');
+    assert.equal(r.priority, 10);
+  });
+
+  it('household code (EN): extracts after "household code"', () => {
+    const r = nfParseEmail({
+      subject: 'Your Netflix Household travel code',
+      html: '<div>Enter your household code: <strong>HJ4K9Q</strong></div>',
+    });
+    assert.equal(r.family_code, 'HJ4K9Q');
+    assert.equal(r.priority, 9);
+  });
+
+  it('household code (VI): extracts after "Hộ gia đình"', () => {
+    const r = nfParseEmail({
+      subject: 'Cập nhật Hộ gia đình Netflix',
+      html: '<div>Mã Hộ gia đình: <strong>AB12CD</strong></div>',
+    });
+    assert.equal(r.family_code, 'AB12CD');
+    assert.equal(r.priority, 9);
+  });
+
+  it('reset link: captures explicit password-reset URL even with a stray number', () => {
+    const r = nfParseEmail({
+      subject: 'Reset your password',
+      html: '<p>Order 12345.</p><a href="https://www.netflix.com/password?g=abc123XYZ&lkid=99">Reset password</a>',
+    });
+    assert.ok(r.reset_link && r.reset_link.includes('/password?'), 'reset_link should be captured');
+    assert.equal(r.extracted_code, null, 'stray order number must not be treated as a login code');
+    assert.equal(r.priority, 8);
+  });
+
+  it('does not capture a generic netflix.com link (logo/footer) as a reset link', () => {
+    const r = nfParseEmail({
+      subject: 'Welcome to Netflix',
+      html: '<a href="https://www.netflix.com/browse">Open Netflix</a>',
+    });
+    assert.equal(r.reset_link, null);
+    assert.equal(r.priority, 0);
+  });
+
+  it('returns empty result for an unrelated email', () => {
+    const r = nfParseEmail({ subject: 'Receipt', html: '<p>Thanks for your purchase.</p>' });
+    assert.equal(r.extracted_code, null);
+    assert.equal(r.family_code, null);
+    assert.equal(r.reset_link, null);
+    assert.equal(r.priority, 0);
   });
 });
