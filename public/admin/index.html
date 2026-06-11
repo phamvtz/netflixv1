@@ -335,6 +335,52 @@
     </div>
   </div>
 
+  <div class="panel-modal-backdrop" id="grantOrderModal">
+    <div class="panel-modal">
+      <h3 id="grantTitle" data-i18n="admin.grantOrder">Grant order</h3>
+      <p class="sub" data-i18n="admin.grantSub">Create a Netflix account order directly for this seller (no balance deducted).</p>
+      <label class="panel-label" data-i18n="admin.grantProduct">Product (optional)</label>
+      <select id="goProduct" class="panel-input" onchange="onGrantProductChange()">
+        <option value="" data-i18n="admin.grantProductNone">— Custom (no product) —</option>
+      </select>
+      <label class="panel-label" data-i18n="admin.grantProductName">Product name</label>
+      <input id="goProductName" type="text" class="panel-input" placeholder="Netflix Premium" />
+      <div class="panel-grid-2">
+        <div>
+          <label class="panel-label" data-i18n="admin.grantEmail">Account email</label>
+          <input id="goEmail" type="email" class="panel-input" placeholder="name@tempmail.id.vn" />
+        </div>
+        <div>
+          <label class="panel-label" data-i18n="admin.grantPassword">Account password (optional)</label>
+          <input id="goPassword" type="text" class="panel-input" placeholder="—" />
+        </div>
+      </div>
+      <label class="panel-label" data-i18n="admin.grantNote">Note (optional)</label>
+      <input id="goNote" type="text" class="panel-input" placeholder="—" />
+      <p class="panel-label" style="margin-top:10px" data-i18n="admin.grantPerms">Code permissions the customer can view</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin:4px 0 6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermLogin" checked /> <span data-i18n="seller.order.permLogin">Login code</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermReset" /> <span data-i18n="seller.order.permReset">Password reset</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermFamily" checked /> <span data-i18n="seller.order.permFamily">Household</span>
+        </label>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;margin:2px 0 4px">
+        <input type="checkbox" id="goViaEmail" checked />
+        <span data-i18n="admin.grantViaEmail">Allow get-code via email</span>
+      </label>
+      <p class="panel-msg-err" id="goErr"></p>
+      <div class="panel-modal-actions">
+        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closeGrantOrder()" data-i18n="common.cancel">Cancel</button>
+        <button class="panel-btn panel-btn--sm panel-btn--green" id="goSaveBtn" onclick="confirmGrantOrder()" data-i18n="admin.grantSubmit">Grant order</button>
+      </div>
+    </div>
+  </div>
+
   <div class="panel-toast" id="toast"></div>
   <script src="/panel/js/i18n.js"></script>
   <script src="/panel/js/filters.js"></script>

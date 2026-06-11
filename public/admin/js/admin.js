@@ -485,6 +485,7 @@ function renderSellers() {
         s.status !== 'active'
           ? `<button class="panel-btn panel-btn--sm panel-btn--green" onclick="approve('${esc(s.id)}', '${esc(s.username)}')">Approve</button>`
           : `<button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="editSellerPerms('${esc(s.id)}', '${esc(s.username)}')">Permissions</button>
+             <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="openGrantOrder('${esc(s.id)}', '${esc(s.username)}')">${tt('admin.grantOrder')}</button>
              <button class="panel-btn panel-btn--sm panel-btn--green" onclick="topupSeller('${esc(s.id)}', '${esc(s.username)}')">Top up</button>
              <button class="panel-btn panel-btn--sm panel-btn--red" onclick="reject('${esc(s.id)}')">Lock</button>`;
       const perms = s.status === 'active' ? sellerPermBadges(s) : '';
@@ -570,6 +571,84 @@ async function topupSeller(id, username) {
   const d = await r.json();
   if (d.success) toast('✓ Đã nạp ' + amount.toLocaleString('vi-VN') + 'đ — số dư: ' + (d.balance || 0).toLocaleString('vi-VN') + 'đ');
   else toast(d.error || 'Top up thất bại');
+}
+
+// ─── Grant order to seller (admin creates an order directly) ──────────────────
+let grantSellerId = null;
+
+function openGrantOrder(id, username) {
+  grantSellerId = id;
+  $('grantTitle').textContent = tt('admin.grantTitle', { seller: username });
+  // Populate product dropdown from the products already loaded (load if empty).
+  const fill = () => {
+    const sel = $('goProduct');
+    const none = tt('admin.grantProductNone');
+    sel.innerHTML = `<option value="">${esc(none)}</option>` +
+      allProducts.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} · ${fmtVnd(p.price)}</option>`).join('');
+  };
+  if (!allProducts.length) { loadProducts().then(fill); } else { fill(); }
+  $('goProductName').value = '';
+  $('goEmail').value = '';
+  $('goPassword').value = '';
+  $('goNote').value = '';
+  $('goPermLogin').checked = true;
+  $('goPermReset').checked = false;
+  $('goPermFamily').checked = true;
+  $('goViaEmail').checked = true;
+  $('goErr').style.display = 'none';
+  $('grantOrderModal').classList.add('show');
+}
+
+function closeGrantOrder() {
+  $('grantOrderModal').classList.remove('show');
+  grantSellerId = null;
+}
+
+// When a product is picked, prefill the product name (still editable).
+function onGrantProductChange() {
+  const id = $('goProduct').value;
+  const p = allProducts.find((x) => x.id === id);
+  if (p) $('goProductName').value = p.name;
+}
+
+async function confirmGrantOrder() {
+  const err = $('goErr');
+  err.style.display = 'none';
+  const productId = $('goProduct').value || null;
+  const productName = $('goProductName').value.trim();
+  const accountEmail = $('goEmail').value.trim();
+  if (!accountEmail.includes('@')) {
+    err.textContent = tt('admin.grantErrEmail');
+    err.style.display = 'block';
+    return;
+  }
+  if (!productId && !productName) {
+    err.textContent = tt('admin.grantErrName');
+    err.style.display = 'block';
+    return;
+  }
+  const payload = {
+    productId,
+    productName: productName || undefined,
+    accountEmail,
+    accountPassword: $('goPassword').value.trim() || undefined,
+    note: $('goNote').value.trim() || undefined,
+    permLogin: $('goPermLogin').checked,
+    permReset: $('goPermReset').checked,
+    permFamily: $('goPermFamily').checked,
+    viaEmail: $('goViaEmail').checked,
+  };
+  $('goSaveBtn').disabled = true;
+  const d = await jpost('/api/admin/sellers/' + encodeURIComponent(grantSellerId) + '/orders', payload);
+  $('goSaveBtn').disabled = false;
+  if (d.success) {
+    const seller = allSellers.find((s) => s.id === grantSellerId);
+    toast(tt('admin.grantOk', { seller: seller ? seller.username : '' }));
+    closeGrantOrder();
+  } else {
+    err.textContent = d.error || 'Grant failed';
+    err.style.display = 'block';
+  }
 }
 
 
@@ -859,6 +938,10 @@ window.editSellerPerms = editSellerPerms;
 window.closePermsModal = closePermsModal;
 window.confirmPerms = confirmPerms;
 window.topupSeller = topupSeller;
+window.openGrantOrder = openGrantOrder;
+window.closeGrantOrder = closeGrantOrder;
+window.onGrantProductChange = onGrantProductChange;
+window.confirmGrantOrder = confirmGrantOrder;
 window.reject = reject;
 window.delKey = delKey;
 window.assignDeposit = assignDeposit;
@@ -912,6 +995,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('permsModal')?.addEventListener('click', (e) => {
     if (e.target === $('permsModal')) closePermsModal();
+  });
+  $('grantOrderModal')?.addEventListener('click', (e) => {
+    if (e.target === $('grantOrderModal')) closeGrantOrder();
   });
   (async () => {
     // Kiểm tra token trong sessionStorage — có thể cũ sau khi server restart
