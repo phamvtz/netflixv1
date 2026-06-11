@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Seller Panel · Netflix Key</title>
-  <meta name="description" content="Seller workspace – quản lý đơn hàng, keys và email Netflix." />
+  <meta name="description" content="Seller workspace – manage Netflix orders, keys and email." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
@@ -356,14 +356,14 @@
             <div class="sw-toolbar-pro">
               <div class="sw-search-box">
                 <svg class="sw-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input id="orderSearch" type="search" class="sw-search-input" placeholder="Tìm theo ORD, email, mã sản phẩm..." oninput="debounceLoadOrders()" />
+                <input id="orderSearch" type="search" class="sw-search-input" data-i18n-placeholder="seller.orders.searchPh" placeholder="ORD-... / email / code / product..." oninput="debounceLoadOrders()" />
               </div>
               <div class="sw-filter-tabs" id="orderStatusTabs">
-                <button type="button" class="sw-filter-tab" data-status="all" onclick="setOrderStatus('all',this)">Tất cả</button>
-                <button type="button" class="sw-filter-tab is-active" data-status="active" onclick="setOrderStatus('active',this)">Đang dùng</button>
-                <button type="button" class="sw-filter-tab" data-status="expired" onclick="setOrderStatus('expired',this)">Hết hạn</button>
+                <button type="button" class="sw-filter-tab" data-status="all" onclick="setOrderStatus('all',this)" data-i18n="chip.all">All</button>
+                <button type="button" class="sw-filter-tab is-active" data-status="active" onclick="setOrderStatus('active',this)" data-i18n="seller.order.statusActive">Active</button>
+                <button type="button" class="sw-filter-tab" data-status="expired" onclick="setOrderStatus('expired',this)" data-i18n="seller.orders.expired">Expired</button>
               </div>
-              <button type="button" class="sw-reload-btn" onclick="loadOrders()" title="Làm mới">
+              <button type="button" class="sw-reload-btn" onclick="loadOrders()" data-i18n-title="common.reload" title="Reload">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
               </button>
               <input type="hidden" id="orderStatusSelect" value="active" />
@@ -448,7 +448,7 @@
               <div class="sw-qr-img"><img id="depositQr" alt="QR" /></div>
               <div class="sw-qr-status-badge">
                 <span class="dot-ping"></span>
-                <span>Đang theo dõi giao dịch...</span>
+                <span data-i18n="seller.deposit.watching">Watching for transactions…</span>
               </div>
               <div class="sw-qr-hint" data-i18n="seller.deposit.qrHint">Sau khi chuyển khoản thành công, bạn sẽ nhận được thông báo realtime ngay tại đây trong vài giây.</div>
             </div>
@@ -489,12 +489,12 @@
               <div class="sw-deposit-info">
                 <div class="info-head">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  <span>Số tiền do bạn nhập trên app ngân hàng</span>
+                  <span data-i18n="seller.deposit.amountNote">The amount you enter in your banking app</span>
                 </div>
                 <div class="info-body">
-                  <div class="info-title">Tối thiểu nạp</div>
+                  <div class="info-title" data-i18n="seller.deposit.minTitle">Minimum deposit</div>
                   <div class="info-val">10.000đ</div>
-                  <div class="info-sub">- số tiền nhỏ hơn sẽ bị hệ thống bỏ qua. Hệ thống tự nhận đúng số bạn chuyển.</div>
+                  <div class="info-sub" data-i18n="seller.deposit.minNote">- smaller amounts are ignored. The system credits exactly what you transfer.</div>
                 </div>
               </div>
             </div>
@@ -699,14 +699,14 @@
     <div class="panel-modal sw-modal-wide">
       <h3 id="buyTitle">Buy product</h3>
       <p class="sub" id="buyPrice"></p>
-      <label class="panel-label">Account email (temp-mail)</label>
-      <input id="buyEmail" type="email" class="panel-input" placeholder="customer@tinyhost.shop" />
-      <label class="panel-label">Netflix password (optional)</label>
-      <input id="buyPass" type="text" class="panel-input" placeholder="leave empty if none yet" />
+      <label class="panel-label" data-i18n="seller.store.buyEmailLabel">Account email (temp-mail)</label>
+      <input id="buyEmail" type="email" class="panel-input" data-i18n-placeholder="seller.store.buyEmailPh" placeholder="name@tempmail.id.vn" />
+      <label class="panel-label" data-i18n="seller.store.buyPassLabel">Netflix password (optional)</label>
+      <input id="buyPass" type="text" class="panel-input" data-i18n-placeholder="seller.store.buyPassPh" placeholder="Leave empty if none yet" />
       <p class="panel-msg-err" id="buyErr"></p>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeBuyModal()">Cancel</button>
-        <button type="button" class="sw-btn sw-btn--primary" id="buyBtn" onclick="confirmBuy()">Confirm purchase</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeBuyModal()" data-i18n="common.cancel">Cancel</button>
+        <button type="button" class="sw-btn sw-btn--primary" id="buyBtn" onclick="confirmBuy()" data-i18n="seller.store.confirmBuy">Confirm purchase</button>
       </div>
     </div>
   </div>
@@ -716,7 +716,7 @@
       <h3 id="histTitle">Order history</h3>
       <div id="histList"></div>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeHistoryModal()">Close</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeHistoryModal()" data-i18n="common.close">Close</button>
       </div>
     </div>
   </div>
@@ -724,33 +724,33 @@
   <div class="panel-modal-backdrop hidden" id="createKeyModal">
     <div class="panel-modal sw-modal-wide">
       <div class="sw-modal-head">
-        <h3>Create new Key</h3>
+        <h3 data-i18n="seller.keys.createTitle">Create new Key</h3>
         <button type="button" class="sw-modal-close" onclick="closeCreateKeyModal()">✕</button>
       </div>
-      <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
-      <label class="panel-label">Account (purchased email)</label>
-      <input id="crOrderSearch" type="search" class="panel-input" placeholder="Search and select an account..." list="crOrderList" />
+      <p class="sub" data-i18n="seller.keys.permLimit">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
+      <label class="panel-label" data-i18n="seller.keys.acctLabel">Account (purchased email)</label>
+      <input id="crOrderSearch" type="search" class="panel-input" data-i18n-placeholder="seller.emails.pickPh" placeholder="Search and select an account..." list="crOrderList" />
       <datalist id="crOrderList"></datalist>
       <input type="hidden" id="crOrderId" />
-      <p class="perm-hint">Type to search orders by email or ORD code.</p>
+      <p class="perm-hint" data-i18n="seller.keys.searchHint">Type to search orders by email or ORD code.</p>
       <div class="sw-sync-box">
-        <div class="title">🔗 Sync across keys</div>
-        <label><input type="checkbox" id="crSyncName" checked /> Name</label>
-        <label><input type="checkbox" id="crSyncExpires" checked /> Duration</label>
-        <label><input type="checkbox" id="crSyncPerms" checked /> Permissions</label>
-        <p class="perm-hint">On: share one value across all keys. Off: each key has its own value.</p>
+        <div class="title" data-i18n="seller.keys.syncTitle">🔗 Sync across keys</div>
+        <label><input type="checkbox" id="crSyncName" checked /> <span data-i18n="seller.keys.syncName">Name</span></label>
+        <label><input type="checkbox" id="crSyncExpires" checked /> <span data-i18n="seller.keys.syncDuration">Duration</span></label>
+        <label><input type="checkbox" id="crSyncPerms" checked /> <span data-i18n="seller.keys.syncPerms">Permissions</span></label>
+        <p class="perm-hint" data-i18n="seller.keys.syncHint">On: share one value across all keys. Off: each key has its own value.</p>
       </div>
       <div id="crKeyRows"></div>
       <button type="button" class="sw-btn sw-btn--outline" id="crAddRowBtn" onclick="addCreateKeyRow()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        Add key
+        <span data-i18n="seller.keys.addKey">Add key</span>
       </button>
       <p class="panel-msg-err" id="crErr"></p>
       <div class="panel-modal-actions sw-modal-foot-split">
         <span id="crKeyCount" class="perm-hint">1/5 keys</span>
         <div>
-          <button type="button" class="sw-btn sw-btn--outline" onclick="closeCreateKeyModal()">Cancel</button>
-          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()">💾 Save Key</button>
+          <button type="button" class="sw-btn sw-btn--outline" onclick="closeCreateKeyModal()" data-i18n="common.cancel">Cancel</button>
+          <button type="button" class="sw-btn sw-btn--primary" id="crSaveBtn" onclick="saveCreateKeys()" data-i18n="seller.keys.saveKey">💾 Save Key</button>
         </div>
       </div>
     </div>
@@ -762,26 +762,26 @@
         <h3 id="editTitle">Edit Key</h3>
         <button type="button" class="sw-modal-close" onclick="closeEditModal()">✕</button>
       </div>
-      <p class="sub">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
-      <label class="panel-label">Account (purchased email)</label>
+      <p class="sub" data-i18n="seller.keys.permLimit">The permissions you select for the key are limited by the permissions the admin granted to the order.</p>
+      <label class="panel-label" data-i18n="seller.keys.acctLabel">Account (purchased email)</label>
       <input id="edEmail" type="text" class="panel-input" readonly />
-      <p class="perm-hint">The account cannot be changed when editing a key.</p>
+      <p class="perm-hint" data-i18n="seller.keys.acctReadonly">The account cannot be changed when editing a key.</p>
       <div class="sw-form-row-2">
         <div>
-          <label class="panel-label">Key name</label>
+          <label class="panel-label" data-i18n="seller.keys.keyName">Key name</label>
           <input id="edName" type="text" class="panel-input" />
         </div>
         <div>
-          <label class="panel-label">Key duration</label>
+          <label class="panel-label" data-i18n="seller.keys.keyDuration">Key duration</label>
           <input id="edExpires" type="datetime-local" class="panel-input" />
         </div>
       </div>
-      <p class="panel-label" style="margin-top:8px">Key permissions</p>
+      <p class="panel-label" style="margin-top:8px" data-i18n="seller.keys.keyPerms">Key permissions</p>
       <div class="sw-perm-checks" id="edPermChecks"></div>
       <p class="sw-perm-note" id="edPermHint"></p>
       <div class="panel-modal-actions">
-        <button type="button" class="sw-btn sw-btn--outline" onclick="closeEditModal()">Cancel</button>
-        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()">💾 Save changes</button>
+        <button type="button" class="sw-btn sw-btn--outline" onclick="closeEditModal()" data-i18n="common.cancel">Cancel</button>
+        <button type="button" class="sw-btn sw-btn--primary" id="edSaveBtn" onclick="saveEditKey()" data-i18n="seller.keys.saveChanges">💾 Save changes</button>
       </div>
     </div>
   </div>

@@ -44,7 +44,7 @@ function renderStoreGrid() {
         </div>`;
     } else if (p.id === 'prod_nf_extra_full') {
       stock = 16;
-      badgeHtml = `<span class="prod-tag" style="background:#10b981 !important;color:#fff !important">MỚI</span>`;
+      badgeHtml = `<span class="prod-tag" style="background:#10b981 !important;color:#fff !important">${tt('seller.store.tagNew')}</span>`;
       metaTagsHtml = `
         <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
           <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.74rem;color:#4b5563;background:#f3f4f6;padding:3px 8px;border-radius:6px;border:1px solid #e5e7eb">
@@ -54,7 +54,7 @@ function renderStoreGrid() {
         </div>`;
     } else if (p.id === 'prod_nf_fam_1m') {
       stock = 0;
-      badgeHtml = `<span class="prod-tag" style="background:#10b981 !important;color:#fff !important">MỚI</span>`;
+      badgeHtml = `<span class="prod-tag" style="background:#10b981 !important;color:#fff !important">${tt('seller.store.tagNew')}</span>`;
     } else {
       const ageDays = p.createdAt ? (Date.now() / 1000 - p.createdAt) / 86400 : 999;
       badgeHtml = ageDays <= 14
@@ -62,7 +62,7 @@ function renderStoreGrid() {
         : '';
     }
 
-    const priceText = p.id === 'prod_nf_extra_full' ? 'Từ 40.000đ' : fmtVnd(p.price);
+    const priceText = p.id === 'prod_nf_extra_full' ? tt('seller.store.priceFrom', { price: fmtVnd(40000) }) : fmtVnd(p.price);
     const isOutOfStock = stock <= 0;
     
     const buyButtonHtml = isOutOfStock

@@ -262,15 +262,15 @@ async function createKeyForOrder(orderId) {
 }
 
 // ── History event type labels ──────────────────────────────────
-const HISTORY_LABELS = {
-  renewed:           '🔄 Gia hạn',
-  perm_changed:      '🔑 Thay đổi quyền',
-  password_changed:  '🔒 Đổi mật khẩu',
-  created:           '✅ Tạo đơn',
-  purchased:         '🛒 Mua hàng',
-  expired:           '⏰ Hết hạn',
-  revoked:           '❌ Thu hồi',
-  via_email_changed: '📧 Đổi cài đặt mail',
+const HISTORY_LABEL_KEYS = {
+  renewed:           'seller.hist.renewed',
+  perm_changed:      'seller.hist.perm_changed',
+  password_changed:  'seller.hist.password_changed',
+  created:           'seller.hist.created',
+  purchased:         'seller.hist.purchased',
+  expired:           'seller.hist.expired',
+  revoked:           'seller.hist.revoked',
+  via_email_changed: 'seller.hist.via_email_changed',
 };
 
 // Parse history event detail into readable HTML
@@ -283,28 +283,28 @@ function formatHistoryDetail(eventType, raw) {
     const days = obj.daysAdded || obj.days || '';
     const exp  = obj.newExpiry || obj.expiresAt || '';
     const parts = [];
-    if (days) parts.push(`+${days} ngày`);
-    if (exp)  parts.push(`Hết hạn mới: <b>${fmtTs(exp)}</b>`);
+    if (days) parts.push(tt('seller.hist.daysAdded', { n: days }));
+    if (exp)  parts.push(tt('seller.hist.newExpiry', { date: fmtTs(exp) }));
     return parts.length ? `<span class="hist-detail">${parts.join(' · ')}</span>` : '';
   }
 
   if (eventType === 'perm_changed') {
     const pills = [];
     const yn = (v) => v ? '<span class="hpill hpill--on">✓</span>' : '<span class="hpill hpill--off">✗</span>';
-    if (obj.permLogin   !== undefined) pills.push(`${yn(obj.permLogin)} Login code`);
-    if (obj.permReset   !== undefined) pills.push(`${yn(obj.permReset)} Reset mật khẩu`);
-    if (obj.permFamily  !== undefined) pills.push(`${yn(obj.permFamily)} Household`);
-    if (obj.viaEmail    !== undefined) pills.push(`📧 Gửi qua email: ${obj.viaEmail ? 'Bật' : 'Tắt'}`);
+    if (obj.permLogin   !== undefined) pills.push(`${yn(obj.permLogin)} ${tt('seller.order.permLogin')}`);
+    if (obj.permReset   !== undefined) pills.push(`${yn(obj.permReset)} ${tt('seller.order.permReset')}`);
+    if (obj.permFamily  !== undefined) pills.push(`${yn(obj.permFamily)} ${tt('seller.order.permFamily')}`);
+    if (obj.viaEmail    !== undefined) pills.push(`📧 ${tt('seller.order.viaEmail')}: ${obj.viaEmail ? tt('seller.hist.on') : tt('seller.hist.off')}`);
     return pills.length ? `<span class="hist-detail">${pills.join(' &nbsp;·&nbsp; ')}</span>` : '';
   }
 
   if (eventType === 'password_changed') {
-    return '<span class="hist-detail">Mật khẩu đã được cập nhật.</span>';
+    return `<span class="hist-detail">${tt('seller.hist.pwUpdated')}</span>`;
   }
 
   if (eventType === 'via_email_changed') {
     const on = obj.viaEmail;
-    return `<span class="hist-detail">Nhận code qua email: <b>${on ? 'Bật' : 'Tắt'}</b></span>`;
+    return `<span class="hist-detail">${tt('seller.hist.viaEmailState', { state: on ? tt('seller.hist.on') : tt('seller.hist.off') })}</span>`;
   }
 
   // fallback: show key-value pairs (skip internal/large fields)
@@ -318,13 +318,13 @@ function formatHistoryDetail(eventType, raw) {
 async function openHistory(orderId) {
   const d = await api(`/api/seller/orders/${encodeURIComponent(orderId)}/history`);
   if (!d.success) return toast(d.error || 'Error');
-  $('histTitle').textContent = 'Lịch sử · ' + orderId;
+  $('histTitle').textContent = tt('seller.keys.historyTitle', { id: orderId });
   const events = d.events || [];
   if (!events.length) {
-    $('histList').innerHTML = '<p class="sub" style="padding:12px 0;color:var(--sw-muted)">Chưa có sự kiện nào.</p>';
+    $('histList').innerHTML = `<p class="sub" style="padding:12px 0;color:var(--sw-muted)">${tt('seller.hist.empty')}</p>`;
   } else {
     $('histList').innerHTML = events.map((e) => {
-      const label  = HISTORY_LABELS[e.eventType] || esc(e.eventType);
+      const label  = HISTORY_LABEL_KEYS[e.eventType] ? tt(HISTORY_LABEL_KEYS[e.eventType]) : esc(e.eventType);
       const detail = formatHistoryDetail(e.eventType, e.detail);
       return `<div class="sw-history-item">
         <div class="hist-row">

@@ -152,7 +152,7 @@
     const k = (window.SellerApp.allKeys || []).find((x) => x.key === keyId);
     if (!k) return;
     editingKeyId = keyId;
-    $('editTitle').textContent = 'Edit Key · ' + (k.keyName || k.key.slice(0, 12));
+    $('editTitle').textContent = tt('seller.keys.editTitleDyn', { name: (k.keyName || k.key.slice(0, 12)) });
     $('edEmail').value = k.email;
     $('edName').value = k.keyName || '';
     $('edExpires').value = toLocalInput(k.expiresAt);
@@ -251,12 +251,12 @@
       });
     });
 
-    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} keys`;
+    $('crKeyCount').textContent = tt('seller.keys.keyCount', { n: createRows.length, max: MAX_KEYS_BATCH });
   }
 
   function updateCreateCount() {
     $('crAddRowBtn').disabled = createRows.length >= MAX_KEYS_BATCH;
-    $('crKeyCount').textContent = `${createRows.length}/${MAX_KEYS_BATCH} keys`;
+    $('crKeyCount').textContent = tt('seller.keys.keyCount', { n: createRows.length, max: MAX_KEYS_BATCH });
   }
 
   function addCreateKeyRow() {
