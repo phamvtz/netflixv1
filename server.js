@@ -1492,6 +1492,7 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
     }
 
     let perms = null;
+    let sellerId = null;
     const orderRow = getOrderByEmailForInbox(email);
 
     if (keyStr) {
@@ -1502,6 +1503,7 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
         return res.status(403).json({ success: false, error: 'Key expired' });
       }
       perms = { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily };
+      sellerId = row.sellerId;
       incrementKeyUsage(keyStr);
     } else if (orderRow) {
       if (!orderRow.viaEmail) {
@@ -1511,9 +1513,23 @@ app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => 
         return res.status(403).json({ success: false, error: 'Order expired' });
       }
       perms = { permLogin: orderRow.permLogin, permReset: orderRow.permReset, permFamily: orderRow.permFamily };
+      sellerId = orderRow.sellerId;
     } else {
       // Fail closed: unknown email (no key, no order) must not receive any codes.
       return res.status(403).json({ success: false, error: 'No key or order found for this email' });
+    }
+
+    // Re-validate against the seller's CURRENT state at use-time. A key/order
+    // carries the perms it was issued with, but the admin may have since locked
+    // the seller or revoked a permission — those changes must take effect for
+    // already-issued keys/orders (the panel promises "admin can revoke anytime").
+    // Legacy keys with no seller (sellerId null) are left as-is.
+    if (sellerId) {
+      const seller = getAccountById(sellerId);
+      if (!seller || seller.role !== 'seller' || seller.status !== 'active') {
+        return res.status(403).json({ success: false, error: 'Seller account is not active' });
+      }
+      perms = clampKeyPerms(perms, getSellerMaxPerms(sellerId));
     }
 
     const result = await fetchInboxForEmail(email, perms);
@@ -2113,8 +2129,14 @@ app.get('/api/admin/sellers', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/sellers/:id/approve', requireAdmin, (req, res) => {
+  // Only set perms on the first approval (pending → active). Re-approving an
+  // already-active seller must NOT silently reset their perms to the defaults —
+  // use PATCH /perms for deliberate changes.
+  const acc = getAccountById(req.params.id);
+  if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Seller not found' });
+  const wasPending = acc.status !== 'active';
   const ok = setAccountStatus(req.params.id, 'active');
-  if (ok) {
+  if (ok && wasPending) {
     const body = req.body || {};
     setSellerPerms(req.params.id, {
       permLogin: body.permLogin !== false,
