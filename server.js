@@ -45,7 +45,6 @@ const {
   deleteExpiredSessions,
   createKey,
   getKey,
-  resolveKeyEmail,
   incrementKeyUsage,
   updateKey,
   clampKeyPerms,

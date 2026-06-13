@@ -52,7 +52,6 @@ function renderTransactions() {
   const typeLabel = {
     topup: { txt: tt('seller.tx.typeTopup'), cls: 'perm-badge--on' },
     purchase: { txt: tt('seller.tx.typePurchase'), cls: 'perm-badge--off' },
-    admin_adjust: { txt: tt('seller.tx.typeAdjust'), cls: 'perm-badge--off' },
   };
   $('txnBody').innerHTML = pageRows.length ? pageRows.map((t) => {
     const pos = t.amount >= 0;
