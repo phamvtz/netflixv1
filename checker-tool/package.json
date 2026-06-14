@@ -1,0 +1,24 @@
+{
+  "name": "netflix-cookie-checker",
+  "version": "1.0.0",
+  "description": "Standalone Netflix cookie checker (LIVE / plan-lost / dead) — runs its own web UI + API.",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build:exe": "pkg . --targets node18-win-x64 --output dist/netflix-checker.exe"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "lib/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}

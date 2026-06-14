@@ -1,0 +1,44 @@
+/* Design tokens — Premium SaaS Theme */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root,
+[data-theme="admin"],
+[data-theme="seller"] {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --bd: #e5e7eb;
+  --t1: #111827;
+  --t2: #6b7280;
+  --t3: #9ca3af;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --focus: #2563eb;
+  --btn-text-on-accent: #ffffff;
+  --mono: #111827;
+  --green: #16a34a;
+  --amber: #f59e0b;
+  --red-ui: #dc2626;
+  --status-ok: #16a34a;
+  --status-warn: #f59e0b;
+  --status-bad: #dc2626;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --hover-bg: rgba(37, 99, 235, 0.04);
+  --row-hover: rgba(37, 99, 235, 0.02);
+
+  /* Form Card Design System */
+  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #eff6ff 0%, #f8fafc 100%);
+  --fc-card: #ffffff;
+  --fc-bd: #e5e7eb;
+  --fc-text: #111827;
+  --fc-muted: #6b7280;
+  --fc-label: #374151;
+  --fc-blue: #2563eb;
+  --fc-blue-hover: #1d4ed8;
+  --fc-green: #16a34a;
+  --fc-green-bg: #f0fdf4;
+  --fc-radius: 16px;
+  --fc-input-radius: 12px;
+  --fc-font: Inter, system-ui, -apple-system, sans-serif;
+}

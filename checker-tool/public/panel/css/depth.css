@@ -1,0 +1,53 @@
+/* UI depth — flat light B&W */
+
+:root,
+[data-theme="admin"],
+[data-theme="seller"] {
+  --perspective: none;
+  --elev-1: none;
+  --elev-2: none;
+  --glow-accent: none;
+}
+
+body.ui-scene::before,
+body.ui-scene::after,
+body.ui-scene--cinematic::after {
+  display: none !important;
+}
+
+.ui-depth-tilt:hover,
+.panel-stat--click:hover,
+.stat-card:hover,
+.sw-stat:hover {
+  transform: none !important;
+}
+
+.panel-card,
+.panel-shell .panel-card,
+.sw-order-card,
+.sw-stat {
+  box-shadow: none !important;
+  border: 1px solid var(--bd, #d4d4d4);
+}
+
+/* Seller login — single flat shadow */
+[data-theme="seller"] .seller-auth-card.panel-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid #e5e5e5 !important;
+}
+
+.panel-stat,
+.stat-card {
+  border: 1px solid var(--bd, #d4d4d4);
+  background: #fff;
+}
+
+.panel-stat.is-active,
+.stat-card.is-active {
+  border-color: #000;
+  background: var(--accent-soft, #eee);
+}
+
+.stat-card .sc-n {
+  color: #000;
+}

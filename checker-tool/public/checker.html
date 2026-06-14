@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cookie Checker — Netflix</title>
+  <link rel="stylesheet" href="/panel/css/tokens.css" />
+  <link rel="stylesheet" href="/panel/css/form-card.css" />
+  <link rel="stylesheet" href="/panel/css/brand.css" />
+  <link rel="stylesheet" href="/panel/css/i18n.css" />
+  <link rel="stylesheet" href="/css/checker.css" />
+  <link rel="stylesheet" href="/panel/css/depth.css" />
+  <link rel="stylesheet" href="/panel/css/bw-flat.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body class="ui-scene ui-scene--cinematic chk-page" data-i18n-title="chk.title">
+
+  <header class="chk-topnav">
+    <a href="/" data-i18n="nav.getCode">Get code</a>
+    <a href="/checker" class="is-active" data-i18n="nav.checker">Checker</a>
+    <select class="form-card-lang" id="langSelect" aria-label="Language">
+      <option value="auto" data-i18n="me.langAuto">Auto (by IP)</option>
+      <option value="en" data-i18n="lang.en">EN</option>
+      <option value="vi" data-i18n="lang.vi">VI</option>
+    </select>
+  </header>
+
+  <main class="main chk-main">
+
+    <div class="form-card chk-input-card">
+      <div class="form-card-head">
+        <div>
+          <h1 data-i18n="chk.introTitle">Batch-verify Netflix cookies</h1>
+          <p class="form-card-sub" data-i18n="chk.introSub">Live · plan lost · dead — without triggering scan patterns.</p>
+        </div>
+      </div>
+
+      <label class="form-field-label" for="cookieInput" data-i18n="chk.cookieLabel">Cookies</label>
+      <div class="form-input-wrap chk-textarea-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/></svg>
+        <textarea id="cookieInput" class="chk-textarea" data-i18n-placeholder="chk.placeholder" rows="4" spellcheck="false"></textarea>
+      </div>
+      <div class="input-actions chk-actions">
+        <button class="form-btn-primary chk-btn-analyze" onclick="runCheck()" data-i18n="chk.analyze">Analyze</button>
+        <button class="form-btn-primary chk-btn-live" onclick="checkAllLive()" id="checkAllBtn" style="display:none">
+          <span class="live-dot"></span> <span data-i18n="chk.checkLive">Check Live</span>
+        </button>
+        <button class="chk-btn-ghost" onclick="pasteClip()" data-i18n="chk.paste">Paste</button>
+        <button class="chk-btn-ghost" onclick="clearAll()" data-i18n="chk.clear">Clear</button>
+        <button class="chk-btn-ghost" onclick="runDebug()" id="debugBtn" data-i18n="chk.debug">Debug</button>
+
+        <div class="dropdown" id="exportDropdown" style="display:none">
+          <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown()" data-i18n="chk.export">Export ▾</button>
+          <div class="dropdown-menu" id="dropdownMenu">
+            <button onclick="exportData('live','txt')">📄 Live → .txt</button>
+            <button onclick="exportData('live','csv')">📊 Live → .csv</button>
+            <button onclick="exportData('all','csv')">📊 All → .csv</button>
+            <button onclick="exportData('all','json')">📋 All → .json</button>
+          </div>
+        </div>
+
+        <div class="auto-wrap" id="autoWrap" style="display:none">
+          <label class="auto-lbl">
+            <input type="checkbox" id="autoCheck" onchange="toggleAutoCheck()" />
+            <span data-i18n="chk.auto">Auto</span>
+          </label>
+          <select id="autoInterval" class="auto-sel">
+            <option value="5">5m</option>
+            <option value="10">10m</option>
+            <option value="30" selected>30m</option>
+            <option value="60">1h</option>
+          </select>
+          <span class="auto-next" id="autoNext" style="display:none"></span>
+        </div>
+
+        <select id="checkPace" class="auto-sel" data-i18n-title="chk.paceTitle">
+          <option value="stealth" selected data-i18n="chk.paceStealth">Stealth — safest (default)</option>
+          <option value="slow" data-i18n="chk.paceSlow">Slow — 1 Netflix IP/cookie</option>
+          <option value="normal" data-i18n="chk.paceFast">Fast — higher scan risk</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="stat-cards" id="statCards" style="display:none">
+      <div class="stat-card stat-card-total panel-stat-click" id="sc-total" onclick="setFilter('all')" data-i18n-title="common.all">
+        <div class="sc-num" id="sc-total-n">0</div>
+        <div class="sc-label" data-i18n="chk.statTotal">Total</div>
+      </div>
+      <div class="stat-card stat-card-live" id="sc-live" onclick="setFilter('live')">
+        <div class="sc-num" id="sc-live-n">0</div>
+        <div class="sc-label" data-i18n="chk.statLive">Live</div>
+      </div>
+      <div class="stat-card stat-card-dead" id="sc-dead" onclick="setFilter('dead')">
+        <div class="sc-num" id="sc-dead-n">0</div>
+        <div class="sc-label" data-i18n="chk.statDead">Dead</div>
+      </div>
+      <div class="stat-card stat-card-cancel" id="sc-cancel" onclick="setFilter('cancelled')">
+        <div class="sc-num" id="sc-cancel-n">0</div>
+        <div class="sc-label" data-i18n="chk.statCancel">Cancelled / Plan lost</div>
+      </div>
+      <div class="stat-card stat-card-pending" id="sc-pending" onclick="setFilter('pending')">
+        <div class="sc-num" id="sc-pending-n">0</div>
+        <div class="sc-label" data-i18n="chk.statPending">Pending</div>
+      </div>
+    </div>
+
+    <!-- 3D Donut Chart — hiện sau khi check -->
+    <div class="chk-chart-wrap" id="chkChartWrap" style="display:none">
+      <div class="chk-chart-card">
+        <div class="chk-chart-header">
+          <span class="chk-chart-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.21 15.89A9 9 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            Phân tích kết quả
+          </span>
+          <span class="chk-chart-sub" id="chkChartSub">0 cookies phân tích</span>
+        </div>
+        <div id="chkChart3d" class="chk-chart-canvas"></div>
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar" style="display:none">
+      <input type="search" id="resultSearch" class="result-search" data-i18n-placeholder="chk.filterPh" oninput="applyFilter()" />
+      <div class="prog-wrap" id="statProgress" style="display:none">
+        <span id="progressText"></span>
+        <div class="prog-track"><div class="prog-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+    <div class="table-card" id="tableWrap" style="display:none">
+      <table class="tbl" id="ckTable">
+        <thead>
+          <tr>
+            <th class="th-num">#</th>
+            <th class="th-status" data-i18n="chk.thStatus">Status</th>
+            <th class="th-plan" data-i18n="chk.thPlan">Plan</th>
+            <th class="th-email" data-i18n="chk.thEmail">Email</th>
+            <th class="th-profiles" data-i18n="chk.thProfiles">Profiles</th>
+            <th class="th-age" data-i18n="chk.thSession">Session</th>
+            <th class="th-fmt" data-i18n="chk.thFmt">Fmt</th>
+            <th class="th-act" data-i18n="chk.thActions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="ckBody"></tbody>
+      </table>
+      <div class="table-empty" id="tableEmpty" style="display:none" data-i18n="chk.noFilter">No results match this filter.</div>
+    </div>
+
+    <div class="detail-card" id="detailWrap" style="display:none">
+      <div class="detail-hdr">
+        <span id="detailTitle" data-i18n="chk.detail">Detail</span>
+        <button class="detail-close" onclick="closeDetail()">✕</button>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </div>
+
+    <div class="form-card chk-empty-card" id="emptyState">
+      <div class="empty-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/></svg>
+      </div>
+      <p class="empty-t" data-i18n="chk.emptyTitle">Cookie Checker</p>
+      <p class="empty-s form-card-sub" data-i18n="chk.emptySub">Paste → Analyze → Check Live</p>
+    </div>
+
+  </main>
+
+  <script src="/panel/js/i18n.js"></script>
+  <script src="/js/checker.js?v=7"></script>
+</body>
+</html>
