@@ -18,7 +18,7 @@
   function fmtTs(sec) {
     if (!sec) return '—';
     try {
-      return new Date(sec * 1000).toLocaleString('vi-VN', {
+      return new Date(sec * 1000).toLocaleString(window.I18n?.locale() || 'vi-VN', {
         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
       });
     } catch { return '—'; }

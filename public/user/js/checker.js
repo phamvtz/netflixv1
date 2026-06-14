@@ -104,7 +104,7 @@ function fmt_age(ms) {
   if(m<60)return m+'m'; const h=Math.floor(m/60);
   if(h<24)return h+'h'+m%60+'m'; return Math.floor(h/24)+'d'+h%24+'h';
 }
-function fmt_ts(ms) { try { return new Date(ms).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return ''; } }
+function fmt_ts(ms) { try { return new Date(ms).toLocaleString(window.I18n?.locale?.() || 'vi-VN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return ''; } }
 function parse_ck(str) {
   const o={};
   str.split(';').forEach(p=>{ const i=p.indexOf('='); if(i<0)return; const k=p.substring(0,i).trim(),v=p.substring(i+1).trim(); if(k)o[k]=v; });

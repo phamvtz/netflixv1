@@ -1007,6 +1007,11 @@ function getLang() {
   return currentLang;
 }
 
+// Map UI language -> BCP-47 locale for date/number formatting.
+function locale() {
+  return currentLang === 'vi' ? 'vi-VN' : 'en-GB';
+}
+
 function sellerMeta(view) {
   const m = SELLER_META[currentLang] || SELLER_META.en;
   return m[view] || m.orders;
@@ -1023,6 +1028,7 @@ function chip(id, key) {
 window.I18n = {
   t,
   getLang,
+  locale,
   setLang,
   apply: applyDom,
   mountSwitcher,

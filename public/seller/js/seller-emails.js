@@ -86,7 +86,7 @@ function mailCardHtml(m, i, total, accountEmail) {
   const code = m.extracted_code || '';
   const fam = m.family_code || '';
   const reset = m.reset_link || '';
-  const time = m.time ? new Date(m.time).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const time = m.time ? new Date(m.time).toLocaleString(window.I18n?.locale?.() || 'vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   const tag = i === 0 ? tt('seller.emails.latest') : `#${i + 1}`;
 
   let body = '';

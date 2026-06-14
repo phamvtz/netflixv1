@@ -45,7 +45,7 @@ function authHeaders(extra) {
 
 function fmtTs(sec) {
   try {
-    return new Date(sec * 1000).toLocaleDateString('vi-VN');
+    return new Date(sec * 1000).toLocaleDateString(window.I18n?.locale?.() || 'vi-VN');
   } catch {
     return '—';
   }
