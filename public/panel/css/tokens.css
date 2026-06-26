@@ -1,43 +1,44 @@
-/* Design tokens — Premium SaaS Theme */
+/* Design tokens — Monochrome dark (locked, see docs/UI-3D.md) */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root,
 [data-theme="admin"],
 [data-theme="seller"] {
-  --bg: #f8fafc;
-  --card: #ffffff;
-  --bd: #e5e7eb;
-  --t1: #111827;
-  --t2: #6b7280;
-  --t3: #9ca3af;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --focus: #2563eb;
-  --btn-text-on-accent: #ffffff;
-  --mono: #111827;
-  --green: #16a34a;
-  --amber: #f59e0b;
-  --red-ui: #dc2626;
-  --status-ok: #16a34a;
-  --status-warn: #f59e0b;
-  --status-bad: #dc2626;
+  --bg: #0a0a0a;
+  --card: #141414;
+  --bd: #2a2a2a;
+  --t1: #f5f5f5;
+  --t2: #a3a3a3;
+  --t3: #6b6b6b;
+  --accent: #ffffff;
+  --accent-hover: #e5e5e5;
+  --accent-soft: #1f1f1f;
+  --focus: #ffffff;
+  --btn-text-on-accent: #0a0a0a;
+  --mono: #f5f5f5;
+  /* Status by brightness — no brand hues */
+  --green: #f5f5f5;
+  --amber: #a3a3a3;
+  --red-ui: #6b6b6b;
+  --status-ok: #f5f5f5;
+  --status-warn: #a3a3a3;
+  --status-bad: #6b6b6b;
   --radius: 16px;
   --radius-sm: 12px;
-  --hover-bg: rgba(37, 99, 235, 0.04);
-  --row-hover: rgba(37, 99, 235, 0.02);
+  --hover-bg: rgba(255, 255, 255, 0.04);
+  --row-hover: rgba(255, 255, 255, 0.02);
 
   /* Form Card Design System */
-  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #eff6ff 0%, #f8fafc 100%);
-  --fc-card: #ffffff;
-  --fc-bd: #e5e7eb;
-  --fc-text: #111827;
-  --fc-muted: #6b7280;
-  --fc-label: #374151;
-  --fc-blue: #2563eb;
-  --fc-blue-hover: #1d4ed8;
-  --fc-green: #16a34a;
-  --fc-green-bg: #f0fdf4;
+  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #161616 0%, #0a0a0a 100%);
+  --fc-card: #141414;
+  --fc-bd: #2a2a2a;
+  --fc-text: #f5f5f5;
+  --fc-muted: #a3a3a3;
+  --fc-label: #d4d4d4;
+  --fc-blue: #ffffff;
+  --fc-blue-hover: #e5e5e5;
+  --fc-green: #f5f5f5;
+  --fc-green-bg: #1f1f1f;
   --fc-radius: 16px;
   --fc-input-radius: 12px;
   --fc-font: Inter, system-ui, -apple-system, sans-serif;

@@ -14,10 +14,14 @@ No red/green brand colors. Status uses brightness: **live** = white, **dead** = 
 
 ## Files
 
-- `public/panel/css/tokens.css` — source of truth
+- `public/panel/css/tokens.css` — source of truth (shared `--bg`/`--accent`/status vars)
 - `public/panel/css/brand.css` — fonts, mesh, shells
 - `public/panel/css/depth.css` — elevation
-- `public/panel/css/seller-cyber.css` — seller dark overrides
+- `public/panel/css/form-card.css` — get-code / seller-auth form cards
+- `public/panel/css/seller-workspace.css` — seller shell (`--sw-*` tokens)
+- `public/panel/css/seller-components.css` — seller order/product/key components
+- `public/panel/css/seller-auth.css` — seller login page
+- `public/admin/admin.css` — admin dashboard (`--ad-*` tokens)
 
 ## Depth (T1)
 

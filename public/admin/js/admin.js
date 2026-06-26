@@ -316,16 +316,16 @@ function initCharts3D(s, labels, vals) {
       xAxis3D: {
         type: 'category',
         data: categories,
-        axisLabel: { fontSize: 10, color: '#64748b', margin: 8 },
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { fontSize: 10, color: '#a3a3a3', margin: 8 },
+        axisLine: { lineStyle: { color: '#2a2a2a' } },
         axisTick: { show: false },
         splitLine: { show: false },
       },
       yAxis3D: {
         type: 'value',
-        axisLabel: { fontSize: 9, color: '#94a3b8' },
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-        splitLine: { lineStyle: { color: 'rgba(226,232,240,0.5)' } },
+        axisLabel: { fontSize: 9, color: '#6b6b6b' },
+        axisLine: { lineStyle: { color: '#2a2a2a' } },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
       },
       zAxis3D: { type: 'value', show: false },
       series: [{
@@ -350,7 +350,7 @@ function initCharts3D(s, labels, vals) {
           formatter: (p) => p.value[1],
           fontSize: 11,
           fontWeight: 700,
-          color: '#334155',
+          color: '#f5f5f5',
           distance: 2,
         },
         shading: 'lambert',
@@ -359,9 +359,9 @@ function initCharts3D(s, labels, vals) {
       tooltip: {
         show: true,
         formatter: (p) => `<b>${p.value[0] !== undefined ? categories[p.value[0]] : ''}</b>: ${p.value[1]}`,
-        backgroundColor: '#fff',
-        borderColor: '#e2e8f0',
-        textStyle: { color: '#0f172a', fontSize: 12 },
+        backgroundColor: '#141414',
+        borderColor: '#2a2a2a',
+        textStyle: { color: '#f5f5f5', fontSize: 12 },
       },
     });
 
@@ -411,7 +411,7 @@ function initCharts3D(s, labels, vals) {
           show: true,
           formatter: '{b}\n{d}%',
           fontSize: 10,
-          color: '#334155',
+          color: '#f5f5f5',
           fontWeight: 600,
         },
         labelLine: { length: 12, length2: 8 },
@@ -427,9 +427,9 @@ function initCharts3D(s, labels, vals) {
       tooltip: {
         trigger: 'item',
         formatter: '{b}: {c} ({d}%)',
-        backgroundColor: '#fff',
-        borderColor: '#e2e8f0',
-        textStyle: { color: '#0f172a', fontSize: 12 },
+        backgroundColor: '#141414',
+        borderColor: '#2a2a2a',
+        textStyle: { color: '#f5f5f5', fontSize: 12 },
       },
     });
 

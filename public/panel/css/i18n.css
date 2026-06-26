@@ -1,17 +1,17 @@
-/* Language switcher — light */
+/* Language switcher — monochrome dark */
 .lang-switch {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
   border-radius: 999px;
-  border: 1px solid var(--bd, #d4d4d4);
-  background: #f5f5f5;
+  border: 1px solid var(--bd, #2a2a2a);
+  background: var(--card, #141414);
 }
 
 .lang-switch button {
   border: none;
   background: transparent;
-  color: var(--t2, #525252);
+  color: var(--t2, #a3a3a3);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -23,12 +23,12 @@
 }
 
 .lang-switch button:hover {
-  color: #000;
+  color: var(--t1, #f5f5f5);
 }
 
 .lang-switch button.is-active {
-  background: #000;
-  color: #fff;
+  background: var(--accent, #fff);
+  color: var(--btn-text-on-accent, #0a0a0a);
 }
 
 .me-nav .lang-switch {

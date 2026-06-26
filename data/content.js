@@ -1,6 +1,6 @@
 'use strict';
 
-// 37 nội dung mock cho trang browse — seed vào SQLite qua db/seed.js
+// 50 nội dung mock cho trang browse — seed vào SQLite qua db/seed.js
 const GRADIENTS = [
   'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)',
   'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
@@ -54,6 +54,19 @@ const RAW = [
   { title: 'The Adam Project', type: 'movie', duration: '1h 46m', genres: ['Sci-Fi', 'Action', 'Comedy'], year: 2022, description: 'Phi công du hành thời gian gặp bản thân 12 tuổi để cứu tương lai.', rows: ['scifi', 'comedy', 'action'] },
   { title: 'Enola Holmes', type: 'movie', duration: '2h 3m', genres: ['Mystery', 'Adventure', 'Comedy'], year: 2020, description: 'Em gái Sherlock tìm mẹ mất tích trong cuộc phiêu lưu Victorian.', rows: ['comedy', 'action', 'new_releases'] },
   { title: 'Our Planet', type: 'series', seasons: 1, genres: ['Documentary', 'Nature'], year: 2019, description: 'Loạt phim tài liệu về thiên nhiên và đa dạng sinh học trên Trái Đất.', rows: ['documentary', 'new_releases'] },
+  { title: 'The Night Agent', type: 'series', seasons: 2, genres: ['Thriller', 'Action', 'Drama'], year: 2023, description: 'A low-level FBI agent answering an emergency line is pulled into a deadly conspiracy reaching the White House.', rows: ['trending', 'action', 'drama'] },
+  { title: 'Beef', type: 'series', seasons: 1, genres: ['Comedy', 'Drama'], year: 2023, description: 'A road-rage incident between two strangers spirals into a feud that consumes their lives.', rows: ['trending', 'comedy', 'drama', 'new_releases'] },
+  { title: 'One Piece', type: 'series', seasons: 1, genres: ['Adventure', 'Action', 'Fantasy'], year: 2023, description: 'Monkey D. Luffy and his crew sail the seas in search of the legendary treasure known as the One Piece.', rows: ['trending', 'action', 'new_releases'] },
+  { title: 'Fool Me Once', type: 'series', seasons: 1, genres: ['Thriller', 'Mystery', 'Drama'], year: 2024, description: 'A grieving widow spots her murdered husband on a nanny cam and uncovers a web of family secrets.', rows: ['trending', 'drama', 'new_releases'] },
+  { title: '3 Body Problem', type: 'series', seasons: 1, genres: ['Sci-Fi', 'Mystery', 'Drama'], year: 2024, description: 'A scientist\'s fateful decision in 1960s China echoes across space and time to a group of present-day researchers.', rows: ['scifi', 'drama', 'trending', 'new_releases'] },
+  { title: 'Avatar: The Last Airbender', type: 'series', seasons: 1, genres: ['Adventure', 'Action', 'Fantasy'], year: 2024, description: 'A young Air Nomad must master the four elements to bring balance to a world threatened by the Fire Nation.', rows: ['action', 'new_releases', 'trending'] },
+  { title: 'Baby Reindeer', type: 'series', seasons: 1, genres: ['Drama', 'Thriller'], year: 2024, description: 'A struggling comedian\'s small act of kindness triggers an obsessive stalking that unravels his past.', rows: ['drama', 'new_releases'] },
+  { title: 'The Diplomat', type: 'series', seasons: 2, genres: ['Drama', 'Thriller'], year: 2023, description: 'A career diplomat lands a high-profile ambassadorship while navigating an international crisis and her own marriage.', rows: ['drama', 'trending'] },
+  { title: 'Heartstopper', type: 'series', seasons: 3, genres: ['Romance', 'Drama', 'Comedy'], year: 2022, description: 'Two teenage boys at a British grammar school discover friendship can blossom into something more.', rows: ['romance', 'comedy', 'drama'] },
+  { title: 'Leave the World Behind', type: 'movie', duration: '2h 18m', genres: ['Thriller', 'Drama', 'Sci-Fi'], year: 2023, description: 'A family vacation is upended when two strangers arrive at night amid a mysterious nationwide blackout.', rows: ['scifi', 'drama', 'new_releases'] },
+  { title: 'Society of the Snow', type: 'movie', duration: '2h 24m', genres: ['Drama', 'Adventure'], year: 2023, description: 'Survivors of a 1972 Andes plane crash fight to stay alive against impossible odds.', rows: ['drama', 'new_releases'] },
+  { title: 'Damsel', type: 'movie', duration: '1h 50m', genres: ['Fantasy', 'Action', 'Adventure'], year: 2024, description: 'A young woman agrees to marry a prince, only to be sacrificed to a fire-breathing dragon she must outwit.', rows: ['action', 'new_releases', 'trending'] },
+  { title: 'Maestro', type: 'movie', duration: '2h 9m', genres: ['Drama', 'Music'], year: 2023, description: 'The decades-spanning love story between conductor Leonard Bernstein and Felicia Montealegre.', rows: ['drama', 'new_releases'] },
 ];
 
 const content = RAW.map((item, index) => ({
@@ -65,8 +78,8 @@ const content = RAW.map((item, index) => ({
   ...item,
 }));
 
-if (content.length !== 37) {
-  throw new Error(`data/content.js: expected 37 items, got ${content.length}`);
+if (content.length !== 50) {
+  throw new Error(`data/content.js: expected 50 items, got ${content.length}`);
 }
 
 module.exports = { content };

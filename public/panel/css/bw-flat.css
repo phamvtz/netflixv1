@@ -1,4 +1,4 @@
-/* Premium SaaS Theme overrides */
+/* Monochrome dark overrides */
 
 body {
   background-color: var(--bg) !important;
@@ -21,7 +21,7 @@ body {
 
 [data-theme="seller"] .sw-brand-icon {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--btn-text-on-accent) !important;
 }
 
 [data-theme="seller"] .sw-nav a.is-active {
@@ -51,14 +51,14 @@ body {
 }
 
 [data-theme="seller"] .sw-order-head {
-  background: #fdfdfd !important;
+  background: var(--accent-soft) !important;
   border-bottom: 1px solid var(--bd) !important;
 }
 
 [data-theme="seller"] .sw-btn--primary,
 [data-theme="seller"] .panel-btn--primary {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--btn-text-on-accent) !important;
   border-radius: var(--radius-sm) !important;
   border: none !important;
 }
@@ -81,7 +81,7 @@ body {
 
 .panel-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="seller"] #authView .panel-input,
@@ -109,13 +109,14 @@ body {
 
 [data-theme="seller"] #authView .panel-btn--primary {
   background: var(--accent) !important;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2) !important;
+  color: var(--btn-text-on-accent) !important;
+  box-shadow: none !important;
   border-radius: var(--radius-sm) !important;
 }
 
 .filter-bar .chip.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--btn-text-on-accent);
   border-color: var(--accent);
 }
 
@@ -127,25 +128,25 @@ body {
 }
 
 .badge-live {
-  background: var(--green) !important;
-  color: #fff !important;
-  border: 1px solid var(--green) !important;
+  background: var(--accent) !important;
+  color: var(--btn-text-on-accent) !important;
+  border: 1px solid var(--accent) !important;
 }
 
 .badge-dead {
-  background: var(--red-ui) !important;
-  color: #fff !important;
-  border: 1px solid var(--red-ui) !important;
+  background: var(--card) !important;
+  color: var(--t3) !important;
+  border: 1px solid var(--bd) !important;
 }
 
 .badge-cancelled {
-  background: var(--t3) !important;
-  color: #fff !important;
-  border: 1px solid var(--t3) !important;
+  background: var(--accent-soft) !important;
+  color: var(--t2) !important;
+  border: 1px solid var(--bd) !important;
 }
 
-.row-live td { background: rgba(22, 163, 74, 0.03) !important; }
-.row-cancel td { background: rgba(220, 38, 38, 0.02) !important; }
+.row-live td { background: rgba(255, 255, 255, 0.03) !important; }
+.row-cancel td { background: rgba(255, 255, 255, 0.015) !important; }
 
 .me-hero,
 .me-panel,
@@ -157,7 +158,7 @@ body {
 .me-submit,
 .me-nav a.is-active {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--btn-text-on-accent, #0a0a0a) !important;
   border-color: var(--accent) !important;
 }
 
@@ -168,7 +169,7 @@ body {
 
 .lang-switch button.is-active {
   background: var(--accent);
-  color: #fff;
+  color: var(--btn-text-on-accent, #0a0a0a);
 }
 
 /* ─── Admin Panel UI Redesign ─── */
@@ -233,7 +234,7 @@ body {
 
 [data-theme="admin"] .panel-btn--primary {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--btn-text-on-accent, #0a0a0a) !important;
   border-radius: var(--radius-sm) !important;
 }
 
@@ -246,7 +247,7 @@ body {
 
 [data-theme="admin"] .panel-badge--active {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--btn-text-on-accent, #0a0a0a) !important;
 }
 
 [data-theme="admin"] .panel-badge--pending {

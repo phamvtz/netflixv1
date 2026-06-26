@@ -27,7 +27,7 @@ function renderStoreGrid() {
     // "NEW" badge for products created within the last 14 days.
     const ageDays = p.createdAt ? (Date.now() / 1000 - p.createdAt) / 86400 : 999;
     const badgeHtml = ageDays <= 14
-      ? `<span class="prod-tag" style="background:#10b981 !important;color:#fff !important">${tt('seller.store.tagNew')}</span>`
+      ? `<span class="prod-tag" style="background:#f5f5f5 !important;color:#0a0a0a !important">${tt('seller.store.tagNew')}</span>`
       : '';
 
     return `

@@ -81,9 +81,9 @@ describe('SQLite database layer', () => {
     assert.equal(getProfilesByUserId('u002', db).length, 2);
   });
 
-  it('getAllContent trả đúng 37 items với genres/rows là array', () => {
+  it('getAllContent trả đúng 50 items với genres/rows là array', () => {
     const all = getAllContent(db);
-    assert.equal(all.length, 37);
+    assert.equal(all.length, 50);
     assert.ok(Array.isArray(all[0].genres));
     assert.ok(Array.isArray(all[0].rows));
     assert.equal(all.find(c => c.featured)?.title, 'Stranger Things');
@@ -98,8 +98,8 @@ describe('SQLite database layer', () => {
     assert.equal(getSession('sess-test-1', db), null);
   });
 
-  it('content source có đúng 37 items', () => {
-    assert.equal(content.length, 37);
+  it('content source có đúng 50 items', () => {
+    assert.equal(content.length, 50);
   });
 
   it('keys: create → resolve (tăng used_count) → list → delete', () => {
@@ -122,7 +122,7 @@ describe('SQLite database layer', () => {
     const s = getAdminStats(db);
     assert.equal(s.users, 2);
     assert.equal(s.profiles, 6);
-    assert.equal(s.content, 37);
+    assert.equal(s.content, 50);
     assert.equal(typeof s.keys, 'number');
   });
 });

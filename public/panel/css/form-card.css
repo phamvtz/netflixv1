@@ -1,16 +1,16 @@
 /* Shared inbox-style form cards (get-code, seller auth) */
 
 :root {
-  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #dbeafe 0%, #f0f7ff 42%, #f8fafc 100%);
-  --fc-card: #ffffff;
-  --fc-bd: #e2e8f0;
-  --fc-text: #0f172a;
-  --fc-muted: #64748b;
-  --fc-label: #334155;
-  --fc-blue: #3b82f6;
-  --fc-blue-hover: #2563eb;
-  --fc-green: #16a34a;
-  --fc-green-bg: #f0fdf4;
+  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #161616 0%, #0a0a0a 100%);
+  --fc-card: #141414;
+  --fc-bd: #2a2a2a;
+  --fc-text: #f5f5f5;
+  --fc-muted: #a3a3a3;
+  --fc-label: #d4d4d4;
+  --fc-blue: #ffffff;
+  --fc-blue-hover: #e5e5e5;
+  --fc-green: #f5f5f5;
+  --fc-green-bg: #1f1f1f;
   --fc-radius: 16px;
   --fc-input-radius: 10px;
   --fc-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -21,7 +21,7 @@
   border: 1px solid var(--fc-bd);
   border-radius: var(--fc-radius);
   padding: 24px 28px 22px;
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
   font-family: var(--fc-font);
 }
 
@@ -62,7 +62,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--fc-label);
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E") 12px center no-repeat;
+  background: var(--fc-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E") 12px center no-repeat;
   cursor: pointer;
   min-width: 148px;
 }
@@ -70,12 +70,12 @@
 .form-card-lang:focus {
   outline: none;
   border-color: var(--fc-blue);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
 }
 
 .form-tabs {
   display: flex;
-  background: #f1f5f9;
+  background: #1a1a1a;
   border: 1px solid var(--fc-bd);
   border-radius: 999px;
   padding: 4px;
@@ -103,8 +103,8 @@
 
 .form-tab.active {
   background: var(--fc-blue);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+  color: var(--btn-text-on-accent, #0a0a0a);
+  box-shadow: none;
 }
 
 .form-tab svg {
@@ -122,22 +122,22 @@
 .form-input-wrap {
   display: flex;
   align-items: center;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--fc-bd);
   border-radius: var(--fc-input-radius);
   padding: 11px 12px;
   gap: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.03);
   margin-bottom: 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .form-input-wrap:focus-within {
   border-color: var(--fc-blue);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 
 .form-input-wrap svg {
-  color: #94a3b8;
+  color: var(--fc-muted);
   flex-shrink: 0;
 }
 
@@ -181,9 +181,9 @@
   font-size: 0.95rem;
   font-weight: 700;
   font-family: var(--fc-font);
-  color: #fff;
+  color: var(--btn-text-on-accent, #0a0a0a);
   background: var(--fc-blue);
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+  box-shadow: none;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -194,7 +194,7 @@
 
 .form-btn-primary:hover:not(:disabled) {
   background: var(--fc-blue-hover);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
+  box-shadow: none;
 }
 
 .form-btn-primary:disabled {
@@ -233,17 +233,17 @@
 .result-badge--ok {
   background: var(--fc-green-bg);
   color: var(--fc-green);
-  border: 1px solid #bbf7d0;
+  border: 1px solid var(--fc-bd);
 }
 
 .result-badge--err {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: #1f1f1f;
+  color: var(--fc-muted);
+  border: 1px solid var(--fc-bd);
 }
 
 .result-code-panel {
-  background: #f8fafc;
+  background: #1a1a1a;
   border: 1px solid var(--fc-bd);
   border-radius: 12px;
   padding: 16px 18px;
@@ -285,7 +285,7 @@
   padding: 8px 14px;
   border-radius: 8px;
   border: 1px solid var(--fc-bd);
-  background: #fff;
+  background: #1a1a1a;
   color: var(--fc-label);
   font-size: 0.78rem;
   font-weight: 700;
@@ -301,7 +301,7 @@
 
 .result-btn-copy.is-copied {
   color: var(--fc-green);
-  border-color: #86efac;
+  border-color: var(--fc-green);
 }
 
 .result-meta-row {

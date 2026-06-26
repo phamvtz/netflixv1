@@ -1,0 +1,19 @@
+name = "db-migration"
+description = "Viết schema, migration, seed cho SQLite/Turso. Dùng khi thêm bảng/cột, thay đổi schema."
+developer_instructions = """
+# DB Migration Agent
+
+## Stack
+- node:sqlite (built-in Node.js 22+) hoặc @libsql/client cho Turso cloud
+- snake_case columns, camelCase trong JS
+
+## Workflow
+1. Phân tích yêu cầu → viết SQL → update database.js → seed nếu cần → commit
+
+## Conventions
+- Luôn viết cả UP và DOWN migration
+- Comment tiếng Việt
+- snake_case columns, is_active INTEGER (0/1)
+- Timestamps: INTEGER DEFAULT (unixepoch())
+- Seed chỉ insert khi bảng rỗng
+- Auto commit sau thay đổi"""

@@ -49,7 +49,7 @@ body {
   border: 1px solid var(--bd);
   color: var(--t3);
 }
-.perm-badge--on { border-color: #000; color: #000; background: var(--accent-soft, #eee); }
+.perm-badge--on { border-color: var(--accent); color: var(--t1); background: var(--accent-soft); }
 .perm-badge--off { opacity: 0.45; }
 
 .perm-checks { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
@@ -116,7 +116,7 @@ body {
 .panel-actions { display: flex; gap: 8px; align-items: center; }
 
 .panel-card {
-  background: linear-gradient(165deg, rgba(22, 22, 30, 0.92), rgba(10, 10, 14, 0.96));
+  background: var(--card);
   border: 1px solid var(--bd);
   border-radius: var(--radius);
   padding: 22px 20px;
@@ -132,7 +132,7 @@ body {
 .panel-section-title {
   font-size: 0.98rem;
   margin-bottom: 14px;
-  color: #ccd;
+  color: var(--t1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -145,7 +145,7 @@ body {
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 20px;
-  background: #23232f;
+  background: var(--accent-soft);
   color: var(--t2);
 }
 .panel-pill--hot { background: rgba(245, 166, 35, 0.18); color: var(--amber); }
@@ -171,7 +171,7 @@ body {
 .panel-stat-num.hot { color: var(--amber); }
 .panel-stat-label { font-size: 0.74rem; color: var(--t2); margin-top: 4px; }
 
-.panel-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 7px; color: #bcd; }
+.panel-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 7px; color: var(--t2); }
 
 .panel-input,
 .panel-card input[type="text"],
@@ -182,8 +182,8 @@ body {
   padding: 12px 14px;
   border-radius: 9px;
   border: 1.5px solid var(--bd);
-  background: rgba(0, 0, 0, 0.25);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--t1);
   font-size: 0.95rem;
   outline: none;
   margin-bottom: 14px;
@@ -216,16 +216,16 @@ body {
 .panel-btn--sm {
   padding: 7px 13px;
   font-size: 0.78rem;
-  background: #eee;
-  color: #000;
+  background: var(--accent-soft);
+  color: var(--t1);
 }
 .panel-btn--ghost {
-  background: #fff;
+  background: var(--card);
   color: var(--t1);
   border: 1px solid var(--bd);
 }
-.panel-btn--green { background: #000; color: #fff; border: 1px solid #000; }
-.panel-btn--red { background: #f5f5f5; color: var(--t2); border: 1px solid var(--bd); }
+.panel-btn--green { background: var(--accent); color: var(--btn-text-on-accent); border: 1px solid var(--accent); }
+.panel-btn--red { background: var(--card); color: var(--t2); border: 1px solid var(--bd); }
 
 .panel-table-wrap { overflow: auto; max-height: 440px; }
 .panel-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -263,11 +263,11 @@ body {
   font-size: 0.72rem;
   font-weight: 700;
 }
-.panel-badge--active { background: #000; color: #fff; }
-.panel-badge--pending { background: #eee; color: var(--t2); border: 1px solid var(--bd); }
-.panel-badge--rejected { background: #f5f5f5; color: var(--t3); }
-.panel-badge--new { background: #eee; color: var(--t2); }
-.panel-badge--used { background: #e5e5e5; color: #000; }
+.panel-badge--active { background: var(--accent); color: var(--btn-text-on-accent); }
+.panel-badge--pending { background: var(--accent-soft); color: var(--t2); border: 1px solid var(--bd); }
+.panel-badge--rejected { background: var(--accent-soft); color: var(--t3); }
+.panel-badge--new { background: var(--accent-soft); color: var(--t2); }
+.panel-badge--used { background: #2a2a2a; color: var(--t1); }
 
 .filter-bar {
   display: flex;
@@ -289,7 +289,7 @@ body {
   cursor: pointer;
   transition: all 0.15s;
 }
-.chip:hover { color: var(--t1); border-color: #000; }
+.chip:hover { color: var(--t1); border-color: var(--accent); }
 .chip.active {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -374,7 +374,7 @@ body {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: #1c1c28;
+  background: var(--card);
   border: 1px solid var(--bd);
   padding: 11px 20px;
   border-radius: 9px;
@@ -392,6 +392,6 @@ body {
   gap: 10px;
 }
 .acct-pill { font-size: 0.82rem; color: var(--t2); }
-.acct-pill b { color: #fff; }
+.acct-pill b { color: var(--t1); }
 
 .sub { color: var(--t2); font-size: 0.88rem; margin-bottom: 16px; line-height: 1.5; }

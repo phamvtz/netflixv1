@@ -313,15 +313,15 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
   }
 
   const slices = [
-    { name: '✓ Live',      value: live,      color: '#10b981', glow: '#34d399' },
-    { name: '✗ Dead',      value: dead,      color: '#ef4444', glow: '#f87171' },
-    { name: '⚠ Cancelled', value: cancelled, color: '#f59e0b', glow: '#fbbf24' },
-    { name: '⏳ Pending',   value: pending,   color: '#94a3b8', glow: '#cbd5e1' },
+    { name: '✓ Live',      value: live,      color: '#f5f5f5', glow: '#ffffff' },
+    { name: '✗ Dead',      value: dead,      color: '#525252', glow: '#737373' },
+    { name: '⚠ Cancelled', value: cancelled, color: '#a3a3a3', glow: '#d4d4d4' },
+    { name: '⏳ Pending',   value: pending,   color: '#3a3a3a', glow: '#525252' },
   ].filter(s => s.value > 0);
 
   // Nếu toàn bộ vẫn pending, hiển thị loading placeholder
   const showSlices = slices.length > 0 ? slices : [
-    { name: 'Đang chờ…', value: 1, color: '#e2e8f0', glow: '#e2e8f0' },
+    { name: 'Đang chờ…', value: 1, color: '#2a2a2a', glow: '#2a2a2a' },
   ];
 
   _chkChart.setOption({
@@ -330,7 +330,7 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
       orient: 'vertical',
       right: '4%',
       top: 'middle',
-      textStyle: { fontSize: 12, color: '#334155', fontFamily: 'Inter, system-ui, sans-serif' },
+      textStyle: { fontSize: 12, color: '#a3a3a3', fontFamily: 'Inter, system-ui, sans-serif' },
       icon: 'circle',
       itemWidth: 10,
       itemHeight: 10,
@@ -359,7 +359,7 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
         formatter: '{d}%',
         fontSize: 11,
         fontWeight: 700,
-        color: '#fff',
+        color: '#0a0a0a',
         position: 'inside',
       },
       labelLine: { show: false },
@@ -367,7 +367,7 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
         scale: true,
         scaleSize: 6,
         itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,.25)' },
-        label: { show: true, fontSize: 13, fontWeight: 700, color: '#0f172a', position: 'outside' },
+        label: { show: true, fontSize: 13, fontWeight: 700, color: '#f5f5f5', position: 'outside' },
       },
       animationType: 'scale',
       animationEasing: 'backOut',
@@ -376,11 +376,11 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
     tooltip: {
       trigger: 'item',
       formatter: (p) => `<b>${p.name}</b><br/>${p.value} (${p.percent}%)`,
-      backgroundColor: '#fff',
-      borderColor: '#e2e8f0',
+      backgroundColor: '#141414',
+      borderColor: '#2a2a2a',
       borderWidth: 1,
-      textStyle: { color: '#0f172a', fontSize: 12, fontFamily: 'Inter, system-ui, sans-serif' },
-      extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.1); border-radius: 10px;',
+      textStyle: { color: '#f5f5f5', fontSize: 12, fontFamily: 'Inter, system-ui, sans-serif' },
+      extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.5); border-radius: 10px;',
     },
     graphic: [{
       type: 'text',
@@ -389,7 +389,7 @@ function updateCheckerChart({ total, live, dead, cancelled, pending }) {
       style: {
         text: String(total),
         textAlign: 'center',
-        fill: '#0f172a',
+        fill: '#f5f5f5',
         fontSize: 26,
         fontWeight: 900,
         fontFamily: 'Inter, system-ui, sans-serif',

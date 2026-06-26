@@ -1,4 +1,4 @@
-/* UI depth — flat light B&W */
+/* UI depth — flat monochrome dark */
 
 :root,
 [data-theme="admin"],
@@ -32,22 +32,22 @@ body.ui-scene--cinematic::after {
 
 /* Seller login — single flat shadow */
 [data-theme="seller"] .seller-auth-card.panel-card {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
-  border: 1px solid #e5e5e5 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid var(--bd, #2a2a2a) !important;
 }
 
 .panel-stat,
 .stat-card {
-  border: 1px solid var(--bd, #d4d4d4);
-  background: #fff;
+  border: 1px solid var(--bd, #2a2a2a);
+  background: var(--card, #141414);
 }
 
 .panel-stat.is-active,
 .stat-card.is-active {
-  border-color: #000;
-  background: var(--accent-soft, #eee);
+  border-color: var(--accent, #fff);
+  background: var(--accent-soft, #1f1f1f);
 }
 
 .stat-card .sc-n {
-  color: #000;
+  color: var(--t1, #f5f5f5);
 }

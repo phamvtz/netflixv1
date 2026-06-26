@@ -45,7 +45,7 @@ describe('Integration: startup sequence', () => {
   it('tất cả bảng được populate sau migrate + seed', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM users').get().c, 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM profiles').get().c, 6);
-    assert.equal(getAllContent(db).length, 37);
+    assert.equal(getAllContent(db).length, 50);
     assert.equal(db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE role='admin'").get().c, 1);
   });
 

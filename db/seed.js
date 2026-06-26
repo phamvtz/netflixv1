@@ -56,9 +56,10 @@ function seedProfiles(db) {
 }
 
 function seedContent(db) {
-  if (tableCount(db, 'content') > 0) return;
+  // Idempotent per-row insert: keeps existing rows and adds any new content
+  // (id is PRIMARY KEY) so re-seeding an existing DB picks up newly added items.
   const stmt = db.prepare(`
-    INSERT INTO content (
+    INSERT OR IGNORE INTO content (
       id, title, type, seasons, duration, genres, rating, maturity,
       year, description, gradient, accent, rows, featured, progress
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
