@@ -1,7 +1,7 @@
 {
   "name": "netflix-v1",
   "version": "1.0.0",
-  "description": "Netflix clone – full auth/session/cookie flow",
+  "description": "Netflix cookie checker and seller/admin panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

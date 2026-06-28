@@ -56,9 +56,10 @@ function seedProfiles(db) {
 }
 
 function seedContent(db) {
-  if (tableCount(db, 'content') > 0) return;
+  // Idempotent per-row insert: keeps existing rows and adds any new content
+  // (id is PRIMARY KEY) so re-seeding an existing DB picks up newly added items.
   const stmt = db.prepare(`
-    INSERT INTO content (
+    INSERT OR IGNORE INTO content (
       id, title, type, seasons, duration, genres, rating, maturity,
       year, description, gradient, accent, rows, featured, progress
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -100,12 +101,50 @@ function seedAccounts(db) {
   `).run('acc_admin', 'admin', 'hcjx125@gmail.com', hashPassword('Admin2026'));
 }
 
+const PRODUCTS = [
+  {
+    id: 'prod_nf_fam_1m',
+    name: 'Netflix Premium Family 1 Month - Full warranty',
+    durationLabel: '1 month',
+    durationDays: 30,
+    price: 150000,
+    warrantyNote: 'Full warranty',
+  },
+  {
+    id: 'prod_nf_fam_3m',
+    name: 'Netflix Premium Family 3 Months',
+    durationLabel: '3 months',
+    durationDays: 90,
+    price: 400000,
+    warrantyNote: 'Full warranty',
+  },
+];
+
+function seedProducts(db) {
+  if (tableCount(db, 'products') > 0) return;
+  const stmt = db.prepare(`
+    INSERT INTO products (id, name, duration_label, duration_days, price, warranty_note, active)
+    VALUES (?, ?, ?, ?, ?, ?, 1)
+  `);
+  db.exec('BEGIN');
+  try {
+    for (const p of PRODUCTS) {
+      stmt.run(p.id, p.name, p.durationLabel, p.durationDays, p.price, p.warrantyNote ?? null);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function runSeed(db) {
   const conn = db || defaultDb();
   seedUsers(conn);
   seedProfiles(conn);
   seedContent(conn);
   seedAccounts(conn);
+  seedProducts(conn);
 }
 
 module.exports = { runSeed };

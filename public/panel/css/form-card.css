@@ -1,0 +1,338 @@
+/* Shared inbox-style form cards (get-code, seller auth) */
+
+:root {
+  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #161616 0%, #0a0a0a 100%);
+  --fc-card: #141414;
+  --fc-bd: #2a2a2a;
+  --fc-text: #f5f5f5;
+  --fc-muted: #a3a3a3;
+  --fc-label: #d4d4d4;
+  --fc-blue: #ffffff;
+  --fc-blue-hover: #e5e5e5;
+  --fc-green: #f5f5f5;
+  --fc-green-bg: #1f1f1f;
+  --fc-radius: 16px;
+  --fc-input-radius: 10px;
+  --fc-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.form-card {
+  background: var(--fc-card);
+  border: 1px solid var(--fc-bd);
+  border-radius: var(--fc-radius);
+  padding: 24px 28px 22px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  font-family: var(--fc-font);
+}
+
+.form-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.form-card-head h1,
+.form-card-head h2 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--fc-text);
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.form-card-head .form-card-sub {
+  font-size: 0.84rem;
+  color: var(--fc-muted);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 320px;
+}
+
+.form-card-tools {
+  flex-shrink: 0;
+}
+
+.form-card-lang {
+  appearance: none;
+  border: 1px solid var(--fc-bd);
+  border-radius: 999px;
+  padding: 7px 32px 7px 34px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fc-label);
+  background: var(--fc-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E") 12px center no-repeat;
+  cursor: pointer;
+  min-width: 148px;
+}
+
+.form-card-lang:focus {
+  outline: none;
+  border-color: var(--fc-blue);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+}
+
+.form-tabs {
+  display: flex;
+  background: #1a1a1a;
+  border: 1px solid var(--fc-bd);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.form-tab {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--fc-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+  font-family: var(--fc-font);
+}
+
+.form-tab.active {
+  background: var(--fc-blue);
+  color: var(--btn-text-on-accent, #0a0a0a);
+  box-shadow: none;
+}
+
+.form-tab svg {
+  flex-shrink: 0;
+}
+
+.form-field-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fc-label);
+  margin-bottom: 6px;
+}
+
+.form-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--fc-bd);
+  border-radius: var(--fc-input-radius);
+  padding: 11px 12px;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-input-wrap:focus-within {
+  border-color: var(--fc-blue);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.form-input-wrap svg {
+  color: var(--fc-muted);
+  flex-shrink: 0;
+}
+
+.form-input-wrap input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.92rem;
+  outline: none;
+  color: var(--fc-text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.form-input-wrap input::placeholder {
+  color: #94a3b8;
+  font-family: var(--fc-font);
+}
+
+.form-turnstile {
+  margin-bottom: 14px;
+  min-height: 65px;
+}
+
+/* The Cloudflare widget iframe is exactly 65px tall. Test/dummy sitekeys
+   inject an extra red "For testing only" banner right below it. Once the
+   widget has rendered (iframe present), pin the wrapper to the iframe
+   height and clip anything below so the banner never shows or overlaps
+   the submit button. */
+.form-turnstile:has(iframe),
+.form-turnstile--test {
+  height: 65px;
+  max-height: 65px;
+  overflow: hidden;
+}
+
+.form-btn-primary {
+  width: 100%;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: var(--fc-font);
+  color: var(--btn-text-on-accent, #0a0a0a);
+  background: var(--fc-blue);
+  box-shadow: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.form-btn-primary:hover:not(:disabled) {
+  background: var(--fc-blue-hover);
+  box-shadow: none;
+}
+
+.form-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.form-error {
+  font-size: 0.84rem;
+  color: #dc2626;
+  margin-bottom: 10px;
+  display: none;
+  font-weight: 600;
+}
+
+/* Result card */
+.form-card--result {
+  display: none;
+}
+
+.form-card--result.is-visible {
+  display: block;
+}
+
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.result-badge--ok {
+  background: var(--fc-green-bg);
+  color: var(--fc-green);
+  border: 1px solid var(--fc-bd);
+}
+
+.result-badge--err {
+  background: #1f1f1f;
+  color: var(--fc-muted);
+  border: 1px solid var(--fc-bd);
+}
+
+.result-code-panel {
+  background: #1a1a1a;
+  border: 1px solid var(--fc-bd);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.result-code-panel-inner {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-code-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fc-muted);
+  margin-bottom: 8px;
+}
+
+.result-code-digits {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: var(--fc-blue);
+  line-height: 1.1;
+}
+
+.result-btn-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--fc-bd);
+  background: #1a1a1a;
+  color: var(--fc-label);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--fc-font);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.result-btn-copy:hover {
+  border-color: var(--fc-blue);
+  color: var(--fc-blue);
+}
+
+.result-btn-copy.is-copied {
+  color: var(--fc-green);
+  border-color: var(--fc-green);
+}
+
+.result-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.74rem;
+  color: var(--fc-muted);
+  margin-top: 4px;
+}
+
+.result-meta-row span:last-child {
+  text-align: right;
+  max-width: 55%;
+}
+
+.result-items {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: fc-spin 0.6s linear infinite;
+}
+
+@keyframes fc-spin {
+  to { transform: rotate(360deg); }
+}

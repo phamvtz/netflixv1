@@ -1,0 +1,45 @@
+/* Design tokens — Monochrome dark (locked, see docs/UI-3D.md) */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root,
+[data-theme="admin"],
+[data-theme="seller"] {
+  --bg: #0a0a0a;
+  --card: #141414;
+  --bd: #2a2a2a;
+  --t1: #f5f5f5;
+  --t2: #a3a3a3;
+  --t3: #6b6b6b;
+  --accent: #ffffff;
+  --accent-hover: #e5e5e5;
+  --accent-soft: #1f1f1f;
+  --focus: #ffffff;
+  --btn-text-on-accent: #0a0a0a;
+  --mono: #f5f5f5;
+  /* Status by brightness — no brand hues */
+  --green: #f5f5f5;
+  --amber: #a3a3a3;
+  --red-ui: #6b6b6b;
+  --status-ok: #f5f5f5;
+  --status-warn: #a3a3a3;
+  --status-bad: #6b6b6b;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --hover-bg: rgba(255, 255, 255, 0.04);
+  --row-hover: rgba(255, 255, 255, 0.02);
+
+  /* Form Card Design System */
+  --fc-bg: radial-gradient(ellipse 120% 80% at 50% 0%, #161616 0%, #0a0a0a 100%);
+  --fc-card: #141414;
+  --fc-bd: #2a2a2a;
+  --fc-text: #f5f5f5;
+  --fc-muted: #a3a3a3;
+  --fc-label: #d4d4d4;
+  --fc-blue: #ffffff;
+  --fc-blue-hover: #e5e5e5;
+  --fc-green: #f5f5f5;
+  --fc-green-bg: #1f1f1f;
+  --fc-radius: 16px;
+  --fc-input-radius: 12px;
+  --fc-font: Inter, system-ui, -apple-system, sans-serif;
+}

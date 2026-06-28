@@ -84,7 +84,7 @@ const migrations = [
   {
     version: 5,
     up(db) {
-      // Bảng keys: thay keyStore Map in-memory, dùng cho seller bán key + admin quản lý
+      // keys table: replaces the in-memory keyStore Map; used by sellers to sell keys + admin management
       db.exec(`
         CREATE TABLE IF NOT EXISTS keys (
           key        TEXT PRIMARY KEY,
@@ -102,7 +102,7 @@ const migrations = [
   {
     version: 6,
     up(db) {
-      // Tài khoản panel (admin + seller) — tách khỏi bảng users (Netflix demo)
+      // Panel accounts (admin + seller) — separate from the users table (Netflix demo)
       db.exec(`
         CREATE TABLE IF NOT EXISTS accounts (
           id             TEXT PRIMARY KEY,
@@ -125,7 +125,7 @@ const migrations = [
   {
     version: 7,
     up(db) {
-      // Session panel (admin/seller) — UUID cookie tra ngược, tách khỏi sessions Netflix
+      // Panel sessions (admin/seller) — UUID cookie reverse-lookup, separate from Netflix sessions
       db.exec(`
         CREATE TABLE IF NOT EXISTS panel_sessions (
           session_id TEXT PRIMARY KEY,
@@ -142,12 +142,136 @@ const migrations = [
   {
     version: 8,
     up(db) {
-      // Gắn key với seller tạo ra nó (NULL = key legacy hoặc do admin tạo)
+      // Link a key to the seller who created it (NULL = legacy key or admin-created)
       db.exec('ALTER TABLE keys ADD COLUMN seller_id TEXT REFERENCES accounts(id)');
     },
     down(db) {
-      // SQLite cũ không hỗ trợ DROP COLUMN — rollback bỏ qua (không quan trọng)
+      // Older SQLite does not support DROP COLUMN — rollback is skipped (not important)
     },
+  },
+  {
+    version: 9,
+    up(db) {
+      // Maximum permissions the admin grants a seller (key ⊆ seller perms)
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_reset INTEGER NOT NULL DEFAULT 0');
+      db.exec('ALTER TABLE accounts ADD COLUMN perm_family INTEGER NOT NULL DEFAULT 1');
+      // Per-key permissions — the seller picks a subset when creating/editing
+      db.exec('ALTER TABLE keys ADD COLUMN key_name TEXT');
+      db.exec('ALTER TABLE keys ADD COLUMN expires_at INTEGER');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_login INTEGER NOT NULL DEFAULT 1');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_reset INTEGER NOT NULL DEFAULT 0');
+      db.exec('ALTER TABLE keys ADD COLUMN perm_family INTEGER NOT NULL DEFAULT 0');
+    },
+    down(db) {},
+  },
+  {
+    version: 10,
+    up(db) {
+      db.exec(`
+        ALTER TABLE accounts ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE accounts ADD COLUMN contact_name TEXT;
+        ALTER TABLE accounts ADD COLUMN contact_type TEXT;
+        ALTER TABLE accounts ADD COLUMN contact_info TEXT;
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS products (
+          id              TEXT PRIMARY KEY,
+          name            TEXT NOT NULL,
+          duration_label  TEXT,
+          duration_days   INTEGER NOT NULL DEFAULT 30,
+          price           INTEGER NOT NULL,
+          warranty_note   TEXT,
+          active          INTEGER NOT NULL DEFAULT 1,
+          created_at      INTEGER DEFAULT (unixepoch())
+        );
+        CREATE TABLE IF NOT EXISTS seller_orders (
+          id               TEXT PRIMARY KEY,
+          seller_id        TEXT NOT NULL REFERENCES accounts(id),
+          product_id       TEXT REFERENCES products(id),
+          product_name     TEXT NOT NULL,
+          duration_label   TEXT,
+          public_code      TEXT NOT NULL UNIQUE,
+          account_email    TEXT NOT NULL,
+          account_password TEXT,
+          expires_at       INTEGER NOT NULL,
+          renewal_count    INTEGER NOT NULL DEFAULT 0,
+          via_email        INTEGER NOT NULL DEFAULT 1,
+          perm_login       INTEGER NOT NULL DEFAULT 1,
+          perm_reset       INTEGER NOT NULL DEFAULT 0,
+          perm_family      INTEGER NOT NULL DEFAULT 0,
+          note             TEXT,
+          created_at       INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_orders_seller ON seller_orders(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_email ON seller_orders(account_email);
+        CREATE TABLE IF NOT EXISTS order_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    TEXT NOT NULL REFERENCES seller_orders(id),
+          event_type  TEXT NOT NULL,
+          detail      TEXT,
+          created_at  INTEGER DEFAULT (unixepoch())
+        );
+        CREATE TABLE IF NOT EXISTS transactions (
+          id            TEXT PRIMARY KEY,
+          account_id    TEXT NOT NULL REFERENCES accounts(id),
+          type          TEXT NOT NULL,
+          amount        INTEGER NOT NULL,
+          balance_after INTEGER,
+          ref_id        TEXT,
+          description   TEXT,
+          status        TEXT NOT NULL DEFAULT 'completed',
+          created_at    INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_txn_account ON transactions(account_id);
+      `);
+      db.exec('ALTER TABLE keys ADD COLUMN order_id TEXT REFERENCES seller_orders(id)');
+    },
+    down(db) {},
+  },
+  {
+    version: 11,
+    up(db) {
+      // Idempotent log of every bank-webhook delivery.
+      // tx_ref is the bank's own transaction id — UNIQUE so the same payment
+      // can never be credited twice even if the provider retries.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deposit_intents (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          provider      TEXT NOT NULL,
+          tx_ref        TEXT NOT NULL UNIQUE,
+          account_id    TEXT REFERENCES accounts(id),
+          amount        INTEGER NOT NULL,
+          memo          TEXT,
+          matched_user  TEXT,
+          status        TEXT NOT NULL DEFAULT 'pending',
+          transaction_id TEXT REFERENCES transactions(id),
+          payload       TEXT,
+          received_at   INTEGER DEFAULT (unixepoch()),
+          credited_at   INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_dep_status ON deposit_intents(status);
+        CREATE INDEX IF NOT EXISTS idx_dep_account ON deposit_intents(account_id);
+      `);
+    },
+    down(db) {
+      db.exec('DROP TABLE IF EXISTS deposit_intents');
+    },
+  },
+  {
+    version: 12,
+    up(db) {
+      // Warranty auto-check: store the account cookie (server-only, never echoed
+      // to clients) plus the last automated check result so the seller panel can
+      // flag dead / payment-hold accounts that are still within warranty.
+      db.exec(`
+        ALTER TABLE seller_orders ADD COLUMN cookie TEXT;
+        ALTER TABLE seller_orders ADD COLUMN last_check_status TEXT;
+        ALTER TABLE seller_orders ADD COLUMN last_checked_at INTEGER;
+        ALTER TABLE seller_orders ADD COLUMN check_count INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+    down(db) {},
   },
 ];
 

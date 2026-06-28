@@ -1,0 +1,287 @@
+/* Premium SaaS Theme overrides */
+
+body {
+  background-color: var(--bg) !important;
+  color: var(--t1) !important;
+  font-family: Inter, system-ui, sans-serif !important;
+}
+
+/* ─── Seller Panel Workspace ─── */
+[data-theme="seller"] .sw-app,
+[data-theme="seller"] .sw-main,
+[data-theme="seller"] .sw-content {
+  background: var(--bg) !important;
+  color: var(--t1) !important;
+}
+
+[data-theme="seller"] .sw-sidebar {
+  background: var(--card) !important;
+  border-right: 1px solid var(--bd) !important;
+}
+
+[data-theme="seller"] .sw-brand-icon {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+[data-theme="seller"] .sw-nav a.is-active {
+  box-shadow: inset 3px 0 0 var(--accent) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+[data-theme="seller"] .sw-topbar {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--bd) !important;
+}
+
+[data-theme="seller"] .sw-topbar h1,
+[data-theme="seller"] .sw-brand-text,
+[data-theme="seller"] .sw-order-title {
+  color: var(--t1) !important;
+}
+
+[data-theme="seller"] .sw-stat,
+[data-theme="seller"] .sw-card,
+[data-theme="seller"] .sw-order {
+  background: var(--card) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="seller"] .sw-order-head {
+  background: #fdfdfd !important;
+  border-bottom: 1px solid var(--bd) !important;
+}
+
+[data-theme="seller"] .sw-btn--primary,
+[data-theme="seller"] .panel-btn--primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-radius: var(--radius-sm) !important;
+  border: none !important;
+}
+
+[data-theme="seller"] .sw-btn--outline,
+[data-theme="seller"] .panel-btn--ghost {
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.panel-input {
+  background: var(--card);
+  color: var(--t1);
+  border-color: var(--bd);
+  border-radius: var(--radius-sm);
+  height: 48px;
+}
+
+.panel-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="seller"] #authView .panel-input,
+[data-theme="seller"] #authView .panel-card input {
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border-color: var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+[data-theme="seller"] #authView .panel-label {
+  color: var(--t2) !important;
+}
+
+[data-theme="seller"] #authView .panel-tab {
+  background: transparent !important;
+  color: var(--t3) !important;
+}
+
+[data-theme="seller"] #authView .panel-tab.active {
+  background: transparent !important;
+  color: var(--accent) !important;
+  border-bottom: 2px solid var(--accent) !important;
+}
+
+[data-theme="seller"] #authView .panel-btn--primary {
+  background: var(--accent) !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.filter-bar .chip.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.chk-page .wrap,
+.chk-page .editor-wrap,
+.chk-page .results-wrap,
+.chk-page body {
+  background: var(--bg);
+}
+
+.badge-live {
+  background: var(--green) !important;
+  color: #fff !important;
+  border: 1px solid var(--green) !important;
+}
+
+.badge-dead {
+  background: var(--red-ui) !important;
+  color: #fff !important;
+  border: 1px solid var(--red-ui) !important;
+}
+
+.badge-cancelled {
+  background: var(--t3) !important;
+  color: #fff !important;
+  border: 1px solid var(--t3) !important;
+}
+
+.row-live td { background: rgba(22, 163, 74, 0.03) !important; }
+.row-cancel td { background: rgba(220, 38, 38, 0.02) !important; }
+
+.me-hero,
+.me-panel,
+.me-card {
+  background: var(--card);
+  border-color: var(--bd);
+}
+
+.me-submit,
+.me-nav a.is-active {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+
+.lang-switch {
+  background: var(--bg);
+  border-color: var(--bd);
+}
+
+.lang-switch button.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ─── Admin Panel UI Redesign ─── */
+[data-theme="admin"] .panel-topbar {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--bd) !important;
+  padding: 16px 0 !important;
+  margin-bottom: 24px !important;
+  display: block !important;
+}
+
+[data-theme="admin"] .panel-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+[data-theme="admin"] .panel-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+[data-theme="admin"] .panel-brand,
+[data-theme="admin"] .panel-section-title {
+  color: var(--t1) !important;
+}
+
+[data-theme="admin"] .panel-card,
+[data-theme="admin"] .brand-card {
+  background: var(--card) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+}
+
+[data-theme="admin"] .panel-table th {
+  background: var(--bg) !important;
+  border-bottom: 1px solid var(--bd) !important;
+  color: var(--t2) !important;
+}
+
+[data-theme="admin"] .panel-table td {
+  border-bottom: 1px solid var(--bd) !important;
+  color: var(--t1) !important;
+  background: transparent !important;
+}
+
+[data-theme="admin"] .panel-table tr:hover td {
+  background: var(--row-hover) !important;
+}
+
+[data-theme="admin"] .panel-stat {
+  background: var(--card) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="admin"] .panel-btn--primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+[data-theme="admin"] .panel-btn--ghost {
+  background: var(--card) !important;
+  color: var(--t1) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+[data-theme="admin"] .panel-badge--active {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+[data-theme="admin"] .panel-badge--pending {
+  background: var(--bg) !important;
+  color: var(--t2) !important;
+  border: 1px solid var(--bd) !important;
+}
+
+[data-theme="admin"] .panel-subnav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--bd);
+  padding-bottom: 8px;
+}
+
+[data-theme="admin"] .subnav-btn {
+  background: transparent;
+  border: none;
+  color: var(--t2);
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+[data-theme="admin"] .subnav-btn:hover {
+  color: var(--accent);
+  background: var(--hover-bg);
+}
+
+[data-theme="admin"] .subnav-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}

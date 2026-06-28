@@ -1,7 +1,7 @@
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
-// Singleton — mọi module dùng chung một connection
+// Singleton — every module shares a single connection
 const dbPath = process.env.NETFLIX_DB_PATH || path.join(__dirname, '..', 'netflix.db');
 const db = new DatabaseSync(dbPath);
 

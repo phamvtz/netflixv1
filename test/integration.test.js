@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { DatabaseSync } = require('node:sqlite');
-const { runMigrations } = require('../db/migrate');
+const { runMigrations, migrations } = require('../db/migrate');
 const { runSeed } = require('../db/seed');
 const { deleteExpiredSessions, getAllContent } = require('../db/queries');
 
@@ -31,9 +31,10 @@ describe('Integration: startup sequence', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('schema_migrations có 8 version', () => {
+  it('schema_migrations khớp với tất cả migration đã định nghĩa', () => {
     const rows = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(rows.map(r => r.version), [1, 2, 3, 4, 5, 6, 7, 8]);
+    const expected = migrations.map(m => m.version).sort((a, b) => a - b);
+    assert.deepEqual(rows.map(r => r.version), expected);
   });
 
   it('PRAGMA journal_mode = wal và foreign_keys = ON', () => {
@@ -44,7 +45,7 @@ describe('Integration: startup sequence', () => {
   it('tất cả bảng được populate sau migrate + seed', () => {
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM users').get().c, 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM profiles').get().c, 6);
-    assert.equal(getAllContent(db).length, 37);
+    assert.equal(getAllContent(db).length, 50);
     assert.equal(db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE role='admin'").get().c, 1);
   });
 

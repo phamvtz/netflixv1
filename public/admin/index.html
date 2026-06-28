@@ -4,267 +4,386 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin · Netflix v1</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --bg:#0b0b10; --card:#15151d; --bd:#262633; --t1:#e9eaf0; --t2:#8a93a6; --t3:#5b6273; --red:#E50914; --green:#46d369; --amber:#f5a623; }
-    body { min-height: 100vh; background: var(--bg); color: var(--t1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 30px 22px; }
-    .wrap { max-width: 1080px; margin: 0 auto; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-    .brand { font-size: 1.3rem; font-weight: 800; color: #fff; }
-    .brand span { color: var(--red); }
-    input { width: 100%; padding: 12px 14px; border-radius: 9px; border: 1.5px solid var(--bd); background: #0d0d14; color: #fff; font-size: .95rem; outline: none; margin-bottom: 13px; }
-    input:focus { border-color: var(--red); }
-    button { border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: filter .15s, transform .1s; }
-    button:hover { filter: brightness(1.1); }
-    button:active { transform: scale(.98); }
-    .btn-primary { width: 100%; padding: 12px; background: var(--red); color: #fff; font-size: .95rem; }
-    .btn-sm { padding: 6px 12px; font-size: .76rem; background: #23232f; color: #cdd; border-radius: 7px; }
-    .btn-green { background: rgba(70,211,105,.16); color: var(--green); }
-    .btn-red { background: rgba(229,9,20,.16); color: #ff8a8a; }
-    /* login */
-    .login-card { max-width: 380px; margin: 70px auto; background: var(--card); border: 1px solid var(--bd); border-radius: 14px; padding: 28px; }
-    .login-card h1 { font-size: 1.2rem; margin-bottom: 6px; }
-    .login-card .sub { color: var(--t2); font-size: .85rem; margin-bottom: 18px; }
-    .err { color: #ff8a8a; font-size: .85rem; margin-top: 8px; display: none; }
-    .alt { text-align: center; margin-top: 14px; font-size: .8rem; color: var(--t3); }
-    .alt a { color: var(--t2); cursor: pointer; }
-    .hidden { display: none !important; }
-    /* dashboard */
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 13px; margin-bottom: 22px; }
-    .stat { background: var(--card); border: 1px solid var(--bd); border-radius: 12px; padding: 16px; }
-    .stat-num { font-size: 1.7rem; font-weight: 900; color: #fff; }
-    .stat-num.hot { color: var(--amber); }
-    .stat-label { font-size: .74rem; color: var(--t2); margin-top: 3px; }
-    .section { background: var(--card); border: 1px solid var(--bd); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
-    .section.warn { border-color: rgba(245,166,35,.4); background: linear-gradient(180deg, rgba(245,166,35,.06), var(--card)); }
-    .section h2 { font-size: .98rem; margin-bottom: 14px; color: #ccd; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .pill { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; background: #23232f; color: var(--t2); }
-    .pill.amber { background: rgba(245,166,35,.18); color: var(--amber); }
-    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-    th { text-align: left; color: var(--t2); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--bd); }
-    td { padding: 9px 10px; border-bottom: 1px solid #16161d; color: #cdd; vertical-align: middle; }
-    td.mono { font-family: monospace; color: #7ecff5; word-break: break-all; }
-    .badge { padding: 2px 9px; border-radius: 20px; font-size: .72rem; font-weight: 700; }
-    .b-active { background: rgba(70,211,105,.16); color: var(--green); }
-    .b-pending { background: rgba(245,166,35,.18); color: var(--amber); }
-    .b-rejected { background: rgba(229,9,20,.16); color: #ff8a8a; }
-    .empty { color: var(--t3); font-size: .85rem; padding: 12px; text-align: center; }
-    .search input { margin-bottom: 12px; }
-    .logout { padding: 8px 16px; background: #23232f; color: #cdd; font-size: .82rem; }
-    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1c1c28; border: 1px solid var(--bd); padding: 11px 20px; border-radius: 9px; font-size: .85rem; z-index: 999; display: none; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
+  <link rel="stylesheet" href="/panel/css/tokens.css" />
+  <link rel="stylesheet" href="/panel/css/form-card.css" />
+  <link rel="stylesheet" href="/panel/css/brand.css" />
+  <link rel="stylesheet" href="/panel/css/components.css" />
+  <link rel="stylesheet" href="/panel/css/depth.css" />
+  <link rel="stylesheet" href="/panel/css/i18n.css" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+  <!-- ECharts for 3D charts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
 </head>
-<body>
-  <div class="wrap">
-    <!-- ░░ LOGIN ░░ -->
-    <div class="login-card" id="loginCard">
-      <h1>🔐 Admin đăng nhập</h1>
-      <p class="sub">Đăng nhập bằng tài khoản admin.</p>
-      <div id="acctLogin">
-        <input id="username" type="text" placeholder="Username" autocomplete="username" />
-        <input id="password" type="password" placeholder="Mật khẩu" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
-        <button class="btn-primary" onclick="login()">Đăng nhập</button>
-        <p class="alt">hoặc <a onclick="toggleTokenMode(true)">đăng nhập bằng token</a></p>
-      </div>
-      <div id="tokenLogin" class="hidden">
-        <input id="token" type="password" placeholder="Admin token" onkeydown="if(event.key==='Enter')loginToken()" />
-        <button class="btn-primary" onclick="loginToken()">Vào bằng token</button>
-        <p class="alt">hoặc <a onclick="toggleTokenMode(false)">đăng nhập bằng tài khoản</a></p>
-      </div>
-      <p class="err" id="loginErr"></p>
-    </div>
-
-    <!-- ░░ DASHBOARD ░░ -->
-    <div class="hidden" id="dash">
-      <div class="topbar">
-        <div class="brand"><span>●</span> Admin Dashboard</div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-sm" onclick="loadAll()">↻ Tải lại</button>
-          <button class="logout" onclick="logout()">Đăng xuất</button>
+<body data-theme="admin" class="ui-scene ui-scene--cinematic admin-page" data-i18n-title="admin.title">
+  <div class="admin-auth-page" id="loginCard">
+    <div class="admin-auth-shell">
+      <div class="form-card">
+        <div class="form-card-head">
+          <div>
+            <p class="form-card-kicker" data-i18n="admin.kicker">Control plane</p>
+            <h1 data-i18n="admin.dash">Admin Dashboard</h1>
+            <p class="form-card-sub" data-i18n="admin.sub">Sellers, keys, products & approvals.</p>
+          </div>
+          <div class="form-card-tools">
+            <select class="form-card-lang" id="langSelect" aria-label="Language">
+              <option value="auto" data-i18n="me.langAuto">Auto (by IP)</option>
+              <option value="en" data-i18n="lang.en">EN</option>
+              <option value="vi" data-i18n="lang.vi">VI</option>
+            </select>
+          </div>
         </div>
-      </div>
 
-      <div class="stats" id="stats"></div>
+        <div class="form-tabs" id="loginModeTabs">
+          <button type="button" class="form-tab active" id="tabAcct" onclick="toggleTokenMode(false)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span data-i18n="common.username">Account</span>
+          </button>
+          <button type="button" class="form-tab" id="tabTok" onclick="toggleTokenMode(true)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <span data-i18n="admin.token">Token</span>
+          </button>
+        </div>
 
-      <!-- Pending sellers -->
-      <div class="section warn hidden" id="pendingSec">
-        <h2>⏳ Seller chờ duyệt <span class="pill amber" id="pendCount">0</span></h2>
-        <table>
-          <thead><tr><th>Username</th><th>Email</th><th>Đăng ký</th><th></th></tr></thead>
-          <tbody id="pendBody"></tbody>
-        </table>
-      </div>
+        <div id="acctLogin">
+          <label class="form-field-label" for="username" data-i18n="admin.user">Username</label>
+          <div class="form-input-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input id="username" type="text" placeholder="admin" autocomplete="username" />
+          </div>
+          <label class="form-field-label" for="password" data-i18n="admin.pass">Password</label>
+          <div class="form-input-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input id="password" type="password" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
+          </div>
+          <p class="form-error" id="loginErrAcct"></p>
+          <button type="button" class="form-btn-primary" onclick="login()" data-i18n="common.login">Log in</button>
+        </div>
 
-      <!-- All sellers -->
-      <div class="section">
-        <h2>Sellers <span class="pill" id="sellerCount">0</span></h2>
-        <table>
-          <thead><tr><th>Username</th><th>Email</th><th>Trạng thái</th><th></th></tr></thead>
-          <tbody id="sellersBody"></tbody>
-        </table>
-      </div>
+        <div id="tokenLogin" class="hidden">
+          <label class="form-field-label" for="token" data-i18n="admin.token">Admin token</label>
+          <div class="form-input-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <input id="token" type="password" placeholder="token" autocomplete="off" onkeydown="if(event.key==='Enter')loginToken()" />
+          </div>
+          <p class="form-error" id="loginErrTok"></p>
+          <button type="button" class="form-btn-primary" onclick="loginToken()" data-i18n="admin.tokenEnter">Enter with token</button>
+        </div>
 
-      <!-- Keys -->
-      <div class="section">
-        <h2>Keys <span class="pill" id="keyCount">0</span></h2>
-        <div class="search"><input id="keySearch" type="text" placeholder="🔍 Tìm key / email / seller..." oninput="renderKeys()" /></div>
-        <table>
-          <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Dùng</th><th></th></tr></thead>
-          <tbody id="keysBody"></tbody>
-        </table>
-      </div>
+        <p class="form-error" id="loginErr"></p>
 
-      <!-- Users -->
-      <div class="section">
-        <h2>Users (Netflix demo)</h2>
-        <table>
-          <thead><tr><th>ID</th><th>Email</th><th>Tên</th><th>Plan</th></tr></thead>
-          <tbody id="usersBody"></tbody>
-        </table>
+        <div class="form-card-footer">
+          <a href="#" id="authBackLink" data-i18n="seller.backGetCode">Back to get-code page</a>
+        </div>
+        <script>
+          (function() {
+            const host = window.location.hostname;
+            const port = window.location.port;
+            const base = host.replace(/^admin\./, '') || host;
+            const portStr = port ? ':' + port : '';
+            const a = document.getElementById('authBackLink');
+            if (a) a.href = window.location.protocol + '//me.' + base + portStr + '/me';
+          })();
+        </script>
       </div>
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="hidden" id="dash">
+      <header class="ad-topbar">
+        <div class="ad-topbar-inner">
+          <div class="ad-brand">
+            <span class="ad-brand-dot">●</span>
+            <span data-i18n="admin.dash">Admin Dashboard</span>
+          </div>
+          <nav class="ad-nav" id="panelNav">
+            <a href="#" id="navGetCode" data-i18n="nav.getCode">Lấy mã</a>
+            <a href="#" id="navSeller" data-i18n="nav.seller">Seller</a>
+            <a href="/admin" class="is-active" data-i18n="nav.admin">Admin</a>
+          </nav>
+          <div class="ad-actions">
+            <div id="langSwitchDash"></div>
+            <button class="ad-btn-ghost" onclick="loadAll()" data-i18n="common.reload">Reload</button>
+            <button class="ad-btn-danger" onclick="logout()" data-i18n="common.logout">Log out</button>
+          </div>
+        </div>
+      </header>
+      <script>
+        // Gắn link đúng dựa trên hostname hiện tại
+        (function() {
+          const host = window.location.hostname; // e.g. admin.localhost
+          const port = window.location.port;     // e.g. 3002
+          const portStr = port ? ':' + port : '';
+          // Thay "admin." → "me." hoặc bỏ subdomain
+          const base = host.replace(/^admin\./, '') || host;
+          const meHost   = 'me.'     + base;
+          const sellHost = 'seller.' + base;
+          const proto    = window.location.protocol;
+          document.getElementById('navGetCode').href = proto + '//' + meHost + portStr + '/me';
+          document.getElementById('navSeller').href  = proto + '//' + sellHost + portStr + '/seller';
+        })();
+      </script>
 
-  <script>
-    // Token chỉ set khi đăng nhập bằng token (legacy). Mặc định dùng cookie session.
-    let TOKEN = sessionStorage.getItem('adminToken') || '';
-    let allKeys = [];
+      <div class="ad-content">
+        <nav class="panel-subnav" id="adminSubNav">
+          <a href="/admin/overview" class="subnav-btn active" data-target="overview"
+             onclick="event.preventDefault(); switchAdminTab('overview')"
+             data-i18n="admin.tabOverview">Overview</a>
+          <a href="/admin/sellers" class="subnav-btn" data-target="sellers"
+             onclick="event.preventDefault(); switchAdminTab('sellers')"
+             data-i18n="admin.tabSellers">Sellers</a>
+          <a href="/admin/products" class="subnav-btn" data-target="products"
+             onclick="event.preventDefault(); switchAdminTab('products')"
+             data-i18n="admin.tabProducts">Products</a>
+          <a href="/admin/keys" class="subnav-btn" data-target="keys"
+             onclick="event.preventDefault(); switchAdminTab('keys')"
+             data-i18n="admin.tabKeys">Keys</a>
+          <a href="/admin/deposits" class="subnav-btn" data-target="deposits"
+             onclick="event.preventDefault(); switchAdminTab('deposits')"
+             data-i18n="admin.tabDeposits">Deposits</a>
+          <a href="/admin/users" class="subnav-btn" data-target="users"
+             onclick="event.preventDefault(); switchAdminTab('users')"
+             data-i18n="admin.tabUsers">Seed Users</a>
+        </nav>
 
-    const $ = id => document.getElementById(id);
-    function show(el, on) { $(el).classList.toggle('hidden', !on); }
-    function toast(m) { const t = $('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 2600); }
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
-    function authHeaders(extra) { const h = Object.assign({}, extra || {}); if (TOKEN) h['X-Admin-Token'] = TOKEN; return h; }
-    function fmtTs(sec) { try { return new Date(sec * 1000).toLocaleDateString('vi-VN'); } catch { return '—'; } }
+        <div class="panel-stats" id="stats"></div>
 
-    async function jget(url) { const r = await fetch(url, { headers: authHeaders() }); return r.ok ? r.json() : { success: false, status: r.status }; }
-    async function jpost(url) { const r = await fetch(url, { method: 'POST', headers: authHeaders() }); return r.ok ? r.json() : { success: false, status: r.status }; }
+        <!-- 3D Charts Section -->
+        <div class="ad-charts-row" id="chartsRow">
+          <div class="ad-chart-card">
+            <div class="ad-chart-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 17V9m4 8V5m4 12v-5"/></svg>
+              Thống kê hệ thống
+            </div>
+            <div id="chart3dBar" class="ad-chart-canvas"></div>
+          </div>
+          <div class="ad-chart-card">
+            <div class="ad-chart-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              Tỉ lệ Keys
+            </div>
+            <div id="chart3dPie" class="ad-chart-canvas"></div>
+          </div>
+        </div>
 
-    function toggleTokenMode(on) { show('acctLogin', !on); show('tokenLogin', on); $('loginErr').style.display = 'none'; }
+        <section class="panel-card brand-card panel-card--warn hidden" id="pendingSec">
+          <h2 class="panel-section-title"><span data-i18n="admin.pending">Sellers pending approval</span> <span class="panel-pill panel-pill--hot" id="pendCount">0</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Username</th><th>Email</th><th>Registered</th><th></th></tr></thead>
+              <tbody id="pendBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    // ── Login bằng tài khoản (cookie session) ──
-    async function login() {
-      const username = $('username').value.trim(), password = $('password').value;
-      const err = $('loginErr'); err.style.display = 'none';
-      if (!username || !password) { err.textContent = 'Nhập username và mật khẩu.'; err.style.display = 'block'; return; }
-      try {
-        const r = await fetch('/api/panel/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-        const d = await r.json();
-        if (!d.success) throw new Error(d.error || 'Đăng nhập thất bại');
-        if (d.account.role !== 'admin') throw new Error('Tài khoản này không phải admin.');
-        TOKEN = ''; sessionStorage.removeItem('adminToken');
-        showDash();
-      } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
-    }
+        <section class="panel-card brand-card hidden" id="secSellers">
+          <h2 class="panel-section-title"><span data-i18n="admin.sellers">Sellers</span> <span class="panel-pill" id="sellerCount">0</span></h2>
+          <div class="filter-bar" id="sellerFilterBar"></div>
+          <div class="search-row">
+            <input id="sellerSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchSeller" oninput="renderSellers()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Username</th><th>Email</th><th>Status</th><th></th></tr></thead>
+              <tbody id="sellersBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    // ── Login bằng token (legacy) ──
-    async function loginToken() {
-      const t = $('token').value.trim(), err = $('loginErr'); err.style.display = 'none';
-      try {
-        const r = await fetch('/api/admin/stats', { headers: { 'X-Admin-Token': t } });
-        if (r.status === 401) throw new Error('Token sai');
-        if (!r.ok) throw new Error('Lỗi ' + r.status);
-        TOKEN = t; sessionStorage.setItem('adminToken', t);
-        showDash();
-      } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
-    }
+        <section class="panel-card brand-card hidden" id="secProducts">
+          <h2 class="panel-section-title">
+            <span data-i18n="admin.products">Products</span>
+            <span style="display:flex;align-items:center;gap:10px">
+              <span class="panel-pill" id="productCount">0</span>
+              <button class="panel-btn panel-btn--sm panel-btn--green" onclick="openProductModal()" data-i18n="admin.addProduct">+ Add</button>
+            </span>
+          </h2>
+          <div class="filter-bar" id="productFilterBar"></div>
+          <div class="search-row">
+            <input id="productSearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchProduct" oninput="renderProducts()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Name</th><th>Duration</th><th>Price</th><th>Status</th><th></th></tr></thead>
+              <tbody id="productsBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    async function logout() {
-      sessionStorage.removeItem('adminToken'); TOKEN = '';
-      try { await fetch('/api/panel/logout', { method: 'POST' }); } catch {}
-      location.reload();
-    }
+        <section class="panel-card brand-card hidden" id="secKeys">
+          <h2 class="panel-section-title"><span data-i18n="admin.keys">Keys</span> <span class="panel-pill" id="keyCount">0</span></h2>
+          <div class="filter-bar" id="keyFilterBar"></div>
+          <div class="search-row">
+            <input id="keySearch" type="search" class="panel-input panel-input--search" data-i18n-placeholder="admin.searchKey" oninput="renderKeys()" />
+          </div>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>Key</th><th>Email</th><th>Seller</th><th>Used</th><th></th></tr></thead>
+              <tbody id="keysBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    async function showDash() {
-      show('loginCard', false); show('dash', true);
-      await loadAll();
-    }
+        <section class="panel-card brand-card hidden" id="secDeposits">
+          <h2 class="panel-section-title"><span data-i18n="admin.deposits.unmatchedTitle">Unmatched deposits</span> <span class="panel-pill" id="depUnmatchedCount">0</span></h2>
+          <p class="panel-section-sub" data-i18n="admin.deposits.unmatchedSub">Bank transfers the system could not auto-match to a seller. Assign each to the correct seller to credit their balance.</p>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr>
+                <th data-i18n="admin.deposits.colTime">Time</th>
+                <th data-i18n="admin.deposits.colProvider">Gateway</th>
+                <th data-i18n="admin.deposits.colRef">Bank tx ref</th>
+                <th data-i18n="admin.deposits.colAmount">Amount</th>
+                <th data-i18n="admin.deposits.colMemo">Memo</th>
+                <th data-i18n="admin.deposits.colAssign">Assign to seller</th>
+              </tr></thead>
+              <tbody id="depUnmatchedBody"></tbody>
+            </table>
+          </div>
+          <h2 class="panel-section-title" style="margin-top:24px"><span data-i18n="admin.deposits.recentTitle">Recent deposits</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr>
+                <th data-i18n="admin.deposits.colTime">Time</th>
+                <th data-i18n="admin.deposits.colProvider">Gateway</th>
+                <th data-i18n="admin.deposits.colRef">Bank tx ref</th>
+                <th data-i18n="admin.deposits.colAmount">Amount</th>
+                <th data-i18n="admin.deposits.colSeller">Seller</th>
+                <th data-i18n="admin.deposits.colStatus">Status</th>
+              </tr></thead>
+              <tbody id="depRecentAdminBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    async function loadAll() { await Promise.all([loadStats(), loadSellers(), loadKeys(), loadUsers()]); }
+        <section class="panel-card brand-card hidden" id="secUsers">
+          <h2 class="panel-section-title"><span data-i18n="admin.seedUsers">Seed users</span> <span class="panel-pill">DB</span></h2>
+          <div class="panel-table-wrap">
+            <table class="panel-table">
+              <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Plan</th></tr></thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
 
-    async function loadStats() {
-      const d = await jget('/api/admin/stats'); const s = d.stats || {};
-      const items = [
-        ['Users', s.users, false], ['Profiles', s.profiles, false], ['Sessions', s.sessions, false],
-        ['Content', s.content, false], ['Keys', s.keys, false], ['Keys đã dùng', s.keysUsed, false],
-        ['Sellers', s.sellers, false], ['Chờ duyệt', s.pendingSellers, s.pendingSellers > 0],
-      ];
-      $('stats').innerHTML = items.map(([l, n, hot]) =>
-        `<div class="stat"><div class="stat-num ${hot ? 'hot' : ''}">${n ?? 0}</div><div class="stat-label">${l}</div></div>`
-      ).join('');
-    }
+  <!-- Permissions Modal (replaces ugly confirm() dialogs) -->
+  <div class="panel-modal-backdrop" id="permsModal">
+    <div class="panel-modal" style="max-width:420px">
+      <h3 id="permsModalTitle">Cấp quyền Seller</h3>
+      <p class="sub" id="permsModalSub">Chọn quyền cho seller này.</p>
+      <div style="display:flex;flex-direction:column;gap:12px;margin:18px 0">
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;transition:background .12s" id="permLoginLabel">
+          <input type="checkbox" id="permLoginCheck" style="width:16px;height:16px;accent-color:#10b981" />
+          <span style="font-size:0.88rem;font-weight:600;color:#334155">🔐 Login code</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;transition:background .12s" id="permResetLabel">
+          <input type="checkbox" id="permResetCheck" style="width:16px;height:16px;accent-color:#10b981" />
+          <span style="font-size:0.88rem;font-weight:600;color:#334155">🔄 Password reset link</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;transition:background .12s" id="permFamilyLabel">
+          <input type="checkbox" id="permFamilyCheck" style="width:16px;height:16px;accent-color:#10b981" />
+          <span style="font-size:0.88rem;font-weight:600;color:#334155">🏠 Household code</span>
+        </label>
+      </div>
+      <div class="panel-modal-actions">
+        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closePermsModal()">Hủy</button>
+        <button class="panel-btn panel-btn--sm panel-btn--green" id="permsSaveBtn" onclick="confirmPerms()">✓ Xác nhận</button>
+      </div>
+    </div>
+  </div>
 
-    async function loadSellers() {
-      const d = await jget('/api/admin/sellers');
-      const pending = d.pending || [], sellers = d.sellers || [];
-      // Pending
-      show('pendingSec', pending.length > 0);
-      $('pendCount').textContent = pending.length;
-      $('pendBody').innerHTML = pending.map(s => `
-        <tr>
-          <td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtTs(s.createdAt)}</td>
-          <td style="white-space:nowrap">
-            <button class="btn-sm btn-green" onclick="approve('${esc(s.id)}')">✓ Duyệt</button>
-            <button class="btn-sm btn-red" onclick="reject('${esc(s.id)}')">✕ Từ chối</button>
-          </td>
-        </tr>`).join('');
-      // All sellers
-      $('sellerCount').textContent = sellers.length;
-      $('sellersBody').innerHTML = sellers.length ? sellers.map(s => {
-        const cls = s.status === 'active' ? 'b-active' : s.status === 'rejected' ? 'b-rejected' : 'b-pending';
-        const act = s.status !== 'active' ? `<button class="btn-sm btn-green" onclick="approve('${esc(s.id)}')">Duyệt</button>` :
-                    `<button class="btn-sm btn-red" onclick="reject('${esc(s.id)}')">Khoá</button>`;
-        return `<tr><td>${esc(s.username)}</td><td>${esc(s.email)}</td>
-                <td><span class="badge ${cls}">${s.status}${s.emailVerified ? '' : ' · chưa verify'}</span></td>
-                <td>${act}</td></tr>`;
-      }).join('') : '<tr><td colspan="4" class="empty">Chưa có seller</td></tr>';
-    }
+  <div class="panel-modal-backdrop" id="productModal">
+    <div class="panel-modal">
+      <h3 id="productModalTitle">Add product</h3>
+      <p class="sub">Package for sellers to buy from the store. Hidden = not shown in the seller store.</p>
+      <label class="panel-label">Product name</label>
+      <input id="pmName" type="text" class="panel-input" placeholder="Netflix Premium 1 month" />
+      <div class="panel-grid-2">
+        <div>
+          <label class="panel-label">Duration label</label>
+          <input id="pmDurationLabel" type="text" class="panel-input" placeholder="1 month" />
+        </div>
+        <div>
+          <label class="panel-label">Days</label>
+          <input id="pmDurationDays" type="number" class="panel-input" placeholder="30" min="1" />
+        </div>
+      </div>
+      <div class="panel-grid-2">
+        <div>
+          <label class="panel-label">Price (VND)</label>
+          <input id="pmPrice" type="number" class="panel-input" placeholder="150000" min="0" />
+        </div>
+        <div>
+          <label class="panel-label">Warranty note</label>
+          <input id="pmWarranty" type="text" class="panel-input" placeholder="Full warranty" />
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;margin:2px 0 4px;">
+        <input type="checkbox" id="pmActive" checked />
+        <span>On sale (visible in seller store)</span>
+      </label>
+      <p class="panel-msg-err" id="pmErr"></p>
+      <div class="panel-modal-actions">
+        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closeProductModal()">Cancel</button>
+        <button class="panel-btn panel-btn--sm panel-btn--green" id="pmSaveBtn" onclick="saveProduct()">Save</button>
+      </div>
+    </div>
+  </div>
 
-    async function approve(id) { const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/approve'); if (d.success) { toast('Đã duyệt seller'); loadSellers(); loadStats(); } else toast('Lỗi duyệt'); }
-    async function reject(id) { if (!confirm('Từ chối / khoá seller này?')) return; const d = await jpost('/api/admin/sellers/' + encodeURIComponent(id) + '/reject'); if (d.success) { toast('Đã cập nhật'); loadSellers(); loadStats(); } else toast('Lỗi'); }
+  <div class="panel-modal-backdrop" id="grantOrderModal">
+    <div class="panel-modal">
+      <h3 id="grantTitle" data-i18n="admin.grantOrder">Grant order</h3>
+      <p class="sub" data-i18n="admin.grantSub">Create a Netflix account order directly for this seller (no balance deducted).</p>
+      <label class="panel-label" data-i18n="admin.grantProduct">Product (optional)</label>
+      <select id="goProduct" class="panel-input" onchange="onGrantProductChange()">
+        <option value="" data-i18n="admin.grantProductNone">— Custom (no product) —</option>
+      </select>
+      <label class="panel-label" data-i18n="admin.grantProductName">Product name</label>
+      <input id="goProductName" type="text" class="panel-input" placeholder="Netflix Premium" />
+      <div class="panel-grid-2">
+        <div>
+          <label class="panel-label" data-i18n="admin.grantEmail">Account email</label>
+          <input id="goEmail" type="email" class="panel-input" placeholder="name@tempmail.id.vn" />
+        </div>
+        <div>
+          <label class="panel-label" data-i18n="admin.grantPassword">Account password (optional)</label>
+          <input id="goPassword" type="text" class="panel-input" placeholder="—" />
+        </div>
+      </div>
+      <label class="panel-label" data-i18n="admin.grantNote">Note (optional)</label>
+      <input id="goNote" type="text" class="panel-input" placeholder="—" />
+      <p class="panel-label" style="margin-top:10px" data-i18n="admin.grantPerms">Code permissions the customer can view</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin:4px 0 6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermLogin" checked /> <span data-i18n="seller.order.permLogin">Login code</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermReset" /> <span data-i18n="seller.order.permReset">Password reset</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer">
+          <input type="checkbox" id="goPermFamily" checked /> <span data-i18n="seller.order.permFamily">Household</span>
+        </label>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;margin:2px 0 4px">
+        <input type="checkbox" id="goViaEmail" checked />
+        <span data-i18n="admin.grantViaEmail">Allow get-code via email</span>
+      </label>
+      <p class="panel-msg-err" id="goErr"></p>
+      <div class="panel-modal-actions">
+        <button class="panel-btn panel-btn--sm panel-btn--ghost" onclick="closeGrantOrder()" data-i18n="common.cancel">Cancel</button>
+        <button class="panel-btn panel-btn--sm panel-btn--green" id="goSaveBtn" onclick="confirmGrantOrder()" data-i18n="admin.grantSubmit">Grant order</button>
+      </div>
+    </div>
+  </div>
 
-    async function loadKeys() {
-      const d = await jget('/api/admin/keys'); allKeys = d.keys || [];
-      $('keyCount').textContent = allKeys.length;
-      renderKeys();
-    }
-
-    function renderKeys() {
-      const q = ($('keySearch').value || '').trim().toLowerCase();
-      const rows = allKeys.filter(k => !q || k.key.toLowerCase().includes(q) || (k.email || '').toLowerCase().includes(q) || (k.sellerUsername || '').toLowerCase().includes(q));
-      const body = $('keysBody');
-      if (!rows.length) { body.innerHTML = `<tr><td colspan="5" class="empty">${allKeys.length ? 'Không khớp' : 'Chưa có key'}</td></tr>`; return; }
-      body.innerHTML = rows.map(k => `
-        <tr>
-          <td class="mono">${esc(k.key)}<div style="color:var(--t3);font-family:inherit;font-size:.7rem;margin-top:2px">${esc(k.note || '')}</div></td>
-          <td>${esc(k.email)}</td>
-          <td>${k.sellerUsername ? esc(k.sellerUsername) : '<span style="color:var(--t3)">—</span>'}</td>
-          <td>${k.usedCount}</td>
-          <td><button class="btn-sm btn-red" onclick="delKey('${esc(k.key)}')">Xoá</button></td>
-        </tr>`).join('');
-    }
-
-    async function delKey(key) {
-      if (!confirm('Xoá key ' + key + '?')) return;
-      await fetch('/api/admin/keys/' + encodeURIComponent(key), { method: 'DELETE', headers: authHeaders() });
-      await loadKeys(); await loadStats();
-    }
-
-    async function loadUsers() {
-      const d = await jget('/api/admin/users'); const users = d.users || [];
-      $('usersBody').innerHTML = users.map(u =>
-        `<tr><td class="mono">${esc(u.id)}</td><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td>${esc(u.plan)}</td></tr>`
-      ).join('');
-    }
-
-    // ── Init: cookie session (admin) hoặc token cũ → vào dashboard ──
-    (async () => {
-      if (TOKEN) { showDash(); return; }
-      const r = await fetch('/api/panel/me');
-      if (r.ok) { const d = await r.json(); if (d.success && d.account.role === 'admin') showDash(); }
-    })();
-  </script>
+  <div class="panel-toast" id="toast"></div>
+  <script src="/panel/js/i18n.js"></script>
+  <script src="/panel/js/filters.js"></script>
+  <script src="/admin/js/admin.js"></script>
 </body>
 </html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get Netflix Code</title>
+  <link rel="stylesheet" href="/panel/css/tokens.css" />
+  <link rel="stylesheet" href="/panel/css/form-card.css" />
+  <link rel="stylesheet" href="/me/me.css" />
+</head>
+<body class="me-page" data-i18n-title="me.title">
+
+<div class="me-page-bg" aria-hidden="true"></div>
+
+<main class="me-stack">
+  <nav class="me-topnav">
+    <a href="/" class="is-active" data-i18n="nav.getCode">Get code</a>
+    <a href="/checker" data-i18n="nav.checker">Checker</a>
+  </nav>
+
+  <div class="form-card" id="formCard">
+    <div class="form-card-head">
+      <div>
+        <h1 data-i18n="me.cardTitle">Check inbox</h1>
+        <p class="form-card-sub" data-i18n="me.cardSub">Enter email or key to get login code, household code or Netflix password reset link.</p>
+      </div>
+      <div class="form-card-tools">
+        <select class="form-card-lang" id="langSelect" aria-label="Language">
+          <option value="auto" data-i18n="me.langAuto">Auto (by IP)</option>
+          <option value="en" data-i18n="lang.en">EN</option>
+          <option value="vi" data-i18n="lang.vi">VI</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-tabs">
+      <button type="button" class="form-tab active" id="tabEmail" onclick="switchTab('email')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <span data-i18n="me.tabEmail">By email</span>
+      </button>
+      <button type="button" class="form-tab" id="tabKey" onclick="switchTab('key')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <span data-i18n="me.tabKey">By key</span>
+      </button>
+    </div>
+
+    <div id="fieldEmail">
+      <label class="form-field-label" for="inputEmail" data-i18n="me.labelEmail">Email address</label>
+      <div class="form-input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <input id="inputEmail" type="email" data-i18n-placeholder="me.emailPh" placeholder="netflix@example.com" autocomplete="email" />
+      </div>
+    </div>
+
+    <div id="fieldKey" hidden>
+      <label class="form-field-label" for="inputKey" data-i18n="me.labelKey">Key</label>
+      <div class="form-input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <input id="inputKey" type="text" data-i18n-placeholder="me.keyPh" placeholder="SK-XXXX-XXXX-XXXX" spellcheck="false" />
+      </div>
+    </div>
+
+    <div class="form-turnstile" id="turnstileWrap"></div>
+    <p class="form-error" id="errorMsg"></p>
+
+    <button type="button" class="form-btn-primary" id="btnSubmit" onclick="fetchCode()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 12h6M14 9l3 3-3 3"/></svg>
+      <span id="btnSubmitLabel" data-i18n="me.submit">Get code</span>
+    </button>
+  </div>
+
+  <div class="form-card form-card--result" id="resultCard">
+    <div id="resultHeader"></div>
+    <div id="resultContent"></div>
+  </div>
+</main>
+
+<script src="/panel/js/i18n.js"></script>
+<script>
+const tt = (k, v) => I18n.t(k, v);
+
+let mode = 'email';
+let turnstileToken = null;
+let turnstileWidgetId = null;
+let turnstileEnabled = true;
+
+const SUBMIT_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 12h6M14 9l3 3-3 3"/></svg>`;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.defer = true;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function syncLangSelect() {
+  const sel = document.getElementById('langSelect');
+  if (!sel) return;
+  const saved = localStorage.getItem('ui_lang');
+  sel.value = saved === 'en' || saved === 'vi' ? saved : 'auto';
+}
+
+function onLangSelect(value) {
+  if (value === 'auto') {
+    localStorage.removeItem('ui_lang');
+    const nav = (navigator.language || '').toLowerCase();
+    I18n.setLang(nav.startsWith('vi') ? 'vi' : 'en');
+  } else {
+    I18n.setLang(value);
+  }
+  syncLangSelect();
+}
+
+function updateSubmitState() {
+  document.getElementById('btnSubmit').disabled = turnstileEnabled && !turnstileToken;
+}
+
+function resetTurnstile() {
+  turnstileToken = null;
+  if (turnstileWidgetId != null && window.turnstile) {
+    try { turnstile.reset(turnstileWidgetId); } catch { /* ignore */ }
+  }
+  updateSubmitState();
+}
+
+function setSubmitButtonIdle() {
+  const btn = document.getElementById('btnSubmit');
+  btn.innerHTML = `${SUBMIT_ICON}<span>${tt('me.submit')}</span>`;
+}
+
+async function initTurnstile() {
+  try {
+    const cfg = await fetch('/api/turnstile/config').then(r => r.json());
+    turnstileEnabled = !!cfg.enabled;
+    if (!turnstileEnabled) {
+      document.getElementById('turnstileWrap').style.display = 'none';
+      turnstileToken = 'disabled';
+      updateSubmitState();
+      return;
+    }
+    await loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit');
+    const wrap = document.getElementById('turnstileWrap');
+    if (cfg.testMode) wrap.classList.add('form-turnstile--test');
+    turnstileWidgetId = turnstile.render('#turnstileWrap', {
+      sitekey: cfg.siteKey,
+      theme: 'light',
+      size: 'normal',
+      callback(token) { turnstileToken = token; updateSubmitState(); },
+      'expired-callback': resetTurnstile,
+      'error-callback': resetTurnstile,
+    });
+  } catch (e) {
+    showError(tt('me.errTurnstileLoad', { msg: e.message }));
+  }
+}
+
+initTurnstile();
+
+let keyPermissions = null;
+let activeKeyStr = '';
+
+async function resolveKeyServer(key) {
+  try {
+    const r = await fetch('/api/key/resolve?key=' + encodeURIComponent(key));
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d.success) return null;
+    keyPermissions = d.permissions || null;
+    return d.email;
+  } catch { return null; }
+}
+
+function switchTab(t) {
+  mode = t;
+  document.getElementById('tabEmail').classList.toggle('active', t === 'email');
+  document.getElementById('tabKey').classList.toggle('active', t === 'key');
+  document.getElementById('fieldEmail').hidden = t !== 'email';
+  document.getElementById('fieldKey').hidden = t !== 'key';
+  hideResult();
+  hideError();
+}
+
+async function fetchCode() {
+  hideResult();
+  hideError();
+  const btn = document.getElementById('btnSubmit');
+  let emailAddr = '';
+
+  if (mode === 'email') {
+    emailAddr = document.getElementById('inputEmail').value.trim();
+    if (!emailAddr || !emailAddr.includes('@')) {
+      showError(tt('me.errEmail'));
+      return;
+    }
+  } else {
+    const key = document.getElementById('inputKey').value.trim();
+    if (!key) { showError(tt('me.errKey')); return; }
+    activeKeyStr = key;
+    keyPermissions = null;
+    emailAddr = await resolveKeyServer(key);
+    if (!emailAddr) {
+      showError(tt('me.errKeyInvalid'));
+      return;
+    }
+    if (!keyPermissions && emailAddr) {
+      keyPermissions = { permLogin: true, permReset: true, permFamily: true };
+    }
+  }
+
+  if (turnstileEnabled && !turnstileToken) {
+    showError(tt('me.errTurnstile'));
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="form-spinner"></span><span>${tt('common.searching')}</span>`;
+
+  try {
+    const payload = { email: emailAddr, turnstileToken: turnstileToken };
+    if (mode === 'key' && activeKeyStr) payload.key = activeKeyStr;
+    const resp = await fetch('/api/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'inbox');
+    displayResult(data.emails, emailAddr, data.permissions || keyPermissions);
+  } catch (e) {
+    showError(tt('common.error') + ': ' + e.message);
+  } finally {
+    resetTurnstile();
+    setSubmitButtonIdle();
+    updateSubmitState();
+  }
+}
+
+const BADGE_OK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+const BADGE_ERR = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+const COPY_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+
+function displayResult(emails, emailAddr, perms) {
+  const card = document.getElementById('resultCard');
+  const header = document.getElementById('resultHeader');
+  const content = document.getElementById('resultContent');
+
+  if (!emails.length) {
+    header.innerHTML = `<span class="result-badge result-badge--err">${BADGE_ERR} ${tt('me.noCode')}</span>`;
+    let hint = tt('me.inboxEmpty', { email: emailAddr });
+    if (perms && !perms.permFamily && mode === 'key') {
+      hint += `<br><span>${tt('me.permFamily')}</span>`;
+    }
+    content.innerHTML = `<p class="form-card-sub">${hint}<br>${tt('me.tryAgain')}</p>`;
+    card.classList.add('is-visible');
+    return;
+  }
+
+  const label = emails.length === 1 ? tt('me.foundEmail') : tt('me.foundEmails', { n: emails.length });
+  header.innerHTML = `<span class="result-badge result-badge--ok">${BADGE_OK} ${label}</span>`;
+  content.innerHTML = `<div class="result-items">${emails.map(e => buildEmailItem(e, perms)).join('')}</div>`;
+  card.classList.add('is-visible');
+}
+
+function buildEmailItem(email, perms) {
+  const p = perms || { permLogin: true, permReset: true, permFamily: true };
+  const code = p.permLogin ? (email.extracted_code || '') : '';
+  const resetLink = p.permReset ? (email.reset_link || '') : '';
+  const fam = p.permFamily ? (email.family_code || '') : '';
+  const locale = I18n.getLang() === 'vi' ? 'vi-VN' : 'en-US';
+  const time = email.time ? new Date(email.time).toLocaleString(locale, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const subject = escHtml(email.subject || tt('me.netflixLoginSubject'));
+
+  let bodyHtml = '';
+  if (code) {
+    const spaced = escHtml(code.split('').join(' '));
+    bodyHtml = `
+      <div class="result-code-panel">
+        <div class="result-code-panel-inner">
+          <div class="result-code-label">${tt('me.loginCode')}</div>
+          <div class="result-code-digits">${spaced}</div>
+        </div>
+        <button type="button" class="result-btn-copy" data-copy="${attrEsc(code)}">${COPY_ICON}<span>${tt('common.copy')}</span></button>
+      </div>`;
+  } else if (resetLink) {
+    const safeLink = escHtml(resetLink);
+    bodyHtml = `
+      <div class="result-code-panel" style="flex-direction:column;align-items:stretch">
+        <div class="result-code-label">${tt('me.resetLink')}</div>
+        <div class="form-card-sub" style="word-break:break-all"><a href="${safeLink}" target="_blank" rel="noopener">${safeLink.substring(0, 80)}…</a></div>
+        <button type="button" class="result-btn-copy" style="align-self:flex-end;margin-top:8px" data-copy="${attrEsc(resetLink)}">${COPY_ICON}<span>${tt('me.copyLink')}</span></button>
+      </div>`;
+  } else if (fam) {
+    bodyHtml = `
+      <div class="result-code-panel">
+        <div class="result-code-panel-inner">
+          <div class="result-code-label">${tt('me.household')}</div>
+          <div class="result-code-digits" style="font-size:1.35rem;letter-spacing:0.12em">${escHtml(fam)}</div>
+        </div>
+        <button type="button" class="result-btn-copy" data-copy="${attrEsc(fam)}">${COPY_ICON}<span>${tt('common.copy')}</span></button>
+      </div>`;
+  } else {
+    bodyHtml = `<p class="form-card-sub">${escHtml(email.subject)}</p>`;
+  }
+
+  return `<div class="result-item">${bodyHtml}
+    <div class="result-meta-row"><span>${time}</span><span>${subject}</span></div></div>`;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function attrEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const label = btn.querySelector('span');
+    const orig = label ? label.textContent : btn.textContent;
+    if (label) label.textContent = tt('common.copied');
+    btn.classList.add('is-copied');
+    setTimeout(() => {
+      if (label) label.textContent = orig;
+      btn.classList.remove('is-copied');
+    }, 2000);
+  } catch { alert(text); }
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+function hideResult() { document.getElementById('resultCard').classList.remove('is-visible'); }
+
+document.getElementById('resultCard').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  copyText(btn.getAttribute('data-copy'), btn);
+});
+
+document.getElementById('langSelect').addEventListener('change', (e) => onLangSelect(e.target.value));
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') fetchCode(); });
+document.addEventListener('langchange', () => {
+  setSubmitButtonIdle();
+  syncLangSelect();
+  if (typeof I18n !== 'undefined') I18n.apply();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  syncLangSelect();
+  setSubmitButtonIdle();
+});
+</script>
+</body>
+</html>

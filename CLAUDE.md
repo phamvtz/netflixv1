@@ -1,8 +1,8 @@
 # CLAUDE.md — Workspace Configuration
 
-## 1. CLAUDE là ai & Context
+## 1. Who CLAUDE is & Context
 
-CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự án: **Netflix v1** (cookie checker, thư mục này) và **Mail Seller** (`d:\mail-seller`, SaaS panel bán email). Stack Node.js + Express.js, deploy VPS qua SSH + PM2. Mọi thay đổi được commit tự động. Giao tiếp tiếng Việt, comment code tiếng Việt.
+CLAUDE is the AI assistant for a solo full-stack developer, working on 2 projects: **Netflix v1** (cookie checker, this directory) and **Mail Seller** (`d:\mail-seller`, a SaaS email-selling panel). Stack: Node.js + Express.js, deployed to a VPS via SSH + PM2. Every change is committed automatically. Language: all user-facing text, chat replies, and commit messages in English; code comments are being migrated to English.
 
 ---
 
@@ -18,7 +18,7 @@ CLAUDE là AI assistant cho solo full-stack developer, làm việc trên 2 dự 
 ## 3. Quy tắc code
 
 - `camelCase` JS — `snake_case` DB columns
-- Comment tiếng Việt, giải thích "tại sao" không phải "cái gì"
+- Comment in English, explain "why" not "what"
 - `async/await` — không callback lồng nhau
 - Luôn `try/catch`, trả lỗi rõ ràng: `{ success: false, error }`
 - Không `var`, không unused vars, hàm nhỏ làm một việc
@@ -42,7 +42,7 @@ const mapRow = r => ({ userId: r.user_id, createdAt: r.created_at });
 
 ### Auto-commit format
 ```
-feat|fix|refactor|chore: mô tả ngắn tiếng Việt
+feat|fix|refactor|chore: short description in English
 ```
 
 ### Deploy (VPS + PM2)
@@ -88,3 +88,41 @@ curl http://localhost:PORT/api/ping   # verify
 - Không over-engineer, không abstraction thừa, không ORM phức tạp khi raw SQL đủ
 - Không TODO không có plan, không hỏi lại khi task đã rõ
 - Không commit `.env`, `node_modules`, file build tạm
+
+---
+
+## 9. Cấu trúc `public/` (chuẩn — bám khi sửa UI)
+
+```
+public/
+├── admin/          # subdomain admin.* — dashboard duyệt seller, keys
+│   ├── index.html
+│   └── js/
+├── seller/         # subdomain seller.* — tạo key, auth seller
+│   ├── index.html
+│   └── js/
+├── me/             # subdomain me.* — Get Code (khách lấy mã)
+│   └── index.html
+├── user/           # domain chính — checker (tùy chọn); trang chủ = me/
+│   ├── checker.html only (no Netflix clone demo)
+│   ├── css/        # serve qua URL /css/*
+│   └── js/         # serve qua URL /js/*
+└── panel/          # CSS/JS dùng chung admin + seller → /panel/*
+```
+
+| Subdomain | Thư mục | Route chính |
+|-----------|---------|-------------|
+| `main`    | `me/`   | `/me` (lấy mã); `/admin`, `/seller`; `/checker` (đầu vào `/` redirect sang `/me`) |
+| `me`      | `me/`   | `/me` (lấy mã; đầu vào `/` redirect sang `/me`) |
+| `seller`  | `seller/` | `/seller` (đầu vào `/` redirect sang `/seller`) |
+| `admin`   | `admin/` | `/admin` (đầu vào `/` redirect sang `/admin`) |
+
+**Filter UI:** chip status + search (`panel/js/filters.js`). Checker: stat cards (không tab trùng) + `#resultSearch`.
+
+**Sau feat/fix:** thêm dòng vào `CHANGELOG.md`, `node --check`, `npm test`.
+
+## 10. UI theme (locked)
+
+**Monochrome black & white** — accent `#ffffff` on `#0a0a0a` bg; all surfaces (me, admin, seller, checker) share `tokens.css`.
+
+Details: `docs/UI-3D.md`. Netflix clone demo is **removed**.

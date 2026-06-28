@@ -1,0 +1,168 @@
+'use strict';
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  nfBillingIsFuture,
+  nfDetectMembershipEnded,
+  nfHasActiveMembershipSignals,
+  nfHasPaymentElement,
+  nfResolveSubscriptionStatus,
+} = require('../lib/nf-account-live');
+const { nfDetectPaymentHold, nfAccountPagePaymentHold } = require('../lib/nf-email-parse');
+
+// Build a Vietnamese "D tháng M, YYYY" string N days from today, so these tests
+// stay valid over time instead of hard-coding a date that eventually goes stale.
+function viDateOffset(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getDate()} tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+const VI_FUTURE = viDateOffset(180);  // ~6 months ahead
+const VI_PAST = viDateOffset(-180);   // ~6 months ago
+
+describe('Netflix account LIVE signals', () => {
+  it('nfBillingIsFuture parses Vietnamese next payment date', () => {
+    assert.equal(nfBillingIsFuture(`Ngày thanh toán tiếp theo: ${VI_FUTURE}`), true);
+    assert.equal(nfBillingIsFuture(VI_FUTURE), true);
+    assert.equal(nfBillingIsFuture(VI_PAST), false);
+  });
+
+  it('nfHasActiveMembershipSignals: VI Premium + billing + manage link → active', () => {
+    const html = `
+      <div data-uia="account-overview-page+membership-card+title">Gói Cao cấp</div>
+      <div>Thành viên từ tháng 5 năm 2025</div>
+      <div>Ngày thanh toán tiếp theo: ${VI_FUTURE}</div>
+      <a href="#">Quản lý tư cách thành viên</a>
+      <span>VISA **** **** **** 8127</span>
+    `;
+    const billing = `Ngày thanh toán tiếp theo: ${VI_FUTURE}`;
+    assert.equal(nfHasActiveMembershipSignals(html, billing), true);
+  });
+
+  it('nfHasActiveMembershipSignals: plan name only in JSON, no payment uia → still active via billing', () => {
+    const html = `<script>{"planName":"Gói Cao cấp"}</script><p>Ngày thanh toán tiếp theo: ${VI_FUTURE}</p>`;
+    assert.equal(nfHasActiveMembershipSignals(html, VI_FUTURE), true);
+  });
+
+  it('nfHasPaymentElement detects payment data-uia', () => {
+    const html = '<div data-uia="account-overview-page+membership-card+payment+details+CC">';
+    assert.equal(nfHasPaymentElement(html), true);
+  });
+
+  it('nfResolveSubscriptionStatus: future billing → LIVE', () => {
+    const html = `<div>Gói Cao cấp</div><div>Ngày thanh toán tiếp theo: ${VI_FUTURE}</div>`;
+    const out = nfResolveSubscriptionStatus({
+      html,
+      plan: 'Gói Cao cấp',
+      billingText: `Ngày thanh toán tiếp theo: ${VI_FUTURE}`,
+      accountPaymentHold: false,
+      paymentHold: true,
+      paymentError: true,
+      membershipActiveUi: false,
+    });
+    assert.equal(out.isLive, true);
+    assert.equal(out.planLost, false);
+  });
+
+  it('nfResolveSubscriptionStatus: plan + profiles → LIVE without billing date', () => {
+    const out = nfResolveSubscriptionStatus({
+      html: '<div>Gói Cao cấp</div>',
+      plan: 'Gói Cao cấp',
+      billingText: null,
+      profiles: ['A', 'B'],
+      accountPaymentHold: false,
+      paymentHold: true,
+      paymentError: true,
+      membershipActiveUi: false,
+    });
+    assert.equal(out.isLive, true);
+    assert.equal(out.planLost, false);
+  });
+
+  it('nfDetectMembershipEnded: canceled account with restart CTA', () => {
+    const html = `
+      <div>Your membership has already been canceled.</div>
+      <h2>Your membership has ended</h2>
+      <p>Ready to watch? Restart your membership any time.</p>
+      <button>Restart membership</button>
+      <script>{"planName":"Mobile"}</script>
+    `;
+    assert.equal(nfDetectMembershipEnded(html, null), true);
+    const out = nfResolveSubscriptionStatus({
+      html,
+      plan: 'Mobile',
+      billingText: null,
+      profiles: ['Main'],
+      accountPaymentHold: false,
+      paymentHold: false,
+      paymentError: false,
+      membershipActiveUi: false,
+    });
+    assert.equal(out.isLive, false);
+    assert.equal(out.cancelled, true);
+  });
+
+  it('nfHasActiveMembershipSignals: membership page billing label (Lần thanh toán)', () => {
+    const html = `
+      <h1>Tư cách thành viên</h1>
+      <p>Gói Cao cấp</p>
+      <p>Lần thanh toán tiếp theo: ${VI_FUTURE}</p>
+      <a>Hủy tư cách thành viên</a>
+    `;
+    assert.equal(nfHasActiveMembershipSignals(html, VI_FUTURE), true);
+  });
+
+  it('nfResolveSubscriptionStatus: future billing → LIVE despite false payment hold', () => {
+    const html = `
+      <div>Gói Cao cấp</div>
+      <a>Cập nhật phương thức thanh toán</a>
+    `;
+    const billing = `Ngày thanh toán tiếp theo: ${VI_FUTURE}`;
+    assert.equal(nfDetectPaymentHold(html), false);
+    const out = nfResolveSubscriptionStatus({
+      html,
+      plan: 'Gói Cao cấp',
+      billingText: billing,
+      accountPaymentHold: false,
+      paymentHold: true,
+      paymentError: true,
+      membershipActiveUi: false,
+    });
+    assert.equal(out.isLive, true);
+    assert.equal(out.planLost, false);
+    assert.equal(out.paymentError, false);
+  });
+
+  it('on-hold account with future "Next payment" retry date → NOT live (regression)', () => {
+    // Reproduces real screenshot: banner "Your account is on hold. Retry your
+    // payment. We couldn't process your last payment." with Premium plan and a
+    // future "Next payment: July 5, 2026" (which is only the retry date).
+    const html = `
+      <div>Your account is on hold. Retry your payment.</div>
+      <div>We couldn't process your last payment. Retry (MASTERCARD - 6095) or update your payment info to keep enjoying Netflix.</div>
+      <button>Update Payment Method</button>
+      <button>Retry Payment</button>
+      <span>Member since June 2026</span>
+      <div>Premium plan</div>
+      <div>Next payment: July 5, 2026</div>
+      <a href="#">Manage membership</a>
+    `;
+    const billing = 'Next payment: July 5, 2026';
+    assert.equal(nfAccountPagePaymentHold(html), true);
+    const out = nfResolveSubscriptionStatus({
+      html,
+      plan: 'Premium plan',
+      billingText: billing,
+      profiles: ['Main'],
+      accountPaymentHold: true,
+      paymentHold: true,
+      paymentError: true,
+      membershipActiveUi: true,
+    });
+    assert.equal(out.isLive, false);
+    assert.equal(out.paymentHold, true);
+    assert.equal(out.planLost, true);
+    assert.equal(out.cancelled, false);
+  });
+});

@@ -1,0 +1,71 @@
+/* Get Code — centered inbox form (reference layout) */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body.me-page {
+  min-height: 100vh;
+  background: var(--fc-bg);
+  color: var(--fc-text);
+  font-family: var(--fc-font);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.me-page-bg {
+  position: fixed;
+  inset: 0;
+  background: var(--fc-bg);
+  z-index: -1;
+}
+
+.me-stack {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.me-topnav {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.me-topnav a {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fc-muted);
+  text-decoration: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--fc-bd);
+  background: rgba(255, 255, 255, 0.7);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.me-topnav a:hover {
+  color: var(--fc-text);
+  border-color: #94a3b8;
+}
+
+.me-topnav a.is-active {
+  color: #fff;
+  background: var(--fc-blue);
+  border-color: var(--fc-blue);
+}
+
+/* Override legacy bw-flat on this page */
+body.me-page.ui-scene--cinematic {
+  background: var(--fc-bg) !important;
+}
+
+body.me-page .form-card.brand-card::before {
+  display: none;
+}

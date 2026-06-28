@@ -2,36 +2,68 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
+
+(function loadEnvFile() {
+  const envPath = path.join(__dirname, '.env');
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] == null || process.env[key] === '') process.env[key] = val;
+  }
+})();
 const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
+const { nfExtractEmailFromHtml, nfDetectPaymentHold, nfAccountPagePaymentHold, nfParseEmail } = require('./lib/nf-email-parse');
+// Shared extraction logic lives in lib/nf-email-parse.js (unit-tested there).
+const parseNetflixEmail = nfParseEmail;
+const {
+  nfHasPaymentElement,
+  nfHasActiveMembershipSignals,
+  nfHasActiveFutureBilling,
+  nfBillingIsFuture,
+  nfResolveSubscriptionStatus,
+} = require('./lib/nf-account-live');
+// Temp-mail response normalization (unit-tested in test/tempmail.test.js).
+const { mailListOf, mailBodyOf, mailAddressOf, mailIdOf } = require('./lib/tempmail');
 
-// SQLite — khởi tạo singleton trước khi route dùng query layer
+// SQLite — initialize singleton before routes use the query layer
 require('./db/database');
 const { runMigrations } = require('./db/migrate');
 const { runSeed } = require('./db/seed');
 const {
-  getUserByEmail,
-  getUserById,
-  getProfilesByUserId,
-  getProfileByIdAndUserId,
-  createSession,
-  getSession,
-  deleteSession,
   deleteExpiredSessions,
-  getAllContent,
   createKey,
-  resolveKeyEmail,
+  getKey,
+  incrementKeyUsage,
+  updateKey,
+  clampKeyPerms,
+  clampKeyPermsFull,
+  getSellerMaxPerms,
+  setSellerPerms,
   getAllKeys,
   getKeysBySeller,
+  getKeysBySellerEnriched,
   deleteKey,
+  deleteKeyForSeller,
+  syncKeyFromOrder,
   getAdminStats,
   getAllUsers,
   createAccount,
   getAccountByUsername,
   getAccountByEmail,
   getAccountById,
+  setAccountPassword,
   setVerifyCode,
   markEmailVerified,
   setAccountStatus,
@@ -41,19 +73,51 @@ const {
   getPanelSession,
   deletePanelSession,
 } = require('./db/queries');
+const {
+  getProducts,
+  upsertProduct,
+  getSellerBalance,
+  adjustBalance,
+  getTransactions,
+  getTransactionSummary,
+  getSellerOrders,
+  getSellerOrderById,
+  getOrderCookie,
+  recordOrderCheck,
+  listOrdersDueForCheck,
+  updateSellerOrder,
+  renewSellerOrder,
+  getOrderHistory,
+  getSellerEmails,
+  getSellerDashboardStats,
+  purchaseProduct,
+  migrateOrphanKeysToOrders,
+  updateSellerProfile,
+  getSellerProfile,
+  adminCreateOrderForSeller,
+  getOrderByEmailForInbox,
+  getProductById,
+  logOrderEvent,
+  recordDepositIntent,
+  findDepositIntentByRef,
+  listRecentDepositIntents,
+  getDepositIntentsBySeller,
+  listUnmatchedDepositIntents,
+  assignDepositIntent,
+} = require('./db/queries-orders');
 const { subdomainMiddleware } = require('./subdomain');
 const { verifyPassword, hashPassword } = require('./auth');
 const { sendVerificationEmail } = require('./mailer');
 
-// Chỉ tắt verify TLS khi thật sự cần debug cert lỗi — mặc định GIỮ bảo mật.
-// Các site dùng (netflix.com, cloudflare, nftoken.site...) đều có cert hợp lệ.
+// Only disable TLS verification when truly needed to debug cert errors — keep security ON by default.
+// The sites we use (netflix.com, cloudflare, nftoken.site...) all have valid certs.
 if (process.env.INSECURE_TLS === '1') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   console.warn('[SECURITY] TLS verification DISABLED (INSECURE_TLS=1)');
 }
 
-// Admin token: ưu tiên env. Không set → sinh ngẫu nhiên mỗi lần khởi động
-// (in ra console) thay vì mặc định dễ đoán.
+// Admin token: prefer env. If unset → generate random on each startup
+// (printed to console) instead of an easy-to-guess default.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
 const ADMIN_TOKEN_GENERATED = !process.env.ADMIN_TOKEN;
 
@@ -122,8 +186,38 @@ const NF_UA_POOL = [
   },
 ];
 
-// Tạo header browser-realistic cho 1 request Netflix (xoay UA + đủ sec-ch/sec-fetch).
-// Mô phỏng điều hướng thật: từ trang chủ → /account (Referer + Sec-Fetch-User).
+// Một "phiên browser" cố định cho cả warmup + /account (không đổi UA giữa 2 request).
+function createNetflixBrowserSession(cookieStr, extra = {}) {
+  const p = NF_UA_POOL[Math.floor(Math.random() * NF_UA_POOL.length)];
+  const common = {
+    'User-Agent': p.ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Upgrade-Insecure-Requests': '1',
+    'sec-ch-ua': p.chUa,
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': p.platform,
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+    Cookie: cookieStr.trim(),
+    ...extra,
+  };
+  return {
+    home: {
+      ...common,
+      'Sec-Fetch-Site': 'none',
+    },
+    account: {
+      ...common,
+      'Sec-Fetch-Site': 'same-origin',
+      Referer: 'https://www.netflix.com/browse',
+    },
+  };
+}
+
 function buildNetflixHeaders(extra = {}) {
   const p = NF_UA_POOL[Math.floor(Math.random() * NF_UA_POOL.length)];
   return {
@@ -150,7 +244,54 @@ const NETFLIX_HEADERS = buildNetflixHeaders();
 // Delay ngẫu nhiên (ms) — tránh pattern request đều đặn dễ bị quét.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const randDelay = (min = 800, max = 2500) =>
-  sleep(min + Math.floor(Math.random() * (max - min)));
+  sleep(min + Math.floor(Math.random() * Math.max(1, max - min)));
+
+// Tốc độ check — chậm = ít request, ít burst, khó bị Netflix gắn bot.
+const CHECK_PACES = {
+  normal: {
+    preMin: 800, preMax: 2500, gapMin: 1500, gapMax: 4000,
+    warmupMin: 0, warmupMax: 0, betweenMin: 0, betweenMax: 0,
+    nftMin: 0, nftMax: 800, skipNftoken: false, warmup: false,
+  },
+  slow: {
+    preMin: 5000, preMax: 11000, gapMin: 12000, gapMax: 25000,
+    warmupMin: 800, warmupMax: 2200, betweenMin: 1200, betweenMax: 3500,
+    nftMin: 0, nftMax: 0, skipNftoken: true, warmup: true,
+  },
+  stealth: {
+    preMin: 10000, preMax: 22000, gapMin: 20000, gapMax: 45000,
+    warmupMin: 1500, warmupMax: 4000, betweenMin: 2500, betweenMax: 6000,
+    nftMin: 0, nftMax: 0, skipNftoken: true, warmup: true,
+  },
+};
+
+const CHECK_MAX_PER_HOUR = Math.max(10, parseInt(process.env.CHECK_MAX_PER_HOUR || '50', 10) || 50);
+const checkRateState = { windowStart: Date.now(), count: 0 };
+
+function assertCheckRateLimit() {
+  const now = Date.now();
+  if (now - checkRateState.windowStart > 3600000) {
+    checkRateState.windowStart = now;
+    checkRateState.count = 0;
+  }
+  checkRateState.count += 1;
+  if (checkRateState.count > CHECK_MAX_PER_HOUR) {
+    const err = new Error(`Reached ${CHECK_MAX_PER_HOUR} checks/hour — wait ~${Math.ceil((3600000 - (now - checkRateState.windowStart)) / 60000)} minutes to avoid Netflix IP scanning`);
+    err.code = 'RATE_LIMIT';
+    throw err;
+  }
+}
+
+function resolveCheckPace(id) {
+  const key = String(id || process.env.CHECK_PACE || 'stealth').toLowerCase().trim();
+  const cfg = CHECK_PACES[key] || CHECK_PACES.stealth;
+  return { ...cfg, key: CHECK_PACES[key] ? key : 'stealth' };
+}
+
+const CHECK_DEBUG = String(process.env.CHECK_DEBUG || '').toLowerCase() === '1';
+function nfLog(...args) {
+  if (CHECK_DEBUG) console.log(...args);
+}
 
 function isNetflixPremiumPlan(planStr) {
   if (!planStr || typeof planStr !== 'string') return false;
@@ -268,75 +409,27 @@ function nfExtractPlan(html) {
   }
   // Visible text fallback — works for English AND Thai UI
   const PLAN_RE = /\b(?:Ultra|Premium|Standard|Basic|Mobile)(?:\+|\s+(?:with\s+Ads|Ads))?\b/i;
+  const VI_PLAN_RE = /Gói\s+(?:Cao cấp|Tiêu chuẩn|Cơ bản|Di động)/i;
   const THAI_RE = /(?:Netflix\s+)?(?:พรีเมียม|มาตรฐาน|พื้นฐาน|มือถือ|เบสิก|สแตนดาร์ด)/;
   const lines = nfVisibleLines(html);
   for (const line of lines) {
-    const m = line.match(PLAN_RE) || line.match(THAI_RE);
+    const m = line.match(PLAN_RE) || line.match(VI_PLAN_RE) || line.match(THAI_RE);
     if (m && line.length < 100) return nfClean(m[0]);
   }
   // Last resort: raw regex on full HTML
-  const raw = html.match(PLAN_RE) || html.match(THAI_RE);
+  const raw = html.match(PLAN_RE) || html.match(VI_PLAN_RE) || html.match(THAI_RE);
   if (raw) return nfClean(raw[0]);
   return null;
 }
 
-// Extract email directly from Netflix HTML (doesn't need nftoken.site)
-function nfExtractEmail(html) {
-  if (!html) return null;
-  const emailPats = [
-    /"userLogin"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"email"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"memberEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"loginName"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"primaryEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-    /"accountEmail"\s*:\s*"([^"@]{2,50}@[^"]{2,50})"/,
-  ];
-  for (const pat of emailPats) {
-    const m = html.match(pat);
-    if (m) return m[1].trim();
-  }
-  return null;
+function nfPushProfile(profiles, rawName) {
+  const name = nfClean(rawName);
+  if (!name || /^\d+$/.test(name) || profiles.includes(name)) return;
+  profiles.push(name);
 }
 
-// Deep email extraction from Netflix reactContext JSON
-function nfExtractEmailFallback(html) {
-  if (!html) return null;
-
-  // 1. Find netflix.reactContext (main embedded data blob)
-  //    Netflix stores user info: memberLoginId, userLogin, email
-  const ctxPats = [
-    /netflix\.reactContext\s*=\s*(\{[\s\S]{200,}?\})\s*;?\s*<\/script>/,
-    /"memberLoginId"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    /"membershipEmail"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    /"userEmail"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/,
-    // Visible email in account page (may be masked: p***@gmail.com)
-    /data-uia="account-overview-page[^"]*email[^"]*"[^>]*>([^<@]{1,40}@[^<]{2,40})</i,
-    // Inside script context — broader key match
-    /"[a-zA-Z]{0,20}[Ee]mail[a-zA-Z]{0,20}"\s*:\s*"([^"]{2,60}@[^"]{2,60})"/,
-    /"[a-zA-Z]{0,20}[Ll]ogin[a-zA-Z]{0,20}"\s*:\s*"([^"]{2,60}@[^"]{2,60})"/,
-  ];
-
-  for (const pat of ctxPats) {
-    const m = html.match(pat);
-    if (!m) continue;
-    const candidate = m[1]?.trim();
-    if (!candidate) continue;
-    // If it's the full reactContext blob, re-search inside it
-    if (candidate.startsWith('{')) {
-      const inner = candidate.match(/"(?:memberLoginId|userLogin|email|memberEmail)"\s*:\s*"([^"@]{1,60}@[^"]{2,60})"/);
-      if (inner) return inner[1].trim();
-      continue;
-    }
-    // Validate: must have @, not be a Netflix internal email, not example domain
-    if (candidate.includes('@') &&
-        !candidate.includes('netflix.com') &&
-        !candidate.includes('example.') &&
-        !candidate.includes('noreply') &&
-        !candidate.includes('support@')) {
-      return candidate;
-    }
-  }
-  return null;
+function nfBillingLooksLikeMemberSince(text) {
+  return /thành viên từ|member since/i.test(String(text || ''));
 }
 
 const NF_CANCEL_KW = [
@@ -345,68 +438,82 @@ const NF_CANCEL_KW = [
   'reactivate membership','restart membership',
   'kết thúc','hết hạn vào','đã hủy','sẽ kết thúc','đã bị hủy','chấm dứt','kích hoạt lại',
 ];
-const NF_PAYERR_KW = [
-  'payment failed','payment unsuccessful','unable to process your payment',
-  "couldn't process your payment",'problem with your payment','payment method was declined',
-  'account is on hold','your account is on hold','on hold. retry','retry your payment',
-  'update payment','fix payment','payment issue','billing issue',
-  'thanh toán không thành công','không thể xử lý khoản thanh toán','kiểm tra số dư',
+/** Visible payment-failure copy only — avoid matching JSON keys or "update payment method". */
+const NF_PAYERR_PHRASES = [
+  'payment failed', 'payment unsuccessful', 'unable to process your payment',
+  "couldn't process your payment", 'problem with your payment', 'payment method was declined',
+  'account is on hold', 'your account is on hold', 'on hold. retry', 'retry your payment',
+  'thanh toán không thành công', 'không thể xử lý khoản thanh toán',
+  'cập nhật thông tin thanh toán để tiếp tục',
 ];
+
+function nfAccountPaymentError(html) {
+  const low = String(html || '').toLowerCase();
+  if (NF_PAYERR_PHRASES.some((p) => low.includes(p))) return true;
+  return /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html || '');
+}
 
 // ─── Netflix account check — simple & accurate ────────────────────────────────
 // Logic: GET /account với cookie → check element data-uia cụ thể
 //   Có "account-overview-page+membership-card+payment+details" → LIVE
 //   Không có → subscription ended / cancelled
-async function fetchNetflixAccountInfo(cookieStr) {
+async function fetchNetflixAccountInfo(cookieStr, pace) {
   try {
     const cookie = cookieStr.trim();
-    const nfH = buildNetflixHeaders({
-      Cookie: cookie,
-      'Accept-Encoding': 'gzip, deflate, br',
-    });
+    const p = pace || resolveCheckPace();
+    const session = createNetflixBrowserSession(cookie);
 
-    // Delay ngẫu nhiên trước khi chạm Netflix → giảm pattern bot
-    await randDelay();
-    const res = await nodeRequest('https://www.netflix.com/account', { method: 'GET', headers: nfH, timeout: 15000 });
+    await randDelay(p.preMin, p.preMax);
+
+    let browsePaymentHold = false;
+    // Warmup: vào trang chủ/browse trước (giống user thật) — chỉ slow/stealth
+    if (p.warmup) {
+      try {
+        const browseRes = await nodeRequest('https://www.netflix.com/browse', {
+          method: 'GET', headers: session.home, timeout: 12000,
+        });
+        if (browseRes.status === 200) browsePaymentHold = nfDetectPaymentHold(browseRes.text());
+      } catch { /* bỏ qua — vẫn thử /account */ }
+      await randDelay(p.warmupMin, p.warmupMax);
+      await randDelay(p.betweenMin, p.betweenMax);
+    }
+
+    const res = await nodeRequest('https://www.netflix.com/account', {
+      method: 'GET', headers: session.account, timeout: 15000,
+    });
 
     // Redirect → cookie expired/invalid
     if (res.status === 301 || res.status === 302) return { reachable: false, reason: 'redirect→login' };
     if (res.status !== 200) return { reachable: false, reason: `HTTP ${res.status}` };
 
-    const html = res.text();
+    let html = res.text();
     if (!html || html.length < 3000) return { reachable: false, reason: 'empty' };
+
+    let membershipHtml = '';
+    try {
+      await randDelay(350, 900);
+      const memRes = await nodeRequest('https://www.netflix.com/account/membership', {
+        method: 'GET', headers: session.account, timeout: 15000,
+      });
+      if (memRes.status === 200) {
+        membershipHtml = memRes.text() || '';
+        if (membershipHtml.length > 2000) html += `\n<!-- membership -->\n${membershipHtml}`;
+      }
+    } catch { /* optional — /account alone is enough when it fails */ }
 
     // ── PRIMARY LIVE SIGNAL ────────────────────────────────────────────────────
     // Signal 1: payment details element (CC, PayPal, carrier, gift card)
-    const LIVE_SELECTORS = [
-      'account-overview-page+membership-card+payment+details+CC',
-      'account-overview-page+membership-card+payment+details+PAYPAL',
-      'account-overview-page+membership-card+payment+details+CARRIER',
-      'account-overview-page+membership-card+payment+details+GIFT',
-      'account-overview-page+membership-card+payment+details+MOBILE',
-      'account-overview-page+membership-card+payment+details',   // catch-all
-    ];
-    const hasPaymentEl = LIVE_SELECTORS.some(sel => html.includes(`data-uia="${sel}`));
-
-    // Signal 2: Cancel membership button = account is active (can cancel it)
-    const hasCancelBtn = html.toLowerCase().includes('cancel membership') ||
-                         html.toLowerCase().includes('cancel your membership') ||
-                         html.toLowerCase().includes('ยกเลิกสมาชิก');
+    const hasPaymentEl = nfHasPaymentElement(html);
 
     // Log all membership-related data-uia attributes found
     const uiaAll = [...html.matchAll(/data-uia="([^"]+)"/g)].map(m => m[1]);
     const uiaMembership = uiaAll.filter(a => a.includes('membership') || a.includes('plan') || a.includes('payment'));
-    console.log(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl} cancelBtn=${hasCancelBtn}`);
-    if (uiaMembership.length) console.log(`[NF-UIA]`, uiaMembership.join(', '));
-    // Debug email search
-    const emailDbg = nfExtractEmail(html) || nfExtractEmailFallback(html);
-    console.log(`[NF-EMAIL]`, emailDbg || '(not found)');
-    // Debug profiles
+    nfLog(`[NF] status=${res.status} len=${html.length} paymentEl=${hasPaymentEl}`);
+    if (uiaMembership.length) nfLog(`[NF-UIA]`, uiaMembership.join(', '));
+    const emailDbg = nfExtractEmailFromHtml(html);
+    nfLog(`[NF-EMAIL]`, emailDbg || '(not found)');
     const allProfileNames = [...html.matchAll(/"profileName"\s*:\s*"([^"]{1,50})"/g)].map(m=>m[1]).slice(0,5);
-    if (allProfileNames.length) console.log(`[NF-PROFILES]`, allProfileNames);
-
-    // Combine signals: any positive signal = LIVE
-    const isLive = hasPaymentEl || hasCancelBtn;
+    if (allProfileNames.length) nfLog(`[NF-PROFILES]`, allProfileNames);
 
     // ── PLAN — data-uia attribute (most reliable) ──────────────────────────────
     let plan = null;
@@ -414,22 +521,59 @@ async function fetchNetflixAccountInfo(cookieStr) {
     if (planUia) plan = nfClean(planUia[1]);
     if (!plan) plan = nfExtractPlan(html);
 
+    // Hold on /account: strict phrases only (browse uses full nfDetectPaymentHold)
+    let accountPaymentHold = nfAccountPagePaymentHold(html);
+    let paymentHold = browsePaymentHold || accountPaymentHold;
+    const htmlLow = html.toLowerCase();
+    let paymentError = paymentHold || nfAccountPaymentError(html);
+
     // ── BILLING DATE — data-uia attribute ──────────────────────────────────────
     let billingText = null;
     const billUia = html.match(/data-uia="account-overview-page\+membership-card\+description"[^>]*>\s*([^<]{4,120})/);
     if (billUia) billingText = nfClean(billUia[1]);
     if (!billingText) billingText = nfExtractBilling(html);
+    if (membershipHtml && (!billingText || nfBillingLooksLikeMemberSince(billingText))) {
+      const memBilling = nfExtractBilling(membershipHtml);
+      if (memBilling) billingText = memBilling;
+    }
+    if (!billingText || nfBillingLooksLikeMemberSince(billingText)) {
+      const scraped = nfExtractBilling(html);
+      if (scraped && !nfBillingLooksLikeMemberSince(scraped)) billingText = scraped;
+    }
+
+    const membershipActiveUi = nfHasActiveMembershipSignals(html, billingText);
+    // Browse-only hold banner often false-positives; trust /account when membership UI is clearly active
+    if (browsePaymentHold && !accountPaymentHold && membershipActiveUi) {
+      browsePaymentHold = false;
+      paymentHold = false;
+      paymentError = nfAccountPaymentError(html);
+    }
+
+    const futureBillingOnAccount = !!(plan && billingText && nfHasActiveFutureBilling(html, billingText));
+
+    // Browse popup hold — skip when /account already shows a future next payment date
+    let browseVerifyHold = false;
+    if (plan && !paymentHold && !futureBillingOnAccount) {
+      try {
+        await randDelay(400, 1200);
+        const br = await nodeRequest('https://www.netflix.com/browse', {
+          method: 'GET', headers: session.home, timeout: 12000,
+        });
+        if (br.status === 200) {
+          browseVerifyHold = nfDetectPaymentHold(br.text());
+          if (browseVerifyHold && (!membershipActiveUi || accountPaymentHold)) paymentHold = true;
+        }
+      } catch { /* bỏ qua */ }
+    }
 
     // ── EMAIL ──────────────────────────────────────────────────────────────────
-    const emailFromHtml = nfExtractEmail(html) || nfExtractEmailFallback(html);
+    const emailFromHtml = nfExtractEmailFromHtml(html);
 
     // ── PROFILES ──────────────────────────────────────────────────────────────
     const profiles = [];
     // Method 1: JSON "profileName" key
-    for (const m of html.matchAll(/"profileName"\s*:\s*"([^"]{1,50})"/g)) {
-      const name = m[1].trim();
-      // Exclude pure numbers (those are indices, not names), exclude empty, dedupe
-      if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+    for (const m of html.matchAll(/"profileName"\s*:\s*"((?:\\.|[^"\\]){1,80})"/g)) {
+      nfPushProfile(profiles, m[1]);
     }
     // Method 2: profiles array in JSON
     if (!profiles.length) {
@@ -437,8 +581,7 @@ async function fetchNetflixAccountInfo(cookieStr) {
       if (raw) {
         try {
           for (const p of JSON.parse(raw)) {
-            const name = (p?.summary?.profileName || p?.profileName || p?.name || '').trim();
-            if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+            nfPushProfile(profiles, p?.summary?.profileName || p?.profileName || p?.name || '');
           }
         } catch {}
       }
@@ -446,31 +589,48 @@ async function fetchNetflixAccountInfo(cookieStr) {
     // Method 3: data-uia SSR
     if (!profiles.length) {
       for (const m of html.matchAll(/data-uia="profile-name"[^>]*>\s*([^<]+)/g)) {
-        const name = m[1].trim();
-        if (name && !/^\d+$/.test(name)) profiles.push(name);
+        nfPushProfile(profiles, m[1]);
       }
     }
     // Method 4: "displayName" in profile objects
     if (!profiles.length) {
-      for (const m of html.matchAll(/"displayName"\s*:\s*"([^"]{1,50})"/g)) {
-        const name = m[1].trim();
-        if (name && !/^\d+$/.test(name) && !profiles.includes(name)) profiles.push(name);
+      for (const m of html.matchAll(/"displayName"\s*:\s*"((?:\\.|[^"\\]){1,80})"/g)) {
+        nfPushProfile(profiles, m[1]);
       }
     }
 
-    // ── PAYMENT ERROR ──────────────────────────────────────────────────────────
-    const htmlLow    = html.toLowerCase();
-    const paymentError = NF_PAYERR_KW.some(kw => htmlLow.includes(kw.toLowerCase()))
-      || /"(?:paymentIssue|paymentError|paymentFailed|billingIssue)"\s*:\s*(?:true|1|"true")/i.test(html);
+    const resolved = nfResolveSubscriptionStatus({
+      html,
+      plan,
+      billingText,
+      profiles,
+      accountPaymentHold,
+      paymentHold,
+      paymentError,
+      membershipActiveUi,
+    });
+    paymentHold = resolved.paymentHold;
+    paymentError = resolved.paymentError;
+    billingText = resolved.billingText || billingText;
+    const subscriptionActive = resolved.subscriptionActive;
+    const isLive = resolved.isLive;
+    const planLost = resolved.planLost;
+    const membershipEnded = !!resolved.cancelled;
+    nfLog(`[NF] plan=${plan || '-'} billing=${billingText || '-'} profiles=${profiles.length} activeUi=${resolved.membershipActiveUi} futureBill=${resolved.futureBilling} profLive=${resolved.planProfiles} hold=${paymentHold} live=${isLive} planLost=${planLost} ended=${membershipEnded}`);
 
     return {
       reachable:    true,
-      alive:        isLive,        // ← based on payment element presence
-      cancelled:    !isLive,
+      alive:        isLive,
+      cancelled:    membershipEnded || (!subscriptionActive && !paymentHold && !planLost),
+      planLost,
       plan,
       billingText,
       profiles,
       paymentError,
+      paymentHold,
+      accountPaymentHold,
+      futureBilling: resolved.futureBilling,
+      browsePaymentHold: browsePaymentHold || browseVerifyHold,
       emailFromHtml,
     };
   } catch (e) {
@@ -505,14 +665,23 @@ async function checkAccountDetails(cookieStr) {
 
     const alive      = data?.status === 'SUCCESS';
     const plan       = data?.plan || data?.subscription || null;
-    const email      = data?.email || null;
+    const email      = data?.email || data?.mail || data?.loginEmail || data?.login
+      || data?.member_email || data?.user_email || data?.account_email || null;
     const screens    = data?.max_streams != null ? parseInt(data.max_streams) : null;
     const hasPremium = alive && isNetflixPremiumPlan(plan);
     const paymentError = !!(data?.paymentError || data?.payment_error);
 
-    return { alive, hasPremium, plan, email, screens, paymentError, raw: data };
+    // Definitive dead/expired verdict from nftoken — used to override an
+    // HTML-only LIVE (Netflix renders payment-hold banners client-side, so the
+    // SSR HTML can look perfectly active even when the account is on hold/dead).
+    const statusStr = String(data?.status || '').toUpperCase();
+    const msgStr = String(data?.message || data?.msg || data?.error || '').toLowerCase();
+    const definitiveDead = !!data && statusStr !== 'SUCCESS'
+      && (statusStr === 'DEAD' || /dead|expired|invalid|cancel|hold|inactive|fail/i.test(msgStr));
+
+    return { alive, hasPremium, plan, email, screens, paymentError, definitiveDead, raw: data };
   } catch (e) {
-    return { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, raw: null, error: e.message };
+    return { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, definitiveDead: false, raw: null, error: e.message };
   }
 }
 
@@ -536,26 +705,53 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 app.use(subdomainMiddleware);
 
-// ─── Static pages (public/admin | seller | user) ─────────────────────────────
+// ─── Static pages (public/admin | seller | me | user) ────────────────────────
 const PAGE = {
   admin: path.join(__dirname, 'public', 'admin', 'index.html'),
   seller: path.join(__dirname, 'public', 'seller', 'index.html'),
+  me: path.join(__dirname, 'public', 'me', 'index.html'),
   user: (name) => path.join(__dirname, 'public', 'user', name),
 };
 
 // ─── Subdomain root routing ────────────────────────────────────────────────────
-// me.domain/      → user/getcode.html
-// seller.domain/  → seller/index.html
-// admin.domain/   → admin/index.html
-// (domain trần)/  → landing (xử lý ở route '/' bên dưới)
+// me.domain/me      → me/index.html (Get Code)
+// seller.domain/seller  → seller/index.html
+// admin.domain/admin   → admin/index.html
+// me.domain/        → redirect to /me
+// seller.domain/    → redirect to /seller
+// admin.domain/     → redirect to /admin
+// (domain trần)/    → redirect to /me
 function serveSubdomainRoot(req, res, next) {
-  if (req.path !== '/') return next();
-  switch (req.subdomain) {
-    case 'me':     return res.sendFile(PAGE.user('getcode.html'));
-    case 'seller': return res.sendFile(PAGE.seller);
-    case 'admin':  return res.sendFile(PAGE.admin);
-    default:       return next();
+  if (req.path === '/') {
+    if (req.subdomain === 'me') return res.redirect('/me');
+    if (req.subdomain === 'seller') return res.redirect('/seller');
+    if (req.subdomain === 'admin') return res.redirect('/admin');
+    return res.redirect('/me');
   }
+
+  if (req.subdomain === 'me' && req.path === '/me') {
+    return res.sendFile(PAGE.me);
+  }
+  if (req.subdomain === 'seller' && req.path === '/seller') {
+    return res.sendFile(PAGE.seller);
+  }
+  // Seller SPA deep links: only known view slugs, NOT static asset paths (/seller/js/, etc.)
+  const SELLER_VIEW_SLUGS = ['dashboard', 'orders', 'keys', 'store', 'emails', 'deposit', 'transactions', 'profile'];
+  if (req.subdomain === 'seller' && req.path.startsWith('/seller/')) {
+    const slug = req.path.split('/')[2];
+    if (SELLER_VIEW_SLUGS.includes(slug)) return res.sendFile(PAGE.seller);
+  }
+  if (req.subdomain === 'admin' && req.path === '/admin') {
+    return res.sendFile(PAGE.admin);
+  }
+  // Admin SPA deep links: /admin/sellers, /admin/products, etc.
+  if (req.subdomain === 'admin' && req.path.startsWith('/admin/')) {
+    const slug = req.path.split('/')[2];
+    if (['overview', 'sellers', 'products', 'keys', 'users'].includes(slug))
+      return res.sendFile(PAGE.admin);
+  }
+
+  return next();
 }
 app.use(serveSubdomainRoot);
 
@@ -565,373 +761,120 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // CSS/JS user — URL giữ /css, /js (không đổi link trong HTML)
 app.use('/css', express.static(path.join(__dirname, 'public', 'user', 'css')));
 app.use('/js', express.static(path.join(__dirname, 'public', 'user', 'js')));
-
-// ─── Cookie Generation – matching real Netflix formats ─────────────────────────
-
-// nfvdid: base64url-encoded 72 random bytes
-// Real example: BQFmAAEBEOwULkv5c1bP...TbRy311Jd
-function generateNfvdid() {
-  return crypto.randomBytes(72).toString('base64url');
-}
-
-// tmx_guid: base64url-encoded 64 random bytes (ThreatMetrix device fingerprint)
-// Real example: AAwtTZZR2H2Pk8D-dPXx...7g7Q
-function generateTmxGuid() {
-  return crypto.randomBytes(64).toString('base64url');
-}
-
-// thx_guid: 32 hex chars without dashes (UUID without dashes)
-// Real example: 9b166c806f66e0e1d2a76cb7a6f0ed47
-function generateThxGuid() {
-  return crypto.randomBytes(16).toString('hex');
-}
-
-// Base32 (uppercase A-Z2-7) for the `pg` field in NetflixId
-function toBase32(buf) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = 0, val = 0, out = '';
-  for (const byte of buf) {
-    val = (val << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      out += alphabet[(val >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) out += alphabet[(val << (5 - bits)) & 31];
-  return out;
-}
-
-// NetflixId: v=3&ct=<long-base64url>&pg=<BASE32-26chars>&ch=<base64url>.
-// ct embeds sessionId bytes in a protobuf-like binary frame + random padding
-// Real example ct is ~200 base64url chars; pg is 26-char uppercase base32
-function generateNetflixId(sessionId) {
-  const sidHex = sessionId.replace(/-/g, '');
-  const sidBuf = Buffer.from(sidHex, 'hex'); // 16 bytes
-
-  // Protobuf-like framing: field 1 varint=1, field 2 len-delim=16 bytes, random tail
-  const preamble = Buffer.from([0x08, 0x01, 0x12, 0x10]);
-  const tail     = crypto.randomBytes(128);
-  const ct = Buffer.concat([preamble, sidBuf, tail]).toString('base64url');
-
-  const pg = toBase32(crypto.randomBytes(16)).substring(0, 26);
-
-  // ch: HMAC-SHA256 of sessionId, base64url-encoded, trailing dot (real Netflix style)
-  const hmac = crypto.createHmac('sha256', 'nflx_ch_key_v3');
-  hmac.update(sessionId);
-  const ch = hmac.digest().toString('base64url') + '.';
-
-  return `v=3&ct=${ct}&pg=${pg}&ch=${ch}`;
-}
-
-// SecureNetflixId: v=3&mac=<base64url-hmac>.&dt=<timestamp>
-// Real example: v%3D3%26mac%3DAQEAEQABABT_IgWs...%26dt%3D1780112376148
-function generateSecureNetflixId(userId, sessionId) {
-  const hmac = crypto.createHmac('sha256', 'nflx_mac_secret_v3');
-  hmac.update(`${userId}:${sessionId}`);
-  // Real Netflix mac has extra preamble bytes (AQEAEQABABT...) – we prepend similar bytes
-  const preamble = Buffer.from([0x01, 0x01, 0x11, 0x01, 0x01, 0x04]);
-  const mac = Buffer.concat([preamble, hmac.digest()]).toString('base64url') + '.';
-  return `v=3&mac=${mac}&dt=${Date.now()}`;
-}
-
-// Extract sessionId from NetflixId ct field, then look up userId in sessions map
-function decodeNetflixId(netflixId) {
-  try {
-    const decoded = decodeURIComponent(netflixId);
-    const params  = new URLSearchParams(decoded);
-    const ct      = params.get('ct');
-    if (!ct) return null;
-    const raw = Buffer.from(ct, 'base64url');
-    // Skip 4-byte preamble, read 16-byte session ID
-    if (raw.length < 20) return null;
-    const sidBytes = raw.slice(4, 20);
-    const sessionId = [
-      sidBytes.slice(0,4).toString('hex'),
-      sidBytes.slice(4,6).toString('hex'),
-      sidBytes.slice(6,8).toString('hex'),
-      sidBytes.slice(8,10).toString('hex'),
-      sidBytes.slice(10,16).toString('hex'),
-    ].join('-');
-    const row = getSession(sessionId);
-    return row ? { userId: row.user_id, sessionId } : null;
-  } catch {
-    return null;
-  }
-}
-
-// OptanonConsent – matches real Netflix format (OneTrust v202604)
-function generateOptanonConsent() {
-  const consentId = uuidv4();
-  const ts        = Date.now();
-  const datestamp = encodeURIComponent(new Date().toUTCString());
-  return (
-    `isGpcEnabled=0` +
-    `&datestamp=${datestamp}` +
-    `&version=202604.2.0` +
-    `&browserGpcFlag=0` +
-    `&isDntEnabled=0` +
-    `&isIABGlobal=false` +
-    `&hosts=` +
-    `&consentId=${consentId}` +
-    `&interactionCount=1` +
-    `&isAnonUser=1` +
-    `&prevHadToken=0` +
-    `&landingPath=NotLandingPage` +
-    `&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1%2CC0004%3A1` +
-    `&crTime=${ts}` +
-    `&AwaitingReconsent=false`
-  );
-}
-
-// ─── Cookie Setters ────────────────────────────────────────────────────────────
-
-function setAnonymousCookies(req, res) {
-  // nfvdid – virtual device ID (1 year, survives logout)
-  if (!req.cookies.nfvdid) {
-    res.cookie('nfvdid', generateNfvdid(), {
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // OptanonConsent – GDPR/CCPA (1 year)
-  if (!req.cookies.OptanonConsent) {
-    res.cookie('OptanonConsent', generateOptanonConsent(), {
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // tmx_guid – ThreatMetrix device fingerprint (30 days)
-  if (!req.cookies.tmx_guid) {
-    res.cookie('tmx_guid', generateTmxGuid(), {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-
-  // thx_guid – analytics GUID, 32 hex chars (30 days)
-  if (!req.cookies.thx_guid) {
-    res.cookie('thx_guid', generateThxGuid(), {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-}
-
-function setSessionCookies(res, userId, sessionId) {
-  createSession(sessionId, userId);
-
-  const netflixId       = generateNetflixId(sessionId);
-  const secureNetflixId = generateSecureNetflixId(userId, sessionId);
-  const flwssn          = uuidv4();          // UUID (same as real Netflix)
-  const gsid            = uuidv4();          // UUID (real Netflix uses plain UUID, not gs_ prefix)
-  const otSession       = uuidv4();          // UUID (real Netflix uses plain UUID)
-
-  // NetflixId – user identity token (30 days)
-  res.cookie('NetflixId', netflixId, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // SecureNetflixId – HMAC-signed with mac+dt format, HttpOnly (30 days)
-  res.cookie('SecureNetflixId', secureNetflixId, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    sameSite: 'strict',
-    path: '/',
-  });
-
-  // flwssn – Flow session UUID (session-scoped, no maxAge)
-  res.cookie('flwssn', flwssn, {
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // gsid – Global session UUID (30 days)
-  res.cookie('gsid', gsid, {
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  // OTSessionTracking – OneTrust session UUID (session-scoped)
-  res.cookie('OTSessionTracking', otSession, {
-    httpOnly: false,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  return { netflixId, secureNetflixId, flwssn, gsid, otSession };
-}
-
-function clearSessionCookies(res, sessionId) {
-  if (sessionId) deleteSession(sessionId);
-  const opts = { expires: new Date(0), path: '/' };
-  res.clearCookie('NetflixId',          opts);
-  res.clearCookie('SecureNetflixId',    opts);
-  res.clearCookie('flwssn',             opts);
-  res.clearCookie('gsid',               opts);
-  res.clearCookie('OTSessionTracking',  opts);
-  res.clearCookie('profilesNewSession', opts);
-}
-
-// ─── Middleware ────────────────────────────────────────────────────────────────
-
-// API path → 401 JSON; page path → redirect tới trang đăng nhập
-function authFail(req, res) {
-  if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
-  }
-  return res.redirect('/login');
-}
-
-function requireAuth(req, res, next) {
-  const nfid = req.cookies.NetflixId;
-  if (!nfid) return authFail(req, res);
-  const decoded = decodeNetflixId(nfid);
-  if (!decoded) { clearSessionCookies(res, null); return authFail(req, res); }
-  const user = getUserById(decoded.userId);
-  if (!user) { clearSessionCookies(res, decoded.sessionId); return authFail(req, res); }
-  req.user      = user;
-  req.sessionId = decoded.sessionId;
-  next();
-}
-
-function requireProfile(req, res, next) {
-  if (req.cookies.profilesNewSession !== '0') {
-    if (req.path.startsWith('/api/')) {
-      return res.status(403).json({ success: false, error: 'Chưa chọn hồ sơ' });
-    }
-    return res.redirect('/profiles');
-  }
-  next();
-}
+app.use('/panel', express.static(path.join(__dirname, 'public', 'panel')));
+app.use('/admin/js', express.static(path.join(__dirname, 'public', 'admin', 'js')));
+app.use('/seller/js', express.static(path.join(__dirname, 'public', 'seller', 'js')));
 
 // ─── Page Routes ───────────────────────────────────────────────────────────────
 
-app.get('/', (req, res) => {
-  setAnonymousCookies(req, res);
-  if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(PAGE.user('index.html'));
+app.get('/me', (req, res) => {
+  res.sendFile(PAGE.me);
 });
 
-app.get('/login', (req, res) => {
-  setAnonymousCookies(req, res);
-  if (req.cookies.NetflixId && decodeNetflixId(req.cookies.NetflixId)) return res.redirect('/browse');
-  res.sendFile(PAGE.user('login.html'));
-});
-
-app.get('/profiles', requireAuth, (req, res) => {
-  res.sendFile(PAGE.user('profiles.html'));
-});
+app.get('/login', (req, res) => res.redirect('/'));
+app.get('/profiles', (req, res) => res.redirect('/'));
+app.get('/browse', (req, res) => res.redirect('/'));
 
 app.get('/checker', (req, res) => {
-  setAnonymousCookies(req, res);
   res.sendFile(PAGE.user('checker.html'));
 });
 
-app.get('/browse', requireAuth, requireProfile, (req, res) => {
-  // netflix-sans-normal-3-loaded: set when user reaches browse (font loading marker)
-  if (!req.cookies['netflix-sans-normal-3-loaded']) {
-    res.cookie('netflix-sans-normal-3-loaded', 'true', {
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
-  res.sendFile(PAGE.user('browse.html'));
+// Alias cũ → cùng trang lấy mã
+app.get('/getcode.html', (req, res) => {
+  res.redirect('/me');
 });
 
-// Legacy URL (footer landing, link cũ)
-app.get('/getcode.html', (req, res) => {
-  res.sendFile(PAGE.user('getcode.html'));
+// Panel trên domain chính (redirect API login)
+app.get('/admin', (req, res) => res.sendFile(PAGE.admin));
+app.get('/seller', (req, res) => res.sendFile(PAGE.seller));
+
+// Admin SPA sub-routes — serve same HTML, client handles routing
+const ADMIN_VIEWS = ['overview', 'sellers', 'products', 'keys', 'deposits', 'users'];
+ADMIN_VIEWS.forEach((slug) => {
+  app.get(`/admin/${slug}`, (req, res) => res.sendFile(PAGE.admin));
+});
+
+// Seller SPA sub-routes — serve same HTML, client handles routing
+const SELLER_VIEWS = ['dashboard', 'orders', 'keys', 'store', 'emails', 'deposit', 'transactions', 'profile'];
+SELLER_VIEWS.forEach((slug) => {
+  app.get(`/seller/${slug}`, (req, res) => res.sendFile(PAGE.seller));
+});
+
+app.get('/', (req, res) => {
+  res.redirect('/me');
 });
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 
-app.post('/api/auth/login', (req, res) => {
-  setAnonymousCookies(req, res);
-  const { email, password } = req.body;
-  const user = getUserByEmail(email);
-  if (!user || !verifyPassword(user.password, password)) {
-    return res.status(401).json({ success: false, message: 'Email hoặc mật khẩu không đúng.' });
-  }
-  const sessionId      = uuidv4();
-  const sessionCookies = setSessionCookies(res, user.id, sessionId);
-  return res.json({
-    success: true,
-    user: { id: user.id, name: user.name, plan: user.plan },
-    sessionCookies,
-    redirect: '/profiles',
-  });
-});
-
-app.post('/api/auth/logout', requireAuth, (req, res) => {
-  clearSessionCookies(res, req.sessionId);
-  return res.json({ success: true, redirect: '/' });
-});
-
-app.get('/api/profiles', requireAuth, (req, res) => {
-  const profiles = getProfilesByUserId(req.user.id);
-  return res.json({ success: true, profiles, user: { name: req.user.name, plan: req.user.plan } });
-});
-
-app.post('/api/profiles/select', requireAuth, (req, res) => {
-  const { profileId } = req.body;
-  const profile = getProfileByIdAndUserId(profileId, req.user.id);
-  if (!profile) return res.status(404).json({ success: false, message: 'Profile không tồn tại.' });
-
-  // New flow session after profile selection (same real Netflix behavior)
-  res.cookie('flwssn', uuidv4(), { httpOnly: false, sameSite: 'lax', path: '/' });
-  res.cookie('profilesNewSession', '0', { httpOnly: false, sameSite: 'lax', path: '/' });
-
-  return res.json({ success: true, profile, redirect: '/browse' });
-});
-
-app.get('/api/content', requireAuth, requireProfile, (req, res) => {
-  return res.json({ success: true, content: getAllContent() });
-});
-
-// ─── nftoken.site — tùy chọn, mặc định TẮT (chỉ check trực tiếp netflix.com) ───
+// ─── nftoken.site — optional; default direct netflix.com only ───
 // NFTOKEN_MODE=off       → chỉ direct (mặc định)
 // NFTOKEN_MODE=parallel  → song song nftoken + direct (hành vi cũ)
 // NFTOKEN_MODE=fallback  → direct trước, gọi nftoken nếu unreachable hoặc thiếu plan/email
 // USE_NFTOKEN=1|true|on  → alias của parallel
 function getNftokenMode() {
-  const raw = String(process.env.NFTOKEN_MODE || process.env.USE_NFTOKEN || 'off').toLowerCase().trim();
+  const raw = String(process.env.NFTOKEN_MODE || process.env.USE_NFTOKEN || 'fallback').toLowerCase().trim();
   if (raw === '1' || raw === 'true' || raw === 'on' || raw === 'parallel') return 'parallel';
   if (raw === 'fallback') return 'fallback';
   return 'off';
 }
 
-const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, raw: null, skipped: true };
+const NFT_SKIPPED = { alive: false, hasPremium: false, plan: null, email: null, screens: null, paymentError: false, definitiveDead: false, raw: null, skipped: true };
 
 function mergeCheckResults(nf, nft) {
   const plan = nf.plan || nft.plan || null;
-  const alive = !!(nf.alive || nft.alive);
+  let paymentHold = !!nf.paymentHold;
+  let paymentError = !!nf.paymentError || !!(nft.paymentError && !nf.reachable);
+  let planLost = !!nf.planLost;
+  let alive = false;
+
+  if (nf.reachable) {
+    alive = !!nf.alive;
+    if (nf.cancelled) {
+      alive = false;
+      planLost = false;
+      paymentError = false;
+      paymentHold = false;
+    } else if (nf.accountPaymentHold) {
+      // Explicit /account hold banner is authoritative — a future "next payment"
+      // date on a held account is only the retry date, not a healthy renewal.
+      alive = false;
+      paymentHold = true;
+      paymentError = true;
+      planLost = !!plan;
+    } else {
+      const hasProfiles = Array.isArray(nf.profiles) && nf.profiles.length > 0;
+      const futureBill = !!(nf.futureBilling || (nf.billingText && nfBillingIsFuture(nf.billingText)));
+      if (plan && (futureBill || hasProfiles || nf.alive)) {
+        alive = true;
+        planLost = false;
+        paymentError = false;
+        paymentHold = false;
+      }
+    }
+  } else if (!nft.skipped && nft.alive) {
+    alive = !!nft.alive && !paymentError;
+  }
+
+  // nftoken gave a definitive DEAD/expired/hold verdict → override HTML-only LIVE.
+  // Netflix renders payment-hold banners client-side, so SSR HTML can look active
+  // even when the account is dead/on-hold; nftoken actually tries to mint a token.
+  if (!nft.skipped && nft.definitiveDead) {
+    alive = false;
+    paymentHold = true;
+    paymentError = true;
+    planLost = !!plan;
+  }
 
   let source = 'none';
   if (nft.skipped) {
     source = nf.reachable ? 'direct' : 'none';
-  } else if (nf.alive && nft.alive) {
-    source = 'direct+nftoken';
-  } else if (nft.alive) {
+  } else if (nft.definitiveDead) {
     source = 'nftoken';
-  } else if (nf.reachable || nf.alive) {
+  } else if (nf.reachable && nft.alive) {
+    source = planLost ? 'direct' : 'direct+nftoken';
+  } else if (nft.alive && !nf.reachable) {
+    source = 'nftoken';
+  } else if (nf.reachable) {
     source = 'direct';
   }
 
@@ -943,12 +886,14 @@ function mergeCheckResults(nf, nft) {
     email:        nf.emailFromHtml || nft.email || null,
     screens:      nft.screens      || null,
     hasPremium:   !!(nft.hasPremium || (alive && isNetflixPremiumPlan(plan))),
-    paymentError: !!(nft.paymentError || nf.paymentError),
+    paymentError,
+    paymentHold,
+    planLost,
     profiles:     nf.profiles      || [],
     billingText:  nf.billingText   || null,
-    cancelled:    !alive && !!(nf.reachable || nf.cancelled),
+    cancelled:    !!(nf.cancelled && !planLost) || (!alive && nf.reachable && !planLost),
     reachable:    !!(nf.reachable),
-    _nft: nft.skipped ? { skipped: true } : { alive: nft.alive, error: nft.error },
+    _nft: nft.skipped ? { skipped: true } : { alive: nft.alive, definitiveDead: !!nft.definitiveDead, error: nft.error },
     _nf:  { reachable: nf.reachable, alive: nf.alive, error: nf.error },
   };
 }
@@ -956,128 +901,173 @@ function mergeCheckResults(nf, nft) {
 async function runNftokenCheck(cookieStr) {
   return checkAccountDetails(cookieStr).catch(e => ({
     alive: false, hasPremium: false, plan: null, email: null, screens: null,
-    paymentError: false, raw: null, error: e.message, skipped: false,
+    paymentError: false, definitiveDead: false, raw: null, error: e.message, skipped: false,
   }));
 }
 
 function shouldFallbackNftoken(nf) {
   if (!nf.reachable) return true;
-  if (nf.alive && !nf.plan && !nf.emailFromHtml) return true;
+  // Có plan nhưng không có email → gọi nftoken (trường hợp Netflix SSR đổi format)
+  if (!nf.emailFromHtml) return true;
+  if (nf.alive && !nf.plan) return true;
   return false;
 }
 
+// Map a fullCheck result into a compact warranty status string for storage/UI.
+// live | payment_hold | plan_lost | dead | inconclusive | unknown
+function checkResultToStatus(out) {
+  if (!out || typeof out !== 'object') return 'unknown';
+  if (out.rateLimited) return 'inconclusive';
+  if (out.alive) return 'live';
+  if (out.paymentHold) return 'payment_hold';
+  if (out.planLost) return 'plan_lost';
+  if (out.verifyInconclusive) return 'inconclusive';
+  if (out.reachable === false && !out.source) return 'inconclusive';
+  return 'dead';
+}
+
 // ─── Full check — direct netflix.com (+ nftoken tùy NFTOKEN_MODE) ─────────────
-async function fullCheck(cookieStr) {
+async function fullCheck(cookieStr, paceId) {
   try {
+    assertCheckRateLimit();
+    const pace = resolveCheckPace(paceId);
     const mode = getNftokenMode();
-    const nf = await fetchNetflixAccountInfo(cookieStr).catch(e => ({
+    const nf = await fetchNetflixAccountInfo(cookieStr, pace).catch(e => ({
       reachable: false, alive: false, error: e.message, profiles: [],
     }));
 
     let nft = NFT_SKIPPED;
+    let inconclusiveVerify = false;
 
-    if (mode === 'parallel') {
-      nft = await runNftokenCheck(cookieStr);
-    } else if (mode === 'fallback' && shouldFallbackNftoken(nf)) {
-      nft = await runNftokenCheck(cookieStr);
+    if (!pace.skipNftoken) {
+      if (mode === 'parallel') {
+        await randDelay(pace.nftMin, pace.nftMax);
+        nft = await runNftokenCheck(cookieStr);
+      } else if (mode === 'fallback' && shouldFallbackNftoken(nf)) {
+        await randDelay(pace.nftMin, pace.nftMax);
+        nft = await runNftokenCheck(cookieStr);
+      }
     }
 
-    return mergeCheckResults(nf, nft);
+    // Verify-LIVE: if direct HTML looks alive but nftoken hasn't run yet, verify it.
+    // Netflix renders payment-hold/dead banners client-side, so SSR HTML can look
+    // active on a dead/on-hold account. nftoken actually mints a token, so a
+    // definitive DEAD verdict here overrides the HTML-only LIVE (even in stealth).
+    // Retry on transient/inconclusive nftoken responses so a single network blip
+    // can't silently fall back to a false LIVE ("fail-open").
+    const verifyLiveEnabled = process.env.VERIFY_LIVE_NFTOKEN !== '0' && mode !== 'off';
+    if (verifyLiveEnabled && nft.skipped && nf.reachable && nf.alive) {
+      const maxTries = Math.max(1, parseInt(process.env.VERIFY_LIVE_RETRIES || '2', 10) || 2);
+      for (let attempt = 1; attempt <= maxTries; attempt++) {
+        await randDelay(pace.nftMin || 400, pace.nftMax || 1500);
+        nft = await runNftokenCheck(cookieStr);
+        // Stop as soon as nftoken gives a definitive verdict (alive or dead).
+        if (nft.definitiveDead || nft.alive) break;
+        // Otherwise it was a transient error / inconclusive response — retry.
+      }
+      inconclusiveVerify = !nft.definitiveDead && !nft.alive;
+    }
+
+    const out = mergeCheckResults(nf, nft);
+    out.checkPace = pace.key;
+    if (pace.skipNftoken && nft.skipped) out.nftokenSkippedStealth = true;
+    // Could not confirm a LIVE-looking account with nftoken (all attempts failed)
+    // — surface it so the UI can warn instead of showing a confident LIVE.
+    if (inconclusiveVerify) out.verifyInconclusive = true;
+    return out;
   } catch (e) {
-    return { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
+    const out = { alive: false, error: e.message, profiles: [], plan: null, billingText: null, nftokenMode: getNftokenMode() };
+    if (e.code === 'RATE_LIMIT') out.rateLimited = true;
+    return out;
   }
 }
 
 // ─── Live check – single cookie set ──────────────────────────────────────────
-app.post('/api/checker/live-check', async (req, res) => {
+app.post('/api/checker/live-check', ipRateLimit('check', CHECK_MAX_PER_HOUR, 3600000), async (req, res) => {
   try {
     const { cookie } = req.body;
     if (!cookie || typeof cookie !== 'string') {
-      return res.status(400).json({ error: 'Thiếu cookie' });
+      return res.status(400).json({ error: 'Missing cookie' });
     }
-    const result = await fullCheck(cookie);
+    const result = await fullCheck(cookie, req.body.pace);
     return res.json(result);
   } catch (e) {
     console.error('[live-check] ERROR:', e.message);
-    return res.status(500).json({ alive: false, error: e.message, profiles: [] });
+    const limited = e.code === 'RATE_LIMIT';
+    // Rate-limit message is user-facing guidance; anything else stays generic.
+    return res.status(limited ? 429 : 500).json({ alive: false, error: limited ? e.message : 'Internal server error', profiles: [], rateLimited: limited });
   }
 });
 
 // ─── Batch live check – multiple sets ────────────────────────────────────────
-app.post('/api/checker/batch', async (req, res) => {
+app.post('/api/checker/batch', ipRateLimit('batch', 10, 3600000), async (req, res) => {
   try {
     const { cookies } = req.body;
     if (!Array.isArray(cookies) || !cookies.length) {
-      return res.status(400).json({ error: 'Thiếu cookies array' });
+      return res.status(400).json({ error: 'Missing cookies array' });
+    }
+    const BATCH_MAX = Math.max(1, parseInt(process.env.CHECK_BATCH_MAX || '50', 10) || 50);
+    if (cookies.length > BATCH_MAX) {
+      return res.status(400).json({ error: `Too many cookies — max ${BATCH_MAX} per batch` });
+    }
+    if (cookies.some(c => typeof c !== 'string' || !c.trim())) {
+      return res.status(400).json({ error: 'Each cookie must be a non-empty string' });
     }
     // CONCURRENCY=1: check tuần tự từ cùng 1 IP → tránh burst song song dễ bị Netflix flag.
     // Mỗi fullCheck đã có randDelay nội bộ; thêm khoảng nghỉ giữa các cookie cho tự nhiên.
+    const pace = resolveCheckPace(req.body.pace);
     const CONCURRENCY = 1;
     const results = new Array(cookies.length).fill(null);
     for (let i = 0; i < cookies.length; i += CONCURRENCY) {
       const slice   = cookies.slice(i, i + CONCURRENCY);
-      const checked = await Promise.all(slice.map(c => fullCheck(c).catch(e => ({ alive: false, error: e.message, profiles: [] }))));
+      const checked = await Promise.all(slice.map(c => fullCheck(c, req.body.pace).catch(e => ({ alive: false, error: e.message, profiles: [] }))));
       checked.forEach((r, j) => { results[i + j] = r; });
-      if (i + CONCURRENCY < cookies.length) await randDelay(1500, 4000);
+      if (i + CONCURRENCY < cookies.length) await randDelay(pace.gapMin, pace.gapMax);
     }
     return res.json({ results });
   } catch (e) {
     console.error('[batch] ERROR:', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-// Cookie inspector endpoint
-app.get('/api/session/info', (req, res) => {
-  const c = req.cookies;
-  let user = null, sessionId = null;
-  if (c.NetflixId) {
-    const d = decodeNetflixId(c.NetflixId);
-    if (d) {
-      user      = getUserById(d.userId) || null;
-      sessionId = d.sessionId;
-    }
-  }
-
-  const phase = !c.NetflixId
-    ? 'anonymous'
-    : c.profilesNewSession === '0'
-      ? 'profile_selected'
-      : 'authenticated';
-
-  // Show realistic truncated values just like the real browser would see
-  const truncate = (val, n = 55) => val ? (val.length > n ? val.substring(0, n) + '…' : val) : null;
-
-  return res.json({
-    phase,
-    authenticated: !!user,
-    user: user ? { id: user.id, name: user.name, plan: user.plan } : null,
-    cookies: {
-      nfvdid:              truncate(c.nfvdid, 60),
-      OptanonConsent:      c.OptanonConsent ? '[set – ' + c.OptanonConsent.length + ' chars]' : null,
-      tmx_guid:            truncate(c.tmx_guid, 60),
-      thx_guid:            c.thx_guid || null,
-      NetflixId:           c.NetflixId ? truncate(decodeURIComponent(c.NetflixId), 70) : null,
-      SecureNetflixId:     c.SecureNetflixId ? '[HttpOnly – không đọc được bằng JS]' : null,
-      flwssn:              c.flwssn || null,
-      gsid:                c.gsid || null,
-      OTSessionTracking:   c.OTSessionTracking || null,
-      profilesNewSession:  c.profilesNewSession || null,
-      'netflix-sans-normal-3-loaded': c['netflix-sans-normal-3-loaded'] || null,
-    },
-  });
 });
 
 // ─── Cloudflare Turnstile ─────────────────────────────────────────────────────
-// Test keys (luôn pass): site=1x00000000000000000000AA secret=1x0000000000000000000000000000000AA
-// Production: set TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY trong env
-const TURNSTILE_SITE_KEY   = process.env.TURNSTILE_SITE_KEY   || '1x00000000000000000000AA';
-const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
-const TURNSTILE_ENABLED    = process.env.TURNSTILE_DISABLED !== '1';
+// Production: https://dash.cloudflare.com → Turnstile → site key + secret in .env
+// Dev-only test widget: TURNSTILE_USE_TEST=1 (shows "For testing only" banner)
+const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
+const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+
+function resolveTurnstileConfig() {
+  if (process.env.TURNSTILE_DISABLED === '1') {
+    return { enabled: false, siteKey: '', secretKey: '', testMode: false, reason: 'disabled' };
+  }
+  const siteKey = String(process.env.TURNSTILE_SITE_KEY || '').trim();
+  const secretKey = String(process.env.TURNSTILE_SECRET_KEY || '').trim();
+  const isTestKey = (k) => !k || k === TURNSTILE_TEST_SITE_KEY || k.startsWith('1x00000000000000000000');
+  if (siteKey && secretKey && !isTestKey(siteKey)) {
+    return { enabled: true, siteKey, secretKey, testMode: false, reason: 'production' };
+  }
+  if (process.env.TURNSTILE_USE_TEST === '1') {
+    return {
+      enabled: true,
+      siteKey: TURNSTILE_TEST_SITE_KEY,
+      secretKey: TURNSTILE_TEST_SECRET_KEY,
+      testMode: true,
+      reason: 'test',
+    };
+  }
+  return { enabled: false, siteKey: '', secretKey: '', testMode: false, reason: 'missing_keys' };
+}
+
+const TURNSTILE_CFG = resolveTurnstileConfig();
+const TURNSTILE_SITE_KEY = TURNSTILE_CFG.siteKey;
+const TURNSTILE_SECRET_KEY = TURNSTILE_CFG.secretKey;
+const TURNSTILE_ENABLED = TURNSTILE_CFG.enabled;
+const TURNSTILE_TEST_MODE = TURNSTILE_CFG.testMode;
 
 async function verifyTurnstile(token, remoteip) {
   if (!TURNSTILE_ENABLED) return { success: true, skipped: true };
-  if (!token) return { success: false, error: 'Thiếu captcha' };
+  if (!token) return { success: false, error: 'Missing captcha' };
 
   try {
     const body = new URLSearchParams({
@@ -1107,103 +1097,462 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || req.ip || '';
 }
 
-async function fetchInboxForEmail(email) {
-  const [user, domain] = email.split('@');
-  const url = `https://tinyhost.shop/api/email/${encodeURIComponent(domain)}/${encodeURIComponent(user)}/?limit=20`;
-  const r   = await nodeRequest(url, {
-    method: 'GET',
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
-    timeout: 12000,
+// ─── Per-IP rate limiter for abuse-prone endpoints (login brute force, OTP
+// guessing, inbox scraping). Fixed window, in-memory — đủ cho single instance.
+const ipRateBuckets = new Map();
+function ipRateLimit(name, max, windowMs) {
+  return (req, res, next) => {
+    const key = `${name}:${getClientIp(req)}`;
+    const now = Date.now();
+    let bucket = ipRateBuckets.get(key);
+    if (!bucket || now - bucket.start > windowMs) {
+      bucket = { start: now, count: 0 };
+      ipRateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      return res.status(429).json({ success: false, error: 'Too many requests — try again later' });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const cutoff = Date.now() - 3600000;
+  for (const [key, bucket] of ipRateBuckets) {
+    if (bucket.start < cutoff) ipRateBuckets.delete(key);
+  }
+}, 600000).unref();
+
+// 500s: log the real error server-side, return a generic message to the client
+// (raw e.message can leak DB schema / internal paths / upstream details).
+function serverError(req, res, e) {
+  console.error(`[500] ${req.method} ${req.path}:`, e.message);
+  return res.status(500).json({ success: false, error: 'Internal server error' });
+}
+
+// Chỉ trả loại mã key được phép — seller/admin cấp qua key
+function filterEmailsByPerms(emails, perms) {
+  const p = perms || { permLogin: true, permReset: true, permFamily: true };
+  return emails
+    .map((e) => {
+      const out = { ...e };
+      if (!p.permLogin) out.extracted_code = null;
+      if (!p.permReset) out.reset_link = null;
+      if (!p.permFamily) out.family_code = null;
+      const has = out.extracted_code || out.reset_link || out.family_code;
+      if (!has) return null;
+      let priority = 0;
+      if (out.extracted_code) priority = 10;
+      else if (out.family_code) priority = 9;
+      else if (out.reset_link) priority = 8;
+      out.priority = priority;
+      return out;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+}
+
+// ─── Temp-mail provider selection ─────────────────────────────────────────────
+// MAIL_PROVIDER = tempmail (default, tempmail.id.vn API) | generator (generator.email scrape)
+const MAIL_PROVIDER = String(process.env.MAIL_PROVIDER || 'tempmail').toLowerCase();
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// ─── Temp-mail provider: tempmail.id.vn (Bearer-token, account-scoped) ────────
+// Reading an inbox is a 3-step flow: list mailboxes → find the one matching the
+// address → list its messages → read each message body. The mailbox must belong
+// to the account that owns TEMPMAIL_TOKEN.
+const MAIL_API_BASE  = String(process.env.TEMPMAIL_API_BASE || 'https://tempmail.id.vn').replace(/\/+$/, '');
+const MAIL_API_TOKEN = String(process.env.TEMPMAIL_TOKEN || '').trim();
+const MAIL_MAX_MESSAGES = Math.max(1, parseInt(process.env.TEMPMAIL_MAX_MESSAGES || '15', 10) || 15);
+
+function mailAuthHeaders() {
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${MAIL_API_TOKEN}`,
+    'User-Agent': 'Mozilla/5.0',
+  };
+}
+
+async function mailGet(path) {
+  const r = await nodeRequest(`${MAIL_API_BASE}${path}`, {
+    method: 'GET', headers: mailAuthHeaders(), timeout: 12000,
   });
+  if (r.status !== 200) return null;
+  try { return r.json(); } catch { return null; }
+}
 
-  let data;
-  try { data = r.json(); } catch { return { success: true, emails: [], total: 0 }; }
-  if (r.status !== 200) return { success: true, emails: [], total: 0 };
+// Find the mailbox id for an address (must belong to the token's account).
+async function findMailboxId(email) {
+  const data = await mailGet('/api/email');
+  const target = email.toLowerCase();
+  for (const m of mailListOf(data)) {
+    if (mailAddressOf(m) === target) return mailIdOf(m);
+  }
+  return null;
+}
 
-  const raw    = data.emails || data.data || [];
-  const emails = raw.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+async function fetchInboxTempmail(email, perms) {
+  if (!MAIL_API_TOKEN) {
+    console.warn('[inbox] TEMPMAIL_TOKEN not configured — cannot fetch mail');
+    return { success: true, emails: [], total: 0 };
+  }
+
+  const mailId = await findMailboxId(email);
+  if (!mailId) return { success: true, emails: [], total: 0 };
+
+  const list = mailListOf(await mailGet(`/api/email/${encodeURIComponent(mailId)}`));
+  const top  = list.slice(0, MAIL_MAX_MESSAGES);
+
+  // Message-list items often omit the body — fetch full content when missing.
+  const detailed = await Promise.all(top.map(async (m) => {
+    if (m.body || m.text_body || m.html_body || m.html) return m;
+    const id = mailIdOf(m);
+    if (!id) return m;
+    const full = await mailGet(`/api/message/${encodeURIComponent(id)}`).catch(() => null);
+    const body = mailBodyOf(full);
+    return body ? { ...m, ...body } : m;
+  }));
+
+  let emails = detailed.map(parseNetflixEmail).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  if (perms) emails = filterEmailsByPerms(emails, perms);
   return { success: true, emails, total: emails.length };
+}
+
+// ─── Temp-mail provider: generator.email (no official API — HTML scrape) ──────
+// Mechanism (verified live): the mailbox is rendered server-side at GET /{email}
+// with a `surl` cookie; the page JS only polls /check_mail.php for a reload
+// signal. So we GET the mailbox page and parse the message blocks out of the
+// HTML. Class names are obfuscated (prefix "e7m"), so we parse by stable
+// structure/anchors (message containers carry an id) rather than brittle classes,
+// then reuse parseNetflixEmail which extracts codes regardless of markup.
+function genEmailHeaders(email) {
+  return {
+    'User-Agent': BROWSER_UA,
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'en-US,en;q=0.9',
+    // generator.email keys the mailbox off this cookie pair.
+    'Cookie': `surl=${encodeURIComponent(email)}`,
+    'Referer': `https://generator.email/${encodeURIComponent(email)}`,
+  };
+}
+
+// Split the mailbox HTML into per-message chunks. generator.email wraps each
+// received mail in a container whose id encodes the message id (e.g. id="...").
+// We locate message bodies by the `e7m` block that holds subject/from/body.
+function genParseMailbox(html) {
+  if (!html || typeof html !== 'string') return [];
+  // Each opened mail lives under a div carrying an onclick/open handler or a
+  // unique data id. Capture chunks between message anchors.
+  const chunks = [];
+  // Anchor on the per-mail container. generator.email uses elements like
+  // <div class="e7m ... mail_inb..." onclick="...mailid...">. Be permissive.
+  const re = /<div[^>]*\bid="([a-z0-9]{6,})"[^>]*>([\s\S]*?)(?=<div[^>]*\bid="[a-z0-9]{6,}"|<\/body)/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const id = m[1];
+    const inner = m[2] || '';
+    // Skip layout/nav containers — only keep blocks that look like a mail
+    // (contain a sender address or a subject-ish line).
+    if (/@/.test(inner) || /subject/i.test(inner)) {
+      chunks.push({ id, html: inner });
+    }
+  }
+  return chunks;
+}
+
+async function fetchInboxGenerator(email, perms) {
+  const r = await nodeRequest(`https://generator.email/${encodeURIComponent(email)}`, {
+    method: 'GET', headers: genEmailHeaders(email), timeout: 12000,
+  });
+  if (r.status !== 200) {
+    console.warn(`[inbox] generator.email returned ${r.status}`);
+    return { success: true, emails: [], total: 0 };
+  }
+  const html = r.text();
+  const chunks = genParseMailbox(html).slice(0, MAIL_MAX_MESSAGES);
+
+  let emails = chunks.map((c) => {
+    // Strip tags for the text body; keep html for link/code extraction.
+    const text = c.html.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+    const fromMatch = c.html.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    return parseNetflixEmail({
+      id: c.id,
+      subject: '',
+      body: text,
+      html: c.html,
+      from: fromMatch ? fromMatch[0] : '',
+    });
+  }).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  if (perms) emails = filterEmailsByPerms(emails, perms);
+  return { success: true, emails, total: emails.length };
+}
+
+// Dispatcher — pick the configured provider.
+async function fetchInboxForEmail(email, perms) {
+  if (MAIL_PROVIDER === 'generator') return fetchInboxGenerator(email, perms);
+  return fetchInboxTempmail(email, perms);
 }
 
 app.get('/api/turnstile/config', (req, res) => {
   return res.json({
     success: true,
     enabled: TURNSTILE_ENABLED,
-    siteKey: TURNSTILE_SITE_KEY,
+    siteKey: TURNSTILE_ENABLED ? TURNSTILE_SITE_KEY : null,
+    testMode: TURNSTILE_TEST_MODE,
+    reason: TURNSTILE_CFG.reason,
   });
 });
 
-// ─── Temp Mail Inbox API ──────────────────────────────────────────────────────
-app.get('/api/inbox', async (req, res) => {
-  try {
-    const email = (req.query.email || '').trim().toLowerCase();
-    if (!email || !email.includes('@'))
-      return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
-
-    const result = await fetchInboxForEmail(email);
-    return res.json(result);
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+// Bank/deposit config from .env (no hardcoded values in the UI)
+app.get('/api/deposit/config', requireSeller, (req, res) => {
+  const bankCode  = String(process.env.BANK_CODE || '').trim();
+  const bankName  = String(process.env.BANK_NAME || '').trim();
+  const accountNo = String(process.env.BANK_ACCOUNT_NO || '').trim();
+  const holder    = String(process.env.BANK_ACCOUNT_NAME || '').trim();
+  const configured = !!(bankCode && accountNo && holder);
+  const memo = `${String(process.env.BANK_MEMO_PREFIX || 'NAP').trim()} ${req.account.username}`.trim();
+  let qrUrl = null;
+  if (configured) {
+    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankCode)}-${encodeURIComponent(accountNo)}-compact2.png`
+      + `?addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(holder)}`;
   }
+  return res.json({
+    success: true,
+    configured,
+    bankName: bankName || bankCode,
+    bankCode,
+    accountNo,
+    holder,
+    memo,
+    qrUrl,
+  });
 });
 
-app.post('/api/inbox', async (req, res) => {
+// ── Bank webhook: auto-credit seller balance on incoming transfer ──────
+// Accepts Casso (array under data[]) or SePay (single-object) payloads.
+// Authorization: shared secret in `BANK_WEBHOOK_TOKEN` env, sent as
+// `Authorization: Bearer <token>` or `?token=` (Casso supports both).
+// Idempotency: each transaction's bank-side tx id (tid / id) is stored
+// UNIQUE in `deposit_intents`, so retries / re-deliveries are no-ops.
+function bankWebhookAuthorized(req) {
+  const expected = String(process.env.BANK_WEBHOOK_TOKEN || '').trim();
+  if (!expected) return false; // refuse if not configured
+  const header = String(req.headers.authorization || '').trim();
+  const bearer = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  const queryToken = String(req.query.token || '').trim();
+  return bearer === expected || queryToken === expected || header === expected;
+}
+
+function normalizeWebhookEvents(body) {
+  if (!body) return [];
+  // Casso: { error: 0, data: [ { tid, amount, description, when, gateway } ] }
+  if (Array.isArray(body.data)) {
+    return body.data.map((d) => ({
+      provider: 'casso',
+      txRef: String(d.tid ?? d.id ?? ''),
+      amount: Number(d.amount ?? 0),
+      memo: String(d.description ?? d.content ?? ''),
+      when: d.when || d.transactionDateTime || null,
+      raw: d,
+    }));
+  }
+  // SePay: { id, gateway, transferAmount, content, transferType, transactionDate }
+  if (body.id != null && (body.transferAmount != null || body.content != null)) {
+    return [{
+      provider: 'sepay',
+      txRef: String(body.id),
+      amount: Number(body.transferAmount ?? body.amount ?? 0),
+      memo: String(body.content ?? body.description ?? ''),
+      when: body.transactionDate || null,
+      raw: body,
+    }];
+  }
+  // Generic fallback
+  if (body.tx_ref || body.txRef) {
+    return [{
+      provider: String(body.provider || 'generic'),
+      txRef: String(body.tx_ref ?? body.txRef),
+      amount: Number(body.amount ?? 0),
+      memo: String(body.memo ?? body.description ?? ''),
+      when: body.timestamp || null,
+      raw: body,
+    }];
+  }
+  return [];
+}
+
+function extractUsernameFromMemo(memo) {
+  if (!memo) return null;
+  const prefix = String(process.env.BANK_MEMO_PREFIX || 'NAP').trim();
+  // Strip diacritics, normalize whitespace
+  const flat = String(memo)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ').trim();
+  // Match: <prefix> <username> (username = alnum/underscore, 3–32 chars)
+  const re = new RegExp(`(?:^|\\s)${prefix}\\s+([a-zA-Z0-9_]{3,32})`, 'i');
+  const m = flat.match(re);
+  if (m) return m[1].toLowerCase();
+  // Fallback: any alnum token >= 3 chars that matches an existing username
+  return null;
+}
+
+app.post('/api/deposit/webhook', express.json({ limit: '256kb' }), (req, res) => {
+  if (!bankWebhookAuthorized(req)) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  const events = normalizeWebhookEvents(req.body);
+  if (!events.length) {
+    return res.status(400).json({ success: false, error: 'Unrecognized payload' });
+  }
+  const results = [];
+  for (const ev of events) {
+    if (!ev.txRef) {
+      results.push({ ok: false, error: 'missing tx_ref' });
+      continue;
+    }
+    if (ev.amount <= 0) {
+      results.push({ txRef: ev.txRef, ok: false, error: 'non-credit ignored' });
+      continue;
+    }
+    const existing = findDepositIntentByRef(ev.provider, ev.txRef);
+    if (existing) {
+      results.push({ txRef: ev.txRef, ok: true, duplicate: true, status: existing.status });
+      continue;
+    }
+    const username = extractUsernameFromMemo(ev.memo);
+    let acc = null;
+    if (username) {
+      const a = getAccountByUsername(username);
+      if (a && a.role === 'seller' && a.status === 'active') acc = a;
+    }
+    const out = recordDepositIntent({
+      provider: ev.provider,
+      txRef: ev.txRef,
+      amount: ev.amount,
+      memo: ev.memo,
+      matchedUser: username,
+      accountId: acc ? acc.id : null,
+      payload: JSON.stringify(ev.raw).slice(0, 8000),
+    });
+    if (out.duplicate) {
+      results.push({ txRef: ev.txRef, ok: true, duplicate: true });
+    } else if (out.unmatched) {
+      results.push({ txRef: ev.txRef, ok: true, unmatched: true, memo: ev.memo });
+    } else if (out.error) {
+      results.push({ txRef: ev.txRef, ok: false, error: out.error });
+    } else {
+      results.push({
+        txRef: ev.txRef, ok: true, credited: true,
+        username, amount: ev.amount, balance: out.balance, transactionId: out.transactionId,
+      });
+    }
+  }
+  return res.json({ success: true, processed: results.length, results });
+});
+
+// Recent deposit intents — admin-visibility
+app.get('/api/admin/deposit-intents', requireAdmin, (req, res) => {
+  const rows = listRecentDepositIntents(100);
+  return res.json({ success: true, intents: rows });
+});
+
+// Unmatched deposits the system could not auto-credit (admin review queue).
+app.get('/api/admin/deposit-intents/unmatched', requireAdmin, (req, res) => {
+  return res.json({ success: true, intents: listUnmatchedDepositIntents(100) });
+});
+
+// Manually assign an unmatched deposit to a seller and credit their balance.
+app.post('/api/admin/deposit-intents/:id/assign', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const sellerId = String(req.body.sellerId || '').trim();
+  if (!Number.isInteger(id) || !sellerId) {
+    return res.status(400).json({ success: false, error: 'Missing deposit id or sellerId' });
+  }
+  const out = assignDepositIntent(id, sellerId);
+  if (out.error) return res.status(400).json({ success: false, error: out.error });
+  return res.json({ success: true, ...out });
+});
+
+// ─── Temp Mail Inbox API ──────────────────────────────────────────────────────
+// Codes are only released for emails bound to a valid key or a via-email order
+// (security: an unauthenticated GET variant used to leak unfiltered codes).
+app.post('/api/inbox', ipRateLimit('inbox', 30, 5 * 60000), async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
+    const keyStr = (req.body.key || '').trim();
     const turnstileToken = req.body.turnstileToken || req.body.token || '';
 
     if (!email || !email.includes('@'))
-      return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+      return res.status(400).json({ success: false, error: 'Invalid email' });
 
     const captcha = await verifyTurnstile(turnstileToken, getClientIp(req));
     if (!captcha.success) {
-      return res.status(403).json({ success: false, error: captcha.error || 'Captcha không hợp lệ' });
+      return res.status(403).json({ success: false, error: captcha.error || 'Invalid captcha' });
     }
 
-    const result = await fetchInboxForEmail(email);
+    let perms = null;
+    let sellerId = null;
+    const orderRow = getOrderByEmailForInbox(email);
+
+    if (keyStr) {
+      const row = getKey(keyStr);
+      if (!row) return res.status(403).json({ success: false, error: 'Invalid key' });
+      if (row.email !== email) return res.status(403).json({ success: false, error: 'Key does not match email' });
+      if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
+        return res.status(403).json({ success: false, error: 'Key expired' });
+      }
+      perms = { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily };
+      sellerId = row.sellerId;
+      incrementKeyUsage(keyStr);
+    } else if (orderRow) {
+      if (!orderRow.viaEmail) {
+        return res.status(403).json({ success: false, error: 'This order has not enabled get-code via email — use a key' });
+      }
+      if (orderRow.status === 'expired') {
+        return res.status(403).json({ success: false, error: 'Order expired' });
+      }
+      perms = { permLogin: orderRow.permLogin, permReset: orderRow.permReset, permFamily: orderRow.permFamily };
+      sellerId = orderRow.sellerId;
+    } else {
+      // Fail closed: unknown email (no key, no order) must not receive any codes.
+      return res.status(403).json({ success: false, error: 'No key or order found for this email' });
+    }
+
+    // Re-validate against the seller's CURRENT state at use-time. A key/order
+    // carries the perms it was issued with, but the admin may have since locked
+    // the seller or revoked a permission — those changes must take effect for
+    // already-issued keys/orders (the panel promises "admin can revoke anytime").
+    // Legacy keys with no seller (sellerId null) are left as-is.
+    if (sellerId) {
+      const seller = getAccountById(sellerId);
+      if (!seller || seller.role !== 'seller' || seller.status !== 'active') {
+        return res.status(403).json({ success: false, error: 'Seller account is not active' });
+      }
+      perms = clampKeyPerms(perms, getSellerMaxPerms(sellerId));
+    }
+
+    const result = await fetchInboxForEmail(email, perms);
+    if (keyStr && perms) {
+      result.permissions = perms;
+    }
     return res.json(result);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
-function parseNetflixEmail(raw) {
-  const subject  = String(raw.subject   || '');
-  const body     = String(raw.body      || raw.text_body || '');
-  const html     = String(raw.html_body || raw.html      || '');
-  const from     = String(raw.from      || raw.sender    || '');
-  const id       = raw.id || raw._id || '';
-  const time     = raw.created_at || raw.date || '';
-  const full     = (subject + ' ' + body + ' ' + html).replace(/<[^>]+>/g, ' ');
-
-  let code = null, reset_link = null, family_code = null, priority = 0;
-
-  // Netflix OTP 4-8 digits
-  const otp = full.match(/(?:mã|code|passcode|verify)[:\s]+(\d{4,8})/i)
-    || full.match(/\b(\d{4,8})\b(?=[^<]{0,80}(?:netflix|sign\s*in|login|xác nhận))/i)
-    || subject.match(/\b(\d{4,8})\b/);
-  if (otp) { code = otp[1]; priority = 10; }
-
-  // Reset link
-  const rl = full.match(/https?:\/\/[^\s"'<>]+(?:reset|password)[^\s"'<>]*/i)
-    || full.match(/https?:\/\/www\.netflix\.com\/[^\s"'<>]+/i);
-  if (rl && !code) { reset_link = rl[0]; priority = 8; }
-
-  // Household code
-  const fam = full.match(/(?:household|family)[:\s]+([A-Z0-9]{4,12})/i);
-  if (fam) { family_code = fam[1]; priority = 9; }
-
-  return { id, subject, from, time, extracted_code: code, reset_link, family_code, priority };
-}
-
 // ─── Panel auth (admin/seller accounts) ───────────────────────────────────────
 const PANEL_COOKIE = 'panelSession';
+// Set COOKIE_SECURE=1 in production (TLS) so the session cookie is never sent over plain HTTP.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 
 function setPanelCookie(res, sessionId) {
   res.cookie(PANEL_COOKIE, sessionId, {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     httpOnly: true,
     sameSite: 'lax',
+    secure: COOKIE_SECURE,
     path: '/',
   });
 }
@@ -1222,34 +1571,34 @@ function getPanelAccount(req) {
 // Bắt buộc seller đã đăng nhập + active
 function requireSeller(req, res, next) {
   const acc = getPanelAccount(req);
-  if (!acc || acc.role !== 'seller') return res.status(401).json({ success: false, error: 'Chưa đăng nhập seller' });
-  if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản chưa được duyệt' });
+  if (!acc || acc.role !== 'seller') return res.status(401).json({ success: false, error: 'Seller not logged in' });
+  if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Account not approved yet' });
   req.account = acc;
   next();
 }
 
 // Đăng nhập panel (admin hoặc seller)
-app.post('/api/panel/login', (req, res) => {
+app.post('/api/panel/login', ipRateLimit('login', 20, 15 * 60000), (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ success: false, error: 'Thiếu tài khoản hoặc mật khẩu' });
+    if (!username || !password) return res.status(400).json({ success: false, error: 'Missing username or password' });
     const acc = getAccountByUsername(String(username).trim());
     if (!acc || !verifyPassword(acc.password, password)) {
-      return res.status(401).json({ success: false, error: 'Sai tài khoản hoặc mật khẩu' });
+      return res.status(401).json({ success: false, error: 'Wrong username or password' });
     }
     if (acc.role === 'seller') {
-      if (!acc.emailVerified) return res.status(403).json({ success: false, error: 'Chưa xác minh email', needVerify: true, accountId: acc.id });
-      if (acc.status === 'pending')  return res.status(403).json({ success: false, error: 'Tài khoản đang chờ admin duyệt' });
-      if (acc.status === 'rejected') return res.status(403).json({ success: false, error: 'Tài khoản đã bị từ chối' });
+      if (!acc.emailVerified) return res.status(403).json({ success: false, error: 'Email not verified', needVerify: true, accountId: acc.id });
+      if (acc.status === 'pending')  return res.status(403).json({ success: false, error: 'Account is pending admin approval' });
+      if (acc.status === 'rejected') return res.status(403).json({ success: false, error: 'Account was rejected' });
     }
-    if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Tài khoản không hoạt động' });
+    if (acc.status !== 'active') return res.status(403).json({ success: false, error: 'Account inactive' });
 
     const sid = uuidv4();
     createPanelSession(sid, acc.id);
     setPanelCookie(res, sid);
     return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role }, redirect: acc.role === 'admin' ? '/admin' : '/seller' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
@@ -1262,58 +1611,87 @@ app.post('/api/panel/logout', (req, res) => {
 
 app.get('/api/panel/me', (req, res) => {
   const acc = getPanelAccount(req);
-  if (!acc) return res.status(401).json({ success: false, error: 'Chưa đăng nhập' });
-  return res.json({ success: true, account: { username: acc.username, email: acc.email, role: acc.role, status: acc.status } });
+  if (!acc) return res.status(401).json({ success: false, error: 'Not logged in' });
+  const out = { username: acc.username, email: acc.email, role: acc.role, status: acc.status };
+  if (acc.role === 'seller') {
+    Object.assign(out, getSellerMaxPerms(acc.id));
+    const prof = getSellerProfile(acc.id);
+    if (prof) {
+      out.balance = prof.balance;
+      out.contactName = prof.contactName;
+      out.contactType = prof.contactType;
+      out.contactInfo = prof.contactInfo;
+    }
+  }
+  return res.json({ success: true, account: out });
 });
 
 // Seller tự đăng ký → tạo account pending + gửi mã xác minh email
-app.post('/api/seller/register', async (req, res) => {
+app.post('/api/seller/register', ipRateLimit('register', 10, 3600000), async (req, res) => {
   try {
-    const username = String(req.body.username || '').trim();
-    const email    = String(req.body.email || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-    if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username tối thiểu 3 ký tự' });
-    if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
-    if (password.length < 6)   return res.status(400).json({ success: false, error: 'Mật khẩu tối thiểu 6 ký tự' });
-    if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username đã tồn tại' });
-    if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email đã được dùng' });
+    const captcha = await verifyTurnstile(req.body.turnstileToken || req.body.token || '', getClientIp(req));
+    if (!captcha.success) {
+      return res.status(403).json({ success: false, error: captcha.error || 'Invalid captcha' });
+    }
+
+    const username    = String(req.body.username || '').trim();
+    const email       = String(req.body.email || '').trim().toLowerCase();
+    const password    = String(req.body.password || '');
+    const contactName = String(req.body.contactName || '').trim();
+    const contactType = String(req.body.contactType || '').trim().toLowerCase();
+    const contactInfo = String(req.body.contactInfo || '').trim();
+    const allowedTypes = new Set(['telegram', 'zalo', 'facebook', '']);
+    if (username.length < 3)   return res.status(400).json({ success: false, error: 'Username must be at least 3 characters' });
+    if (!email.includes('@'))  return res.status(400).json({ success: false, error: 'Invalid email' });
+    if (password.length < 6)   return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    if (!contactName)          return res.status(400).json({ success: false, error: 'Full name is required' });
+    if (!contactType || !allowedTypes.has(contactType)) {
+      return res.status(400).json({ success: false, error: 'Select a contact type' });
+    }
+    if (!contactInfo)          return res.status(400).json({ success: false, error: 'Contact info is required' });
+    if (getAccountByUsername(username)) return res.status(409).json({ success: false, error: 'Username already exists' });
+    if (getAccountByEmail(email))       return res.status(409).json({ success: false, error: 'Email already used' });
 
     const code    = String(Math.floor(100000 + Math.random() * 900000)); // mã 6 số
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;             // hết hạn 15 phút
     const id      = 'sel_' + crypto.randomBytes(6).toString('hex');
-    createAccount({ id, username, email, password: hashPassword(password), role: 'seller', verifyCode: code, verifyExpires: expires });
+    createAccount({
+      id, username, email, password: hashPassword(password), role: 'seller',
+      verifyCode: code, verifyExpires: expires,
+      contactName, contactType, contactInfo,
+    });
 
     const mail = await sendVerificationEmail(email, code).catch(() => ({ sent: false }));
-    return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Đã tạo tài khoản. Nhập mã xác minh gửi tới email.' });
+    return res.json({ success: true, accountId: id, emailSent: mail.sent, message: 'Account created. Enter the verification code sent to your email.' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
 // Xác minh email bằng mã 6 số
-app.post('/api/seller/verify-email', (req, res) => {
+app.post('/api/seller/verify-email', ipRateLimit('verify', 10, 15 * 60000), (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
-    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
     if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
     if (!acc.verifyCode || acc.verifyCode !== String(req.body.code || '').trim()) {
-      return res.status(400).json({ success: false, error: 'Mã không đúng' });
+      return res.status(400).json({ success: false, error: 'Incorrect code' });
     }
     if (acc.verifyExpires && Math.floor(Date.now() / 1000) > acc.verifyExpires) {
-      return res.status(400).json({ success: false, error: 'Mã đã hết hạn, hãy gửi lại' });
+      return res.status(400).json({ success: false, error: 'Code expired, please resend' });
     }
     markEmailVerified(acc.id);
-    return res.json({ success: true, message: 'Xác minh thành công. Chờ admin duyệt tài khoản.' });
+    return res.json({ success: true, message: 'Verified successfully. Waiting for admin approval.' });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
 // Gửi lại mã xác minh
-app.post('/api/seller/resend-code', async (req, res) => {
+app.post('/api/seller/resend-code', ipRateLimit('resend', 5, 15 * 60000), async (req, res) => {
   try {
     const acc = getAccountById(String(req.body.accountId || ''));
-    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Tài khoản không tồn tại' });
+    if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Account not found' });
     if (acc.emailVerified) return res.json({ success: true, alreadyVerified: true });
     const code    = String(Math.floor(100000 + Math.random() * 900000));
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;
@@ -1321,40 +1699,404 @@ app.post('/api/seller/resend-code', async (req, res) => {
     const mail = await sendVerificationEmail(acc.email, code).catch(() => ({ sent: false }));
     return res.json({ success: true, emailSent: mail.sent });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
+  }
+});
+
+// ─── Seller workspace API ─────────────────────────────────────────────────────
+app.get('/api/seller/dashboard', requireSeller, (req, res) => {
+  const sellerId = req.account.id;
+  return res.json({
+    success: true,
+    stats: getSellerDashboardStats(sellerId),
+    balance: getSellerBalance(sellerId),
+    sellerPerms: getSellerMaxPerms(sellerId),
+    profile: getSellerProfile(sellerId),
+  });
+});
+
+app.get('/api/seller/orders', requireSeller, (req, res) => {
+  const orders = getSellerOrders(req.account.id);
+  const keys = getKeysBySeller(req.account.id);
+  const keysByOrder = {};
+  for (const k of keys) {
+    if (k.orderId) {
+      if (!keysByOrder[k.orderId]) keysByOrder[k.orderId] = [];
+      keysByOrder[k.orderId].push(k);
+    }
+  }
+  const enriched = orders.map((o) => ({ ...o, keys: keysByOrder[o.id] || [] }));
+  const status = (req.query.status || 'all').toLowerCase();
+  const q = (req.query.q || '').trim().toLowerCase();
+  let filtered = enriched;
+  if (status !== 'all') filtered = filtered.filter((o) => o.status === status);
+  if (q) {
+    filtered = filtered.filter((o) =>
+      [o.id, o.productName, o.publicCode, o.accountEmail, o.note].some(
+        (f) => String(f || '').toLowerCase().includes(q),
+      ),
+    );
+  }
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const perPage = Math.min(50, Math.max(5, parseInt(req.query.perPage, 10) || 20));
+  const total = filtered.length;
+  const start = (page - 1) * perPage;
+  return res.json({
+    success: true,
+    orders: filtered.slice(start, start + perPage),
+    pagination: { page, perPage, total, pages: Math.ceil(total / perPage) || 1 },
+    sellerPerms: getSellerMaxPerms(req.account.id),
+  });
+});
+
+app.get('/api/seller/orders/:id', requireSeller, (req, res) => {
+  const order = getSellerOrderById(req.params.id, req.account.id);
+  if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+  const keys = getKeysBySeller(req.account.id).filter((k) => k.orderId === order.id);
+  return res.json({ success: true, order, keys });
+});
+
+app.patch('/api/seller/orders/:id', requireSeller, (req, res) => {
+  try {
+    const { accountPassword, viaEmail, note, permLogin, permReset, permFamily, cookie } = req.body;
+    const order = updateSellerOrder(req.params.id, req.account.id, {
+      accountPassword, viaEmail, note, permLogin, permReset, permFamily, cookie,
+    });
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+    return res.json({ success: true, order });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.post('/api/seller/orders/:id/renew', requireSeller, (req, res) => {
+  const order = renewSellerOrder(req.params.id, req.account.id);
+  if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+  return res.json({ success: true, order });
+});
+
+app.get('/api/seller/orders/:id/history', requireSeller, (req, res) => {
+  const events = getOrderHistory(req.params.id, req.account.id);
+  if (!events.length && !getSellerOrderById(req.params.id, req.account.id)) {
+    return res.status(404).json({ success: false, error: 'Order not found' });
+  }
+  return res.json({ success: true, events });
+});
+
+// Manual warranty re-check: run the live checker against the order's stored
+// cookie and persist the verdict. Cookie is read server-side only.
+app.post('/api/seller/orders/:id/recheck', requireSeller, async (req, res) => {
+  try {
+    const order = getSellerOrderById(req.params.id, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+    const cookie = getOrderCookie(req.params.id, req.account.id);
+    if (!cookie) return res.status(400).json({ success: false, error: 'No cookie stored for this order' });
+
+    const out = await fullCheck(cookie, req.body.pace);
+    if (out.rateLimited) {
+      return res.status(429).json({ success: false, error: 'Hourly check limit reached — try again later', rateLimited: true });
+    }
+    const status = checkResultToStatus(out);
+    recordOrderCheck(req.params.id, status);
+    logOrderEvent(req.params.id, 'warranty_check', `manual: ${status}`);
+    return res.json({ success: true, status, checkedAt: Math.floor(Date.now() / 1000) });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.post('/api/seller/orders/:id/keys', requireSeller, (req, res) => {
+  try {
+    const order = getSellerOrderById(req.params.id, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+    const max = getSellerMaxPerms(req.account.id);
+    const perms = clampKeyPerms({
+      permLogin: req.body.permLogin ?? order.permLogin,
+      permReset: req.body.permReset ?? order.permReset,
+      permFamily: req.body.permFamily ?? order.permFamily,
+    }, max);
+    const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
+    const row = createKey(key, order.accountEmail, {
+      keyName: (req.body.keyName || order.productName || '').trim() || null,
+      note: order.note,
+      expiresAt: order.expiresAt,
+      orderId: order.id,
+      ...perms,
+    }, req.account.id);
+    logOrderEvent(order.id, 'key_created', key, null);
+    return res.json({ success: true, key: row });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.get('/api/seller/products', requireSeller, (req, res) => {
+  return res.json({ success: true, products: getProducts(true), balance: getSellerBalance(req.account.id) });
+});
+
+app.post('/api/seller/store/buy', requireSeller, (req, res) => {
+  try {
+    const { productId, accountEmail, accountPassword } = req.body;
+    const result = purchaseProduct(req.account.id, productId, { accountEmail, accountPassword });
+    if (result.error) return res.status(400).json({ success: false, error: result.error });
+    return res.json({ success: true, order: result.order, balance: result.balance });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.get('/api/seller/transactions', requireSeller, (req, res) => {
+  return res.json({
+    success: true,
+    transactions: getTransactions(req.account.id),
+    summary: getTransactionSummary(req.account.id),
+  });
+});
+
+// Deposit history for the logged-in seller (matched/credited intents).
+app.get('/api/seller/deposits', requireSeller, (req, res) => {
+  return res.json({
+    success: true,
+    deposits: getDepositIntentsBySeller(req.account.id, 100),
+  });
+});
+
+app.get('/api/seller/emails', requireSeller, (req, res) => {
+  return res.json({ success: true, emails: getSellerEmails(req.account.id) });
+});
+
+app.patch('/api/seller/profile', requireSeller, (req, res) => {
+  const profile = updateSellerProfile(req.account.id, {
+    contactName: req.body.contactName,
+    contactType: req.body.contactType,
+    contactInfo: req.body.contactInfo,
+  });
+  return res.json({ success: true, profile });
+});
+
+app.get('/api/seller/profile', requireSeller, (req, res) => {
+  const profile = getSellerProfile(req.account.id);
+  return res.json({ success: true, profile });
+});
+
+// Seller đổi mật khẩu (đăng nhập bằng session, không cần captcha)
+app.post('/api/seller/change-password', requireSeller, (req, res) => {
+  try {
+    const oldPassword = String(req.body.oldPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+    const acc = getAccountById(req.account.id);
+    if (!acc || !verifyPassword(acc.password, oldPassword)) {
+      return res.status(403).json({ success: false, error: 'Current password is incorrect' });
+    }
+    setAccountPassword(req.account.id, hashPassword(newPassword));
+    return res.json({ success: true });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+// Seller lấy mail của tài khoản đã mua (session auth, dùng quyền của đơn — không cần captcha)
+app.post('/api/seller/mail', requireSeller, async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email.includes('@')) return res.status(400).json({ success: false, error: 'Invalid email' });
+    const order = getSellerOrders(req.account.id).find((o) => (o.accountEmail || '').toLowerCase() === email);
+    if (!order) return res.status(404).json({ success: false, error: 'Account not found in your orders' });
+    const perms = { permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily };
+    const result = await fetchInboxForEmail(email, perms);
+    result.permissions = perms;
+    return res.json(result);
+  } catch (e) {
+    return serverError(req, res, e);
   }
 });
 
 // Danh sách key của seller + tổng quan
 app.get('/api/seller/keys', requireSeller, (req, res) => {
-  const keys = getKeysBySeller(req.account.id);
+  const keys = getKeysBySellerEnriched(req.account.id);
   const used = keys.filter(k => k.usedCount > 0).length;
-  return res.json({ success: true, keys, summary: { total: keys.length, used, unused: keys.length - used } });
+  const sellerPerms = getSellerMaxPerms(req.account.id);
+  return res.json({
+    success: true, keys, sellerPerms,
+    summary: { total: keys.length, used, unused: keys.length - used },
+  });
 });
 
-// Tạo key — yêu cầu seller đăng nhập, gắn seller_id
+function keyPermContext(sellerId, order) {
+  const max = getSellerMaxPerms(sellerId);
+  const orderMax = order ? {
+    permLogin: order.permLogin,
+    permReset: order.permReset,
+    permFamily: order.permFamily,
+  } : null;
+  return { max, orderMax };
+}
+
+// Tạo key — quyền key ⊆ quyền admin cấp seller
 app.post('/api/key/register', requireSeller, (req, res) => {
   try {
-    const { email, note } = req.body;
-    if (!email?.includes('@')) return res.status(400).json({ success: false, error: 'Email không hợp lệ' });
+    const { email, note, keyName, expiresAt, permLogin, permReset, permFamily, orderId } = req.body;
+    let emailAddr = email?.trim().toLowerCase();
+    let order = null;
+    if (orderId) {
+      order = getSellerOrderById(orderId, req.account.id);
+      if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+      emailAddr = order.accountEmail;
+    }
+    if (!emailAddr?.includes('@')) return res.status(400).json({ success: false, error: 'Invalid email' });
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const perms = clampKeyPermsFull({
+      permLogin: permLogin ?? order?.permLogin,
+      permReset: permReset ?? order?.permReset,
+      permFamily: permFamily ?? order?.permFamily,
+    }, max, orderMax);
     const key = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
-    createKey(key, email.trim().toLowerCase(), (note || '').trim() || null, req.account.id);
-    return res.json({ success: true, key, email });
+    let exp = order?.expiresAt ?? null;
+    if (expiresAt) {
+      const t = new Date(expiresAt).getTime();
+      if (!Number.isNaN(t)) exp = Math.floor(t / 1000);
+    }
+    const row = createKey(key, emailAddr, {
+      note: (note || order?.note || '').trim() || null,
+      keyName: (keyName || '').trim() || null,
+      expiresAt: exp,
+      orderId: order?.id ?? orderId ?? null,
+      ...perms,
+    }, req.account.id);
+    if (order) logOrderEvent(order.id, 'key_created', key, null);
+    return res.json({ success: true, key, email: row.email, permissions: perms });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return serverError(req, res, e);
   }
 });
 
+app.post('/api/seller/keys/batch', requireSeller, (req, res) => {
+  try {
+    const { orderId, items, syncName, syncExpires, syncPerms } = req.body;
+    if (!orderId) return res.status(400).json({ success: false, error: 'Select an account (order)' });
+    const order = getSellerOrderById(orderId, req.account.id);
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    const list = Array.isArray(items) ? items : [{ keyName: req.body.keyName }];
+    if (!list.length || list.length > 5) {
+      return res.status(400).json({ success: false, error: 'Create 1 to 5 keys at a time' });
+    }
+
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const sharedName = syncName !== false ? (list[0].keyName || '').trim() || null : null;
+    let sharedExp = order.expiresAt;
+    if (syncExpires === false && list[0].expiresAt) {
+      const t = new Date(list[0].expiresAt).getTime();
+      if (!Number.isNaN(t)) sharedExp = Math.floor(t / 1000);
+    } else if (syncExpires !== false && list[0].expiresAt) {
+      const t = new Date(list[0].expiresAt).getTime();
+      if (!Number.isNaN(t)) sharedExp = Math.floor(t / 1000);
+    }
+    const sharedPerms = clampKeyPermsFull({
+      permLogin: req.body.permLogin ?? order.permLogin,
+      permReset: req.body.permReset ?? order.permReset,
+      permFamily: req.body.permFamily ?? order.permFamily,
+    }, max, orderMax);
+
+    const created = [];
+    for (const item of list) {
+      const perms = syncPerms !== false ? sharedPerms : clampKeyPermsFull({
+        permLogin: item.permLogin ?? sharedPerms.permLogin,
+        permReset: item.permReset ?? sharedPerms.permReset,
+        permFamily: item.permFamily ?? sharedPerms.permFamily,
+      }, max, orderMax);
+      let exp = sharedExp;
+      if (syncExpires === false && item.expiresAt) {
+        const t = new Date(item.expiresAt).getTime();
+        if (!Number.isNaN(t)) exp = Math.floor(t / 1000);
+      }
+      const keyId = 'SK-' + [1, 2, 3].map(() => crypto.randomBytes(4).toString('hex').toUpperCase()).join('-');
+      const row = createKey(keyId, order.accountEmail, {
+        keyName: syncName !== false ? sharedName : ((item.keyName || '').trim() || null),
+        expiresAt: exp,
+        orderId: order.id,
+        note: order.note,
+        ...perms,
+      }, req.account.id);
+      created.push(row);
+      logOrderEvent(order.id, 'key_created', keyId, null);
+    }
+    return res.json({ success: true, keys: created, count: created.length });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.patch('/api/seller/keys/:key', requireSeller, (req, res) => {
+  try {
+    const keyId = (req.params.key || '').trim();
+    const { note, keyName, expiresAt, permLogin, permReset, permFamily } = req.body;
+    const existing = getKey(keyId);
+    if (!existing || existing.sellerId !== req.account.id) {
+      return res.status(404).json({ success: false, error: 'Key not found' });
+    }
+    const order = existing.orderId ? getSellerOrderById(existing.orderId, req.account.id) : null;
+    const { max, orderMax } = keyPermContext(req.account.id, order);
+    const updates = {};
+    if (note !== undefined) updates.note = (note || '').trim() || null;
+    if (keyName !== undefined) updates.keyName = (keyName || '').trim() || null;
+    if (expiresAt !== undefined) {
+      if (!expiresAt) updates.expiresAt = null;
+      else {
+        const t = new Date(expiresAt).getTime();
+        updates.expiresAt = Number.isNaN(t) ? null : Math.floor(t / 1000);
+      }
+    }
+    if (permLogin !== undefined || permReset !== undefined || permFamily !== undefined) {
+      const merged = clampKeyPermsFull({
+        permLogin: permLogin !== undefined ? permLogin : existing.permLogin,
+        permReset: permReset !== undefined ? permReset : existing.permReset,
+        permFamily: permFamily !== undefined ? permFamily : existing.permFamily,
+      }, max, orderMax);
+      Object.assign(updates, merged);
+    }
+    const row = updateKey(keyId, req.account.id, updates);
+    if (!row) return res.status(404).json({ success: false, error: 'Key not found' });
+    return res.json({ success: true, key: row, orderPerms: order ? {
+      permLogin: order.permLogin, permReset: order.permReset, permFamily: order.permFamily,
+    } : null });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.post('/api/seller/keys/:key/sync', requireSeller, (req, res) => {
+  const row = syncKeyFromOrder(req.params.key, req.account.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Key not found or not linked to an order' });
+  return res.json({ success: true, key: row });
+});
+
+app.delete('/api/seller/keys/:key', requireSeller, (req, res) => {
+  const ok = deleteKeyForSeller(req.params.key, req.account.id);
+  if (!ok) return res.status(404).json({ success: false, error: 'Key not found' });
+  return res.json({ success: true });
+});
+
 app.get('/api/key/resolve', (req, res) => {
-  const email = resolveKeyEmail((req.query.key || '').trim());
-  if (!email) return res.status(404).json({ success: false, error: 'Key không tồn tại' });
-  return res.json({ success: true, email });
+  const row = getKey((req.query.key || '').trim());
+  if (!row) return res.status(404).json({ success: false, error: 'Key not found' });
+  if (row.expiresAt && row.expiresAt < Math.floor(Date.now() / 1000)) {
+    return res.status(403).json({ success: false, error: 'Key expired' });
+  }
+  return res.json({
+    success: true,
+    email: row.email,
+    permissions: { permLogin: row.permLogin, permReset: row.permReset, permFamily: row.permFamily },
+  });
 });
 
 // ─── Admin API (X-Admin-Token) ────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  // 1) Token cũ (backward-compat)
-  const token = req.headers['x-admin-token'] || req.query.token || '';
+  // Header-only: query-string tokens leak via logs/Referer/history.
+  const token = req.headers['x-admin-token'] || '';
   if (token && token === ADMIN_TOKEN) return next();
   // 2) Hoặc session tài khoản admin
   const acc = getPanelAccount(req);
@@ -1387,36 +2129,133 @@ app.get('/api/admin/sellers', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/sellers/:id/approve', requireAdmin, (req, res) => {
-  return res.json({ success: setAccountStatus(req.params.id, 'active') });
+  // Only set perms on the first approval (pending → active). Re-approving an
+  // already-active seller must NOT silently reset their perms to the defaults —
+  // use PATCH /perms for deliberate changes.
+  const acc = getAccountById(req.params.id);
+  if (!acc || acc.role !== 'seller') return res.status(404).json({ success: false, error: 'Seller not found' });
+  const wasPending = acc.status !== 'active';
+  const ok = setAccountStatus(req.params.id, 'active');
+  if (ok && wasPending) {
+    const body = req.body || {};
+    setSellerPerms(req.params.id, {
+      permLogin: body.permLogin !== false,
+      permReset: !!body.permReset,
+      permFamily: body.permFamily !== false,
+    });
+  }
+  return res.json({ success: ok });
+});
+
+app.patch('/api/admin/sellers/:id/perms', requireAdmin, (req, res) => {
+  const { permLogin, permReset, permFamily } = req.body || {};
+  const ok = setSellerPerms(req.params.id, {
+    permLogin: permLogin !== false,
+    permReset: !!permReset,
+    permFamily: permFamily !== false,
+  });
+  if (!ok) return res.status(404).json({ success: false, error: 'Seller not found' });
+  return res.json({ success: true, sellerPerms: getSellerMaxPerms(req.params.id) });
 });
 
 app.post('/api/admin/sellers/:id/reject', requireAdmin, (req, res) => {
   return res.json({ success: setAccountStatus(req.params.id, 'rejected') });
 });
 
+app.post('/api/admin/sellers/:id/topup', requireAdmin, (req, res) => {
+  try {
+    const amount = parseInt(req.body.amount, 10);
+    if (!amount || amount < 1000) return res.status(400).json({ success: false, error: 'Minimum amount is 1,000đ' });
+    if (amount > 100000000) return res.status(400).json({ success: false, error: 'Maximum amount is 100,000,000đ per top-up' });
+    const r = adjustBalance(req.params.id, amount, {
+      type: 'topup',
+      description: req.body.description || 'Admin nạp tiền',
+    });
+    if (!r || r.error) return res.status(400).json({ success: false, error: r?.error || 'Top-up failed' });
+    return res.json({ success: true, balance: r.balance });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.get('/api/admin/products', requireAdmin, (req, res) => {
+  return res.json({ success: true, products: getProducts(false) });
+});
+
+app.post('/api/admin/products', requireAdmin, (req, res) => {
+  try {
+    const b = req.body;
+    const id = b.id || 'prod_' + crypto.randomBytes(4).toString('hex');
+    const p = upsertProduct({
+      id,
+      name: b.name,
+      durationLabel: b.durationLabel,
+      durationDays: parseInt(b.durationDays, 10) || 30,
+      price: parseInt(b.price, 10),
+      warrantyNote: b.warrantyNote,
+      active: b.active !== false,
+    });
+    return res.json({ success: true, product: p });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
+app.post('/api/admin/sellers/:id/orders', requireAdmin, (req, res) => {
+  try {
+    const b = req.body;
+    const product = b.productId ? getProductById(b.productId) : null;
+    const order = adminCreateOrderForSeller({
+      sellerId: req.params.id,
+      productId: product?.id,
+      productName: b.productName || product?.name || 'Netflix Premium',
+      durationLabel: product?.durationLabel || b.durationLabel,
+      durationDays: product?.durationDays || 30,
+      accountEmail: b.accountEmail,
+      accountPassword: b.accountPassword,
+      viaEmail: b.viaEmail !== false,
+      permLogin: b.permLogin !== false,
+      permReset: !!b.permReset,
+      permFamily: b.permFamily !== false,
+      note: b.note,
+    });
+    return res.json({ success: true, order });
+  } catch (e) {
+    return serverError(req, res, e);
+  }
+});
+
 app.get('/api/domains', async (req, res) => {
   try {
-    const r = await nodeRequest('https://tinyhost.shop/api/random-domains/?limit=30', {
-      method: 'GET', headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }, timeout: 8000,
-    });
-    let d; try { d = r.json(); } catch { return res.json({ success: true, domains: [] }); }
-    return res.json({ success: true, domains: d.domains || [] });
-  } catch (e) { return res.status(500).json({ success: false, error: e.message }); }
+    // tempmail.id.vn has no public "random domains" endpoint — serve the
+    // allowed list from env (comma-separated TEMPMAIL_DOMAINS).
+    const domains = String(process.env.TEMPMAIL_DOMAINS || 'tempmail.id.vn')
+      .split(',').map(d => d.trim()).filter(Boolean);
+    return res.json({ success: true, domains });
+  } catch (e) { return serverError(req, res, e); }
 });
 
 // ─── Ping ─────────────────────────────────────────────────────────────────────
 console.log('[BOOT] Registering /api/checker/ping ...');
 app.get('/api/checker/ping', (req, res) => {
   console.log('[PING] called');
-  res.json({ ok: true, ts: Date.now(), version: 'v4', nftokenMode: getNftokenMode() });
+  res.json({
+    ok: true, ts: Date.now(), version: 'v4',
+    nftokenMode: getNftokenMode(),
+    checkPaces: Object.keys(CHECK_PACES),
+    defaultPace: process.env.CHECK_PACE || 'stealth',
+    maxChecksPerHour: CHECK_MAX_PER_HOUR,
+  });
 });
 console.log('[BOOT] /api/checker/ping registered OK');
 
 // ─── Debug: test one cookie, return raw details ───────────────────────────────
-app.post('/api/checker/debug', async (req, res) => {
+app.post('/api/checker/debug', ipRateLimit('debug', 10, 3600000), async (req, res) => {
   try {
     const { cookie } = req.body;
-    if (!cookie) return res.status(400).json({ error: 'no cookie' });
+    if (!cookie || typeof cookie !== 'string') return res.status(400).json({ error: 'no cookie' });
+    // Debug probes hit Netflix/nftoken too — count against the hourly budget.
+    assertCheckRateLimit();
 
     // Test 1: can we reach /account ?
     const cookie_full = cookie.trim();
@@ -1482,7 +2321,8 @@ app.post('/api/checker/debug', async (req, res) => {
       nftokenMode:     nftMode,
     });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    const limited = e.code === 'RATE_LIMIT';
+    return res.status(limited ? 429 : 500).json({ error: limited ? e.message : 'Internal server error', rateLimited: limited });
   }
 });
 
@@ -1492,7 +2332,9 @@ app.post('/api/checker/debug', async (req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[EXPRESS ERR]', req.method, req.path, err.message);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const status = err.status || 500;
+  // 4xx (e.g. body-parser JSON errors) are safe to surface; 5xx stay generic.
+  res.status(status).json({ error: status < 500 ? (err.message || 'Bad request') : 'Internal server error' });
 });
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
@@ -1500,25 +2342,86 @@ app.use((err, req, res, next) => {
 try {
   runMigrations();
   runSeed();
+  const migrated = migrateOrphanKeysToOrders();
+  if (migrated > 0) console.log(`[DB] Đã gắn ${migrated} key cũ vào đơn hàng`);
   deleteExpiredSessions();
 } catch (err) {
   console.error('[FATAL] Database initialization failed:', err.message);
   process.exit(1);
 }
 
-app.listen(PORT, () => {
-  console.log('\n\x1b[31m███╗   ██╗███████╗████████╗███████╗██╗     ██╗██╗  ██╗\x1b[0m');
-  console.log('\x1b[31m████╗  ██║██╔════╝╚══██╔══╝██╔════╝██║     ██║╚██╗██╔╝\x1b[0m');
-  console.log('\x1b[31m██╔██╗ ██║█████╗     ██║   █████╗  ██║     ██║ ╚███╔╝ \x1b[0m');
-  console.log('\x1b[31m██║╚██╗██║██╔══╝     ██║   ██╔══╝  ██║     ██║ ██╔██╗ \x1b[0m');
-  console.log('\x1b[31m██║ ╚████║███████╗   ██║   ██║     ███████╗██║██╔╝ ██╗\x1b[0m');
-  console.log('\x1b[31m╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝     ╚══════╝╚═╝╚═╝  ╚═╝\x1b[0m');
-  console.log(`\n  Đang chạy tại: \x1b[36mhttp://localhost:${PORT}\x1b[0m\n`);
-  console.log('  Tài khoản demo:');
-  console.log('  \x1b[33m●\x1b[0m demo@netflix.com  /  demo123');
-  console.log('  \x1b[33m●\x1b[0m user@netflix.com  /  user123\n');
-  if (ADMIN_TOKEN_GENERATED) {
-    console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
-    console.log('    (set env ADMIN_TOKEN để cố định)\n');
+// ─── Background warranty checker ──────────────────────────────────────────────
+// Periodically re-checks active orders that have a stored cookie and records the
+// verdict so the seller panel can flag dead / payment-hold accounts still under
+// warranty. Disabled with WARRANTY_CHECK=0. Runs sequentially with delays to
+// avoid bursting Netflix/nftoken and to respect the hourly check budget.
+let warrantyJobRunning = false;
+async function runWarrantyCheckBatch() {
+  if (warrantyJobRunning) return;
+  warrantyJobRunning = true;
+  try {
+    const minInterval = Math.max(600, parseInt(process.env.WARRANTY_MIN_INTERVAL_SEC || '21600', 10) || 21600);
+    const batchSize = Math.max(1, parseInt(process.env.WARRANTY_BATCH || '10', 10) || 10);
+    const due = listOrdersDueForCheck(minInterval, batchSize);
+    if (!due.length) return;
+    console.log(`[warranty] checking ${due.length} order(s)`);
+    for (const order of due) {
+      try {
+        const out = await fullCheck(order.cookie);
+        if (out.rateLimited) { console.warn('[warranty] hit rate limit — pausing batch'); break; }
+        const status = checkResultToStatus(out);
+        recordOrderCheck(order.id, status);
+        logOrderEvent(order.id, 'warranty_check', `auto: ${status}`);
+      } catch (e) {
+        console.error(`[warranty] order ${order.id} check failed:`, e.message);
+      }
+      // Space out checks to stay gentle on upstreams.
+      await new Promise((r) => setTimeout(r, 4000 + Math.random() * 4000));
+    }
+  } catch (e) {
+    console.error('[warranty] batch error:', e.message);
+  } finally {
+    warrantyJobRunning = false;
   }
-});
+}
+
+function startWarrantyChecker() {
+  if (process.env.WARRANTY_CHECK === '0') {
+    console.log('  \x1b[33m●\x1b[0m Warranty auto-check: disabled (WARRANTY_CHECK=0)');
+    return;
+  }
+  const everyMin = Math.max(5, parseInt(process.env.WARRANTY_INTERVAL_MIN || '30', 10) || 30);
+  // First run shortly after boot, then on the configured interval.
+  setTimeout(() => { runWarrantyCheckBatch(); }, 60000).unref();
+  setInterval(() => { runWarrantyCheckBatch(); }, everyMin * 60000).unref();
+  console.log(`  \x1b[32m●\x1b[0m Warranty auto-check: every ${everyMin}m`);
+}
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log('\n\x1b[31m███╗   ██╗███████╗████████╗███████╗██╗     ██╗██╗  ██╗\x1b[0m');
+    console.log('\x1b[31m████╗  ██║██╔════╝╚══██╔══╝██╔════╝██║     ██║╚██╗██╔╝\x1b[0m');
+    console.log('\x1b[31m██╔██╗ ██║█████╗     ██║   █████╗  ██║     ██║ ╚███╔╝ \x1b[0m');
+    console.log('\x1b[31m██║╚██╗██║██╔══╝     ██║   ██╔══╝  ██║     ██║ ██╔██╗ \x1b[0m');
+    console.log('\x1b[31m██║ ╚████║███████╗   ██║   ██║     ███████╗██║██╔╝ ██╗\x1b[0m');
+    console.log('\x1b[31m╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝     ╚══════╝╚═╝╚═╝  ╚═╝\x1b[0m');
+    console.log(`\n  Listening: \x1b[36mhttp://localhost:${PORT}\x1b[0m`);
+    console.log('  \x1b[33m/\x1b[0m Get Code   \x1b[33m/checker\x1b[0m   \x1b[33m/seller\x1b[0m   \x1b[33m/admin\x1b[0m\n');
+    if (ADMIN_TOKEN_GENERATED) {
+      console.log(`  \x1b[35m●\x1b[0m ADMIN_TOKEN (random): \x1b[36m${ADMIN_TOKEN}\x1b[0m`);
+      console.log('    (set env ADMIN_TOKEN to pin)\n');
+    }
+    if (TURNSTILE_CFG.reason === 'production') {
+      console.log('  \x1b[32m●\x1b[0m Turnstile: production site key active');
+    } else if (TURNSTILE_CFG.reason === 'test') {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: TEST keys (set TURNSTILE_SITE_KEY in .env for real widget)');
+    } else if (TURNSTILE_CFG.reason === 'missing_keys') {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: off — add TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY to .env');
+    } else {
+      console.log('  \x1b[33m●\x1b[0m Turnstile: disabled (TURNSTILE_DISABLED=1)');
+    }
+    startWarrantyChecker();
+  });
+}
+
+module.exports = { mergeCheckResults };

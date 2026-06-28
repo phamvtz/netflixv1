@@ -14,7 +14,13 @@ const {
   deleteSession,
   getAllContent,
   createKey,
+  getKey,
   resolveKeyEmail,
+  incrementKeyUsage,
+  updateKey,
+  clampKeyPerms,
+  getSellerMaxPerms,
+  setSellerPerms,
   getAllKeys,
   getKeysBySeller,
   deleteKey,
@@ -75,9 +81,9 @@ describe('SQLite database layer', () => {
     assert.equal(getProfilesByUserId('u002', db).length, 2);
   });
 
-  it('getAllContent trả đúng 37 items với genres/rows là array', () => {
+  it('getAllContent trả đúng 50 items với genres/rows là array', () => {
     const all = getAllContent(db);
-    assert.equal(all.length, 37);
+    assert.equal(all.length, 50);
     assert.ok(Array.isArray(all[0].genres));
     assert.ok(Array.isArray(all[0].rows));
     assert.equal(all.find(c => c.featured)?.title, 'Stranger Things');
@@ -92,8 +98,8 @@ describe('SQLite database layer', () => {
     assert.equal(getSession('sess-test-1', db), null);
   });
 
-  it('content source có đúng 37 items', () => {
-    assert.equal(content.length, 37);
+  it('content source có đúng 50 items', () => {
+    assert.equal(content.length, 50);
   });
 
   it('keys: create → resolve (tăng used_count) → list → delete', () => {
@@ -116,7 +122,7 @@ describe('SQLite database layer', () => {
     const s = getAdminStats(db);
     assert.equal(s.users, 2);
     assert.equal(s.profiles, 6);
-    assert.equal(s.content, 37);
+    assert.equal(s.content, 50);
     assert.equal(typeof s.keys, 'number');
   });
 });
@@ -169,6 +175,29 @@ describe('Accounts, panel sessions & seller keys', () => {
     const keys = getKeysBySeller('sel_test', db);
     assert.equal(keys.length, 1);
     assert.equal(keys[0].key, 'SK-SELLER-1');
+  });
+
+  it('quyền seller → key clamp → update key', () => {
+    setSellerPerms('sel_test', { permLogin: true, permReset: false, permFamily: true }, db);
+    const max = getSellerMaxPerms('sel_test', db);
+    assert.equal(max.permFamily, true);
+    assert.equal(max.permReset, false);
+
+    const clamped = clampKeyPerms({ permLogin: true, permReset: true, permFamily: true }, max);
+    assert.equal(clamped.permReset, false);
+    assert.equal(clamped.permFamily, true);
+
+    createKey('SK-PERM-1', 'fam@tinyhost.shop', { permLogin: true, permFamily: true }, 'sel_test', db);
+    const k = getKey('SK-PERM-1', db);
+    assert.equal(k.permFamily, true);
+    assert.equal(k.permReset, false);
+
+    updateKey('SK-PERM-1', 'sel_test', { permFamily: false, keyName: 'test-key' }, db);
+    const k2 = getKey('SK-PERM-1', db);
+    assert.equal(k2.permFamily, false);
+    assert.equal(k2.keyName, 'test-key');
+    assert.equal(incrementKeyUsage('SK-PERM-1', db), true);
+    assert.equal(getKey('SK-PERM-1', db).usedCount, 1);
   });
 });
 
